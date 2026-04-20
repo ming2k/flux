@@ -3,7 +3,7 @@
 
 #define INITIAL_CHUNK_SIZE (4 * 1024 * 1024)
 
-static uint32_t find_memory_type(vg_context *ctx, uint32_t filter, VkMemoryPropertyFlags props)
+static uint32_t find_memory_type(fx_context *ctx, uint32_t filter, VkMemoryPropertyFlags props)
 {
     for (uint32_t i = 0; i < ctx->mem_props.memoryTypeCount; ++i) {
         if ((filter & (1 << i)) &&
@@ -14,9 +14,9 @@ static uint32_t find_memory_type(vg_context *ctx, uint32_t filter, VkMemoryPrope
     return UINT32_MAX;
 }
 
-static vg_vbuf_chunk *chunk_create(vg_context *ctx, size_t size)
+static fx_vbuf_chunk *chunk_create(fx_context *ctx, size_t size)
 {
-    vg_vbuf_chunk *chunk = calloc(1, sizeof(*chunk));
+    fx_vbuf_chunk *chunk = calloc(1, sizeof(*chunk));
     if (!chunk) return NULL;
 
     VkBufferCreateInfo bci = {
@@ -64,7 +64,7 @@ static vg_vbuf_chunk *chunk_create(vg_context *ctx, size_t size)
     return chunk;
 }
 
-void vg_vbuf_pool_init(vg_vbuf_pool *pool, vg_context *ctx)
+void fx_vbuf_pool_init(fx_vbuf_pool *pool, fx_context *ctx)
 {
     pool->ctx = ctx;
     pool->head = NULL;
@@ -72,11 +72,11 @@ void vg_vbuf_pool_init(vg_vbuf_pool *pool, vg_context *ctx)
     pool->next_size = INITIAL_CHUNK_SIZE;
 }
 
-void vg_vbuf_pool_destroy(vg_vbuf_pool *pool)
+void fx_vbuf_pool_destroy(fx_vbuf_pool *pool)
 {
-    vg_vbuf_chunk *chunk = pool->head;
+    fx_vbuf_chunk *chunk = pool->head;
     while (chunk) {
-        vg_vbuf_chunk *next = chunk->next;
+        fx_vbuf_chunk *next = chunk->next;
         vkUnmapMemory(pool->ctx->device, chunk->memory);
         vkFreeMemory(pool->ctx->device, chunk->memory, NULL);
         vkDestroyBuffer(pool->ctx->device, chunk->buffer, NULL);
@@ -86,12 +86,12 @@ void vg_vbuf_pool_destroy(vg_vbuf_pool *pool)
     pool->head = NULL;
 }
 
-void vg_vbuf_pool_reset(vg_vbuf_pool *pool)
+void fx_vbuf_pool_reset(fx_vbuf_pool *pool)
 {
     pool->cursor = 0;
 }
 
-void *vg_vbuf_pool_alloc(vg_vbuf_pool *pool, size_t size,
+void *fx_vbuf_pool_alloc(fx_vbuf_pool *pool, size_t size,
                          VkBuffer *out_buffer, VkDeviceSize *out_offset)
 {
     /* Align to 16 bytes for sanity */
@@ -101,7 +101,7 @@ void *vg_vbuf_pool_alloc(vg_vbuf_pool *pool, size_t size,
         size_t new_size = pool->next_size;
         if (size > new_size) new_size = size;
 
-        vg_vbuf_chunk *new_chunk = chunk_create(pool->ctx, new_size);
+        fx_vbuf_chunk *new_chunk = chunk_create(pool->ctx, new_size);
         if (!new_chunk) return NULL;
 
         new_chunk->next = pool->head;

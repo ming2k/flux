@@ -13,6 +13,6 @@ xdg_shell_code = custom_target('xdg-shell-client-code',
 
 executable('hello_rect',
   ['hello_rect.c', xdg_shell_header, xdg_shell_code],
-  dependencies : [vgfx_dep] + wayland_deps,
+  dependencies : [flux_dep] + wayland_deps,
   install      : false,
 )

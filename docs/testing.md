@@ -39,12 +39,12 @@ to fail regardless of the rendered output.
 Tests the CPU-only low-level object model and recorder state.
 
 Assertions:
-- `vg_path` records verbs/points correctly and tracks bounds.
-- `vg_image` applies default stride/usage rules and retains a private
+- `fx_path` records verbs/points correctly and tracks bounds.
+- `fx_image` applies default stride/usage rules and retains a private
   pixel copy.
-- `vg_font` and `vg_glyph_run` preserve explicit metadata and glyph
+- `fx_font` and `fx_glyph_run` preserve explicit metadata and glyph
   placement.
-- `vg_canvas` records fill/stroke/image/glyph ops in order and resets
+- `fx_canvas` records fill/stroke/image/glyph ops in order and resets
   cleanly between frames.
 
 This suite does not create a Wayland surface and does not require a
@@ -98,8 +98,8 @@ rate ≥ 99% for a repeated-draw workload.
 ## Golden-image tests (phase 1+)
 
 `tests/test_render_golden.c` renders a fixed set of scenes to an
-offscreen `vg_surface` created with `vg_surface_create_offscreen`,
-reads pixels back with `vg_surface_read_pixels`, and compares against
+offscreen `fx_surface` created with `fx_surface_create_offscreen`,
+reads pixels back with `fx_surface_read_pixels`, and compares against
 reference PNGs stored under `tests/golden/`.
 
 ### Pass/fail criterion
@@ -121,7 +121,7 @@ When a rendering change is intentional (new AA algorithm, fixed
 tessellation bug):
 
 ```sh
-VGFX_UPDATE_GOLDENS=1 meson test -C build --suite golden
+FX_UPDATE_GOLDENS=1 meson test -C build --suite golden
 ```
 
 Review the diffs with an image diff tool before committing. Never
@@ -194,14 +194,14 @@ The benchmark is excluded from `meson test`; run it explicitly:
 
 ## Validation in tests
 
-All suites set `VG_ENABLE_VALIDATION=1`. The test harness installs a
-custom `vg_log_fn` that records every log message. After the test body
+All suites set `FX_ENABLE_VALIDATION=1`. The test harness installs a
+custom `fx_log_fn` that records every log message. After the test body
 runs, the harness asserts:
 
 ```c
 assert(error_count == 0);
 ```
 
-where `error_count` is the number of `VG_LOG_ERROR` messages. A
+where `error_count` is the number of `FX_LOG_ERROR` messages. A
 single validation error fails the test, even if the rendered output
 matches the golden.

@@ -3,17 +3,17 @@
 
 #define ATLAS_SIZE 2048
 
-static bool ensure_atlas_image(vg_context *ctx)
+static bool ensure_atlas_image(fx_context *ctx)
 {
     if (ctx->atlas.image) return true;
 
-    vg_image_desc desc = {
+    fx_image_desc desc = {
         .width = ATLAS_SIZE,
         .height = ATLAS_SIZE,
-        .format = VG_FMT_A8_UNORM,
-        .usage = VG_IMAGE_USAGE_SAMPLED | VG_IMAGE_USAGE_TRANSFER_DST,
+        .format = FX_FMT_A8_UNORM,
+        .usage = FX_IMAGE_USAGE_SAMPLED | FX_IMAGE_USAGE_TRANSFER_DST,
     };
-    ctx->atlas.image = vg_image_create(ctx, &desc);
+    ctx->atlas.image = fx_image_create(ctx, &desc);
     if (!ctx->atlas.image) return false;
 
     ctx->atlas.shelf_y = 2;
@@ -22,7 +22,7 @@ static bool ensure_atlas_image(vg_context *ctx)
     return true;
 }
 
-static vg_atlas_entry *find_atlas_entry(vg_context *ctx, vg_font *font, uint32_t glyph_id)
+static fx_atlas_entry *find_atlas_entry(fx_context *ctx, fx_font *font, uint32_t glyph_id)
 {
     for (size_t i = 0; i < ctx->atlas.entry_count; ++i) {
         if (ctx->atlas.entries[i].glyph_id == glyph_id &&
@@ -33,7 +33,7 @@ static vg_atlas_entry *find_atlas_entry(vg_context *ctx, vg_font *font, uint32_t
     return NULL;
 }
 
-static bool upload_glyph(vg_context *ctx, vg_font *font, uint32_t glyph_id, vg_atlas_entry *out_entry)
+static bool upload_glyph(fx_context *ctx, fx_font *font, uint32_t glyph_id, fx_atlas_entry *out_entry)
 {
     if (FT_Load_Glyph(font->ft_face, glyph_id, FT_LOAD_RENDER) != 0) return false;
 
@@ -116,13 +116,13 @@ static bool upload_glyph(vg_context *ctx, vg_font *font, uint32_t glyph_id, vg_a
     /* Record entry */
     if (ctx->atlas.entry_count + 1 > ctx->atlas.entry_cap) {
         size_t new_cap = ctx->atlas.entry_cap ? ctx->atlas.entry_cap * 2 : 256;
-        vg_atlas_entry *new_entries = realloc(ctx->atlas.entries, new_cap * sizeof(vg_atlas_entry));
+        fx_atlas_entry *new_entries = realloc(ctx->atlas.entries, new_cap * sizeof(fx_atlas_entry));
         if (!new_entries) return false;
         ctx->atlas.entries = new_entries;
         ctx->atlas.entry_cap = new_cap;
     }
 
-    vg_atlas_entry *e = &ctx->atlas.entries[ctx->atlas.entry_count++];
+    fx_atlas_entry *e = &ctx->atlas.entries[ctx->atlas.entry_count++];
     e->glyph_id = glyph_id;
     e->font_id = font;
     e->w = w;
@@ -152,22 +152,22 @@ static char *dup_nullable_string(const char *src)
     return copy;
 }
 
-static bool ensure_glyph_capacity(vg_glyph_run *run, size_t extra)
+static bool ensure_glyph_capacity(fx_glyph_run *run, size_t extra)
 {
     size_t need = run->count + extra;
     if (need <= run->cap) return true;
     size_t new_cap = run->cap ? run->cap : 16;
     while (new_cap < need) new_cap *= 2;
-    vg_glyph *glyphs = realloc(run->glyphs, new_cap * sizeof(*glyphs));
+    fx_glyph *glyphs = realloc(run->glyphs, new_cap * sizeof(*glyphs));
     if (!glyphs) return false;
     run->glyphs = glyphs;
     run->cap = new_cap;
     return true;
 }
 
-vg_font *vg_font_create(vg_context *ctx, const vg_font_desc *desc)
+fx_font *fx_font_create(fx_context *ctx, const fx_font_desc *desc)
 {
-    vg_font *font;
+    fx_font *font;
     if (!ctx || !desc || desc->size <= 0.0f || !desc->source_name) return NULL;
     font = calloc(1, sizeof(*font));
     if (!font) return NULL;
@@ -175,7 +175,7 @@ vg_font *vg_font_create(vg_context *ctx, const vg_font_desc *desc)
     font->family = dup_nullable_string(desc->family);
     font->source_name = dup_nullable_string(desc->source_name);
     if (FT_New_Face(ctx->ft_lib, font->source_name, 0, &font->ft_face) != 0) {
-        vg_font_destroy(font);
+        fx_font_destroy(font);
         return NULL;
     }
     FT_Set_Pixel_Sizes(font->ft_face, 0, (FT_UInt)desc->size);
@@ -186,7 +186,7 @@ vg_font *vg_font_create(vg_context *ctx, const vg_font_desc *desc)
     return font;
 }
 
-void vg_font_destroy(vg_font *font)
+void fx_font_destroy(fx_font *font)
 {
     if (!font) return;
     if (font->hb_font) hb_font_destroy(font->hb_font);
@@ -196,7 +196,7 @@ void vg_font_destroy(vg_font *font)
     free(font);
 }
 
-bool vg_font_get_desc(const vg_font *font, vg_font_desc *out_desc)
+bool fx_font_get_desc(const fx_font *font, fx_font_desc *out_desc)
 {
     if (!font) return false;
     if (out_desc) {
@@ -209,9 +209,9 @@ bool vg_font_get_desc(const vg_font *font, vg_font_desc *out_desc)
     return true;
 }
 
-vg_glyph_run *vg_glyph_run_create(size_t reserve_glyphs)
+fx_glyph_run *fx_glyph_run_create(size_t reserve_glyphs)
 {
-    vg_glyph_run *run = calloc(1, sizeof(*run));
+    fx_glyph_run *run = calloc(1, sizeof(*run));
     if (!run) return NULL;
     if (reserve_glyphs && !ensure_glyph_capacity(run, reserve_glyphs)) {
         free(run);
@@ -220,42 +220,42 @@ vg_glyph_run *vg_glyph_run_create(size_t reserve_glyphs)
     return run;
 }
 
-void vg_glyph_run_destroy(vg_glyph_run *run)
+void fx_glyph_run_destroy(fx_glyph_run *run)
 {
     if (!run) return;
     free(run->glyphs);
     free(run);
 }
 
-void vg_glyph_run_reset(vg_glyph_run *run)
+void fx_glyph_run_reset(fx_glyph_run *run)
 {
     if (!run) return;
     run->count = 0;
 }
 
-bool vg_glyph_run_append(vg_glyph_run *run, uint32_t glyph_id, float x, float y)
+bool fx_glyph_run_append(fx_glyph_run *run, uint32_t glyph_id, float x, float y)
 {
     if (!run) return false;
     if (!ensure_glyph_capacity(run, 1)) return false;
-    run->glyphs[run->count++] = (vg_glyph){ .glyph_id = glyph_id, .x = x, .y = y };
+    run->glyphs[run->count++] = (fx_glyph){ .glyph_id = glyph_id, .x = x, .y = y };
     return true;
 }
 
-size_t vg_glyph_run_count(const vg_glyph_run *run)
+size_t fx_glyph_run_count(const fx_glyph_run *run)
 {
     return run ? run->count : 0;
 }
 
-const vg_glyph *vg_glyph_run_data(const vg_glyph_run *run)
+const fx_glyph *fx_glyph_run_data(const fx_glyph_run *run)
 {
     return run ? run->glyphs : NULL;
 }
 
 /* Internal helper for drawing glyphs */
-bool vg_atlas_ensure_glyph(vg_context *ctx, vg_font *font, uint32_t glyph_id, vg_atlas_entry *out_entry)
+bool fx_atlas_ensure_glyph(fx_context *ctx, fx_font *font, uint32_t glyph_id, fx_atlas_entry *out_entry)
 {
     if (!ensure_atlas_image(ctx)) return false;
-    vg_atlas_entry *e = find_atlas_entry(ctx, font, glyph_id);
+    fx_atlas_entry *e = find_atlas_entry(ctx, font, glyph_id);
     if (e) {
         *out_entry = *e;
         return true;

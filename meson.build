@@ -1,4 +1,4 @@
-project('vgfx', 'c',
+project('flux', 'c',
   version : '0.0.1',
   license : 'Apache-2.0',
   default_options : [
@@ -43,7 +43,7 @@ if wayland_opt.allowed()
   endif
 endif
 
-vgfx_inc = include_directories('include', 'src')
+flux_inc = include_directories('include', 'src')
 
 subdir('src')
 
@@ -57,9 +57,9 @@ endif
 
 pkg = import('pkgconfig')
 pkg.generate(
-  libraries   : vgfx_lib,
-  name        : 'vgfx',
-  filebase    : 'vgfx',
+  libraries   : flux_lib,
+  name        : 'flux',
+  filebase    : 'flux',
   description : 'Low-level 2D graphics foundation on Vulkan',
   version     : meson.project_version(),
 )

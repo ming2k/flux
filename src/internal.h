@@ -1,8 +1,8 @@
-/* Internal declarations shared across vgfx translation units. */
-#ifndef VGFX_INTERNAL_H
-#define VGFX_INTERNAL_H
+/* Internal declarations shared across flux translation units. */
+#ifndef FX_INTERNAL_H
+#define FX_INTERNAL_H
 
-#include "vgfx/vgfx.h"
+#include "flux/flux.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -17,24 +17,24 @@
 
 #include "vk/memory.h"
 
-#define VG_MAX_FRAMES_IN_FLIGHT 2
-#define VG_MAX_SWAPCHAIN_IMAGES 8
+#define FX_MAX_FRAMES_IN_FLIGHT 2
+#define FX_MAX_SWAPCHAIN_IMAGES 8
 
 /* ---------- logging ---------- */
 
-void vg_log(const vg_context *ctx, vg_log_level lvl,
+void fx_log(const fx_context *ctx, fx_log_level lvl,
             const char *fmt, ...) __attribute__((format(printf, 3, 4)));
 
-#define VG_LOGE(ctx, ...) vg_log((ctx), VG_LOG_ERROR, __VA_ARGS__)
-#define VG_LOGW(ctx, ...) vg_log((ctx), VG_LOG_WARN,  __VA_ARGS__)
-#define VG_LOGI(ctx, ...) vg_log((ctx), VG_LOG_INFO,  __VA_ARGS__)
-#define VG_LOGD(ctx, ...) vg_log((ctx), VG_LOG_DEBUG, __VA_ARGS__)
+#define FX_LOGE(ctx, ...) fx_log((ctx), FX_LOG_ERROR, __VA_ARGS__)
+#define FX_LOGW(ctx, ...) fx_log((ctx), FX_LOG_WARN,  __VA_ARGS__)
+#define FX_LOGI(ctx, ...) fx_log((ctx), FX_LOG_INFO,  __VA_ARGS__)
+#define FX_LOGD(ctx, ...) fx_log((ctx), FX_LOG_DEBUG, __VA_ARGS__)
 
-#define VG_CHECK_VK(ctx, expr) \
+#define FX_CHECK_VK(ctx, expr) \
     do { \
         VkResult _r = (expr); \
         if (_r != VK_SUCCESS) { \
-            VG_LOGE((ctx), "%s:%d: %s => VkResult %d", \
+            FX_LOGE((ctx), "%s:%d: %s => VkResult %d", \
                     __FILE__, __LINE__, #expr, (int)_r); \
         } \
     } while (0)
@@ -43,16 +43,16 @@ void vg_log(const vg_context *ctx, vg_log_level lvl,
 
 typedef struct {
     uint32_t glyph_id;
-    void    *font_id;   /* vg_font pointer */
+    void    *font_id;   /* fx_font pointer */
     float    u0, v0, u1, v1;
     int      w, h;
     int      bearing_x, bearing_y;
     int      advance;
-} vg_atlas_entry;
+} fx_atlas_entry;
 
-struct vg_atlas {
-    struct vg_image *image;
-    vg_atlas_entry  *entries;
+struct fx_atlas {
+    struct fx_image *image;
+    fx_atlas_entry  *entries;
     size_t           entry_count;
     size_t           entry_cap;
 
@@ -61,10 +61,10 @@ struct vg_atlas {
     int              shelf_x;
 };
 
-/* ---------- vg_context ---------- */
+/* ---------- fx_context ---------- */
 
-struct vg_context {
-    vg_log_fn log;
+struct fx_context {
+    fx_log_fn log;
     void     *log_user;
 
     VkInstance                 instance;
@@ -83,7 +83,7 @@ struct vg_context {
     VkCommandPool frame_cmd_pool;
     FT_Library    ft_lib;
 
-    struct vg_atlas atlas;
+    struct fx_atlas atlas;
 };
 
 /* Picks a physical device and creates the logical device. Graphics
@@ -91,24 +91,24 @@ struct vg_context {
  * `probe_surface` may be VK_NULL_HANDLE; in that case any graphics
  * queue suffices (useful for offscreen contexts; phase-0 always has a
  * wayland surface, but this keeps the seam clean). */
-bool vg_instance_create(vg_context *ctx, const char *app_name,
+bool fx_instance_create(fx_context *ctx, const char *app_name,
                         bool want_validation,
                         const char *const *exts_wanted,
                         uint32_t exts_wanted_n);
-bool vg_device_init(vg_context *ctx, VkSurfaceKHR probe_surface);
-void vg_device_shutdown(vg_context *ctx);
-void vg_instance_destroy(vg_context *ctx);
+bool fx_device_init(fx_context *ctx, VkSurfaceKHR probe_surface);
+void fx_device_shutdown(fx_context *ctx);
+void fx_instance_destroy(fx_context *ctx);
 
-/* ---------- vg_font ---------- */
+/* ---------- fx_font ---------- */
 
-struct vg_glyph_run {
-    vg_glyph *glyphs;
+struct fx_glyph_run {
+    fx_glyph *glyphs;
     size_t    count;
     size_t    cap;
 };
 
-struct vg_font {
-    vg_context *ctx;
+struct fx_font {
+    fx_context *ctx;
     char   *family;
     char   *source_name;
     float   size;
@@ -119,11 +119,11 @@ struct vg_font {
     hb_font_t   *hb_font;
 };
 
-/* ---------- vg_image ---------- */
+/* ---------- fx_image ---------- */
 
-struct vg_image {
-    vg_context    *ctx;
-    vg_image_desc  desc;
+struct fx_image {
+    fx_context    *ctx;
+    fx_image_desc  desc;
     void          *data;
     size_t         data_size;
 
@@ -132,94 +132,94 @@ struct vg_image {
     VkDeviceMemory vk_mem;
 };
 
-/* ---------- vg_surface ---------- */
+/* ---------- fx_surface ---------- */
 
 typedef struct {
     VkImage       image;
     VkImageView   view;
     VkFramebuffer framebuffer;
-} vg_sc_image;
+} fx_sc_image;
 
 typedef struct {
     float surface_size[2];
     float pad[2];
     float color[4];
-} vg_solid_color_pc;
+} fx_solid_color_pc;
 
 typedef struct {
     float surface_size[2];
     float pad[2];
     float color[4];
-} vg_text_pc;
+} fx_text_pc;
 
 typedef struct {
     float surface_size[2];
     float pad[2];
-} vg_image_pc;
+} fx_image_pc;
 
 typedef struct {
     float pos[2];
     float uv[2];
-} vg_image_vertex;
+} fx_image_vertex;
 
 typedef struct {
     float pos[2];
-} vg_solid_vertex;
+} fx_solid_vertex;
 
 typedef struct {
     VkSemaphore     image_available;
     VkSemaphore     render_finished;
     VkFence         in_flight;
     VkCommandBuffer cmd;
-    vg_vbuf_pool    vbuf;
+    fx_vbuf_pool    vbuf;
     VkDescriptorPool desc_pool;
-} vg_frame;
+} fx_frame;
 
 typedef enum {
-    VG_OP_FILL_PATH = 0,
-    VG_OP_STROKE_PATH = 1,
-    VG_OP_DRAW_IMAGE = 2,
-    VG_OP_DRAW_GLYPHS = 3,
-} vg_op_kind;
+    FX_OP_FILL_PATH = 0,
+    FX_OP_STROKE_PATH = 1,
+    FX_OP_DRAW_IMAGE = 2,
+    FX_OP_DRAW_GLYPHS = 3,
+} fx_op_kind;
 
 typedef struct {
-    const vg_path *path;
-    vg_paint       paint;
+    const fx_path *path;
+    fx_paint       paint;
     bool           owns_path;
-} vg_fill_path_op;
+} fx_fill_path_op;
 
 typedef struct {
-    const vg_path *path;
-    vg_paint       paint;
+    const fx_path *path;
+    fx_paint       paint;
     bool           owns_path;
-} vg_stroke_path_op;
+} fx_stroke_path_op;
 
 typedef struct {
-    const vg_image *image;
-    vg_rect         src;
-    vg_rect         dst;
-} vg_draw_image_op;
+    const fx_image *image;
+    fx_rect         src;
+    fx_rect         dst;
+} fx_draw_image_op;
 
 typedef struct {
-    const vg_font      *font;
-    const vg_glyph_run *run;
+    const fx_font      *font;
+    const fx_glyph_run *run;
     float               x;
     float               y;
-    vg_paint            paint;
-} vg_draw_glyphs_op;
+    fx_paint            paint;
+} fx_draw_glyphs_op;
 
 typedef struct {
-    vg_op_kind kind;
+    fx_op_kind kind;
     union {
-        vg_fill_path_op    fill_path;
-        vg_stroke_path_op  stroke_path;
-        vg_draw_image_op   draw_image;
-        vg_draw_glyphs_op  draw_glyphs;
+        fx_fill_path_op    fill_path;
+        fx_stroke_path_op  stroke_path;
+        fx_draw_image_op   draw_image;
+        fx_draw_glyphs_op  draw_glyphs;
     } u;
-} vg_op;
+} fx_op;
 
-struct vg_surface {
-    vg_context *ctx;
+struct fx_surface {
+    fx_context *ctx;
 
     VkSurfaceKHR      vk_surface;
     VkSwapchainKHR    swapchain;
@@ -242,10 +242,10 @@ struct vg_surface {
     VkSampler         sampler;
 
 
-    vg_sc_image       images[VG_MAX_SWAPCHAIN_IMAGES];
+    fx_sc_image       images[FX_MAX_SWAPCHAIN_IMAGES];
     uint32_t          image_count;
 
-    vg_frame          frames[VG_MAX_FRAMES_IN_FLIGHT];
+    fx_frame          frames[FX_MAX_FRAMES_IN_FLIGHT];
     uint32_t          frame_index;      /* cycles 0..MAX_FRAMES-1 */
     uint32_t          acquired_image;   /* set by acquire, read by present */
 
@@ -253,66 +253,66 @@ struct vg_surface {
     int32_t           requested_w, requested_h;
     bool              reported_unimplemented_ops;
 
-    vg_color_space    color_space;
+    fx_color_space    color_space;
 
     /* Canvas recording state: commands are appended CPU-side. */
-    struct vg_canvas {
-        vg_surface *owner;
-        vg_color    clear_color;
+    struct fx_canvas {
+        fx_surface *owner;
+        fx_color    clear_color;
         bool        has_clear;
-        vg_op      *ops;
+        fx_op      *ops;
         size_t      op_count;
         size_t      op_cap;
 
-        vg_matrix  *state_stack;
+        fx_matrix  *state_stack;
         size_t      state_count;
         size_t      state_cap;
-        vg_matrix   current_matrix;
+        fx_matrix   current_matrix;
     } canvas;
 };
 
-bool vg_swapchain_build(vg_surface *s);
-void vg_swapchain_destroy(vg_surface *s);
+bool fx_swapchain_build(fx_surface *s);
+void fx_swapchain_destroy(fx_surface *s);
 /* Waits on all in-flight frame fences and destroys per-frame objects. */
-void vg_surface_wait_idle(vg_surface *s);
-void vg_canvas_reset(vg_canvas *c);
-void vg_canvas_dispose(vg_canvas *c);
-bool vg_path_is_axis_aligned_rect(const vg_path *path, vg_rect *out_rect);
-bool vg_path_get_line_loop(const vg_path *path,
-                           const vg_point **out_points,
+void fx_surface_wait_idle(fx_surface *s);
+void fx_canvas_reset(fx_canvas *c);
+void fx_canvas_dispose(fx_canvas *c);
+bool fx_path_is_axis_aligned_rect(const fx_path *path, fx_rect *out_rect);
+bool fx_path_get_line_loop(const fx_path *path,
+                           const fx_point **out_points,
                            size_t *out_count);
-bool vg_path_flatten_polyline(const vg_path *path, float tolerance,
-                              vg_point **out_points, size_t *out_count,
+bool fx_path_flatten_polyline(const fx_path *path, float tolerance,
+                              fx_point **out_points, size_t *out_count,
                               bool *out_closed);
-bool vg_path_flatten_line_loop(const vg_path *path, float tolerance,
-                               vg_point **out_points, size_t *out_count);
-bool vg_tessellate_simple_polygon(const vg_point *points, size_t count,
-                                  vg_point **out_tris, size_t *out_count);
-bool vg_stroke_polyline(const vg_point *points, size_t count, bool closed,
-                        const vg_paint *paint, vg_point **out_tris, size_t *out_count);
+bool fx_path_flatten_line_loop(const fx_path *path, float tolerance,
+                               fx_point **out_points, size_t *out_count);
+bool fx_tessellate_simple_polygon(const fx_point *points, size_t count,
+                                  fx_point **out_tris, size_t *out_count);
+bool fx_stroke_polyline(const fx_point *points, size_t count, bool closed,
+                        const fx_paint *paint, fx_point **out_tris, size_t *out_count);
 
-bool vg_atlas_ensure_glyph(vg_context *ctx, vg_font *font, uint32_t glyph_id, vg_atlas_entry *out_entry);
+bool fx_atlas_ensure_glyph(fx_context *ctx, fx_font *font, uint32_t glyph_id, fx_atlas_entry *out_entry);
 
 /* ---------- matrix & path transform ---------- */
 
-static inline void vg_matrix_identity(vg_matrix *m)
+static inline void fx_matrix_identity(fx_matrix *m)
 {
     m->m[0] = 1.0f; m->m[1] = 0.0f;
     m->m[2] = 0.0f; m->m[3] = 1.0f;
     m->m[4] = 0.0f; m->m[5] = 0.0f;
 }
 
-static inline bool vg_matrix_is_identity(const vg_matrix *m)
+static inline bool fx_matrix_is_identity(const fx_matrix *m)
 {
     return m->m[0] == 1.0f && m->m[1] == 0.0f &&
            m->m[2] == 0.0f && m->m[3] == 1.0f &&
            m->m[4] == 0.0f && m->m[5] == 0.0f;
 }
 
-void vg_matrix_multiply(vg_matrix *out, const vg_matrix *a, const vg_matrix *b);
-void vg_matrix_transform_point(const vg_matrix *m, float *x, float *y);
+void fx_matrix_multiply(fx_matrix *out, const fx_matrix *a, const fx_matrix *b);
+void fx_matrix_transform_point(const fx_matrix *m, float *x, float *y);
 
 /* Returns a newly allocated path with coordinates transformed by m. */
-vg_path *vg_path_transform(const vg_path *src, const vg_matrix *m);
+fx_path *fx_path_transform(const fx_path *src, const fx_matrix *m);
 
-#endif /* VGFX_INTERNAL_H */
+#endif /* FX_INTERNAL_H */

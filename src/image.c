@@ -1,28 +1,28 @@
 #include "internal.h"
 
-static size_t bytes_per_pixel(vg_pixel_format format)
+static size_t bytes_per_pixel(fx_pixel_format format)
 {
     switch (format) {
-        case VG_FMT_BGRA8_UNORM:
-        case VG_FMT_RGBA8_UNORM:
+        case FX_FMT_BGRA8_UNORM:
+        case FX_FMT_RGBA8_UNORM:
             return 4;
-        case VG_FMT_A8_UNORM:
+        case FX_FMT_A8_UNORM:
             return 1;
     }
     return 0;
 }
 
-static VkFormat to_vk_format(vg_pixel_format fmt)
+static VkFormat to_vk_format(fx_pixel_format fmt)
 {
     switch (fmt) {
-        case VG_FMT_BGRA8_UNORM: return VK_FORMAT_B8G8R8A8_UNORM;
-        case VG_FMT_RGBA8_UNORM: return VK_FORMAT_R8G8B8A8_UNORM;
-        case VG_FMT_A8_UNORM:    return VK_FORMAT_R8_UNORM;
+        case FX_FMT_BGRA8_UNORM: return VK_FORMAT_B8G8R8A8_UNORM;
+        case FX_FMT_RGBA8_UNORM: return VK_FORMAT_R8G8B8A8_UNORM;
+        case FX_FMT_A8_UNORM:    return VK_FORMAT_R8_UNORM;
     }
     return VK_FORMAT_UNDEFINED;
 }
 
-static uint32_t find_memory_type(vg_context *ctx, uint32_t filter, VkMemoryPropertyFlags props)
+static uint32_t find_memory_type(fx_context *ctx, uint32_t filter, VkMemoryPropertyFlags props)
 {
     for (uint32_t i = 0; i < ctx->mem_props.memoryTypeCount; ++i) {
         if ((filter & (1 << i)) &&
@@ -33,9 +33,9 @@ static uint32_t find_memory_type(vg_context *ctx, uint32_t filter, VkMemoryPrope
     return UINT32_MAX;
 }
 
-vg_image *vg_image_create(vg_context *ctx, const vg_image_desc *desc)
+fx_image *fx_image_create(fx_context *ctx, const fx_image_desc *desc)
 {
-    vg_image *image;
+    fx_image *image;
     size_t bpp;
     size_t stride;
     size_t data_size = 0;
@@ -56,8 +56,8 @@ vg_image *vg_image_create(vg_context *ctx, const vg_image_desc *desc)
     image->desc.data = NULL;
     image->desc.stride = stride;
     if (!image->desc.usage) {
-        image->desc.usage = VG_IMAGE_USAGE_SAMPLED |
-                            VG_IMAGE_USAGE_TRANSFER_DST;
+        image->desc.usage = FX_IMAGE_USAGE_SAMPLED |
+                            FX_IMAGE_USAGE_TRANSFER_DST;
     }
 
     if (desc->data) {
@@ -71,7 +71,9 @@ vg_image *vg_image_create(vg_context *ctx, const vg_image_desc *desc)
         image->data_size = data_size;
     }
 
-    /* Vulkan resource creation */
+    /* Vulkan resource creation (skip if no device provided, e.g. in unit tests) */
+    if (!ctx->device) return image;
+
     VkImageCreateInfo ici = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
@@ -87,7 +89,7 @@ vg_image *vg_image_create(vg_context *ctx, const vg_image_desc *desc)
     };
 
     if (vkCreateImage(ctx->device, &ici, NULL, &image->vk_image) != VK_SUCCESS) {
-        vg_image_destroy(image);
+        fx_image_destroy(image);
         return NULL;
     }
 
@@ -101,7 +103,7 @@ vg_image *vg_image_create(vg_context *ctx, const vg_image_desc *desc)
     };
 
     if (vkAllocateMemory(ctx->device, &mai, NULL, &image->vk_mem) != VK_SUCCESS) {
-        vg_image_destroy(image);
+        fx_image_destroy(image);
         return NULL;
     }
 
@@ -122,7 +124,7 @@ vg_image *vg_image_create(vg_context *ctx, const vg_image_desc *desc)
     };
 
     if (vkCreateImageView(ctx->device, &vci, NULL, &image->vk_view) != VK_SUCCESS) {
-        vg_image_destroy(image);
+        fx_image_destroy(image);
         return NULL;
     }
 
@@ -208,17 +210,19 @@ vg_image *vg_image_create(vg_context *ctx, const vg_image_desc *desc)
     return image;
 }
 
-void vg_image_destroy(vg_image *image)
+void fx_image_destroy(fx_image *image)
 {
     if (!image) return;
-    if (image->vk_view) vkDestroyImageView(image->ctx->device, image->vk_view, NULL);
-    if (image->vk_image) vkDestroyImage(image->ctx->device, image->vk_image, NULL);
-    if (image->vk_mem) vkFreeMemory(image->ctx->device, image->vk_mem, NULL);
+    if (image->ctx->device) {
+        if (image->vk_view) vkDestroyImageView(image->ctx->device, image->vk_view, NULL);
+        if (image->vk_image) vkDestroyImage(image->ctx->device, image->vk_image, NULL);
+        if (image->vk_mem) vkFreeMemory(image->ctx->device, image->vk_mem, NULL);
+    }
     free(image->data);
     free(image);
 }
 
-bool vg_image_get_desc(const vg_image *image, vg_image_desc *out_desc)
+bool fx_image_get_desc(const fx_image *image, fx_image_desc *out_desc)
 {
     if (!image) return false;
     if (out_desc) {
@@ -228,7 +232,7 @@ bool vg_image_get_desc(const vg_image *image, vg_image_desc *out_desc)
     return true;
 }
 
-const void *vg_image_data(const vg_image *image,
+const void *fx_image_data(const fx_image *image,
                           size_t *out_size,
                           size_t *out_stride)
 {

@@ -53,7 +53,7 @@ static VkExtent2D clamp_extent(VkSurfaceCapabilitiesKHR caps,
     return e;
 }
 
-static bool make_render_pass(vg_surface *s)
+static bool make_render_pass(fx_surface *s)
 {
     VkAttachmentDescription color = {
         .format         = s->surface_format.format,
@@ -93,13 +93,13 @@ static bool make_render_pass(vg_surface *s)
     };
     VkResult r = vkCreateRenderPass(s->ctx->device, &ci, NULL, &s->render_pass);
     if (r != VK_SUCCESS) {
-        VG_LOGE(s->ctx, "vkCreateRenderPass: %d", (int)r);
+        FX_LOGE(s->ctx, "vkCreateRenderPass: %d", (int)r);
         return false;
     }
     return true;
 }
 
-static VkShaderModule make_shader_module(vg_context *ctx,
+static VkShaderModule make_shader_module(fx_context *ctx,
                                          const uint32_t *code,
                                          size_t code_size)
 {
@@ -110,13 +110,13 @@ static VkShaderModule make_shader_module(vg_context *ctx,
         .pCode    = code,
     };
     if (vkCreateShaderModule(ctx->device, &ci, NULL, &module) != VK_SUCCESS) {
-        VG_LOGE(ctx, "vkCreateShaderModule failed");
+        FX_LOGE(ctx, "vkCreateShaderModule failed");
         return VK_NULL_HANDLE;
     }
     return module;
 }
 
-static bool make_image_dsl(vg_surface *s)
+static bool make_image_dsl(fx_surface *s)
 {
     VkDescriptorSetLayoutBinding binding = {
         .binding = 0,
@@ -130,20 +130,20 @@ static bool make_image_dsl(vg_surface *s)
         .pBindings = &binding,
     };
     if (vkCreateDescriptorSetLayout(s->ctx->device, &ci, NULL, &s->image_dsl) != VK_SUCCESS) {
-        VG_LOGE(s->ctx, "vkCreateDescriptorSetLayout failed");
+        FX_LOGE(s->ctx, "vkCreateDescriptorSetLayout failed");
         return false;
     }
     return true;
 }
 
-static bool make_image_pipeline(vg_surface *s)
+static bool make_image_pipeline(fx_surface *s)
 {
     VkShaderModule vert = VK_NULL_HANDLE;
     VkShaderModule frag = VK_NULL_HANDLE;
     VkPushConstantRange push_range = {
         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
         .offset = 0,
-        .size = sizeof(vg_image_pc),
+        .size = sizeof(fx_image_pc),
     };
     VkPipelineLayoutCreateInfo lci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -153,13 +153,13 @@ static bool make_image_pipeline(vg_surface *s)
         .pPushConstantRanges = &push_range,
     };
     if (vkCreatePipelineLayout(s->ctx->device, &lci, NULL, &s->image_layout) != VK_SUCCESS) {
-        VG_LOGE(s->ctx, "vkCreatePipelineLayout failed");
+        FX_LOGE(s->ctx, "vkCreatePipelineLayout failed");
         return false;
     }
 
     VkPipelineShaderStageCreateInfo stages[2] = { 0 };
-    vert = make_shader_module(s->ctx, vg_image_vert_spv, sizeof(vg_image_vert_spv));
-    frag = make_shader_module(s->ctx, vg_image_frag_spv, sizeof(vg_image_frag_spv));
+    vert = make_shader_module(s->ctx, fx_image_vert_spv, sizeof(fx_image_vert_spv));
+    frag = make_shader_module(s->ctx, fx_image_frag_spv, sizeof(fx_image_frag_spv));
     if (!vert || !frag) goto fail;
 
     stages[0] = (VkPipelineShaderStageCreateInfo){
@@ -177,12 +177,12 @@ static bool make_image_pipeline(vg_surface *s)
 
     VkVertexInputBindingDescription binding = {
         .binding = 0,
-        .stride = sizeof(vg_image_vertex),
+        .stride = sizeof(fx_image_vertex),
         .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
     };
     VkVertexInputAttributeDescription attrs[2] = {
-        { .location = 0, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(vg_image_vertex, pos) },
-        { .location = 1, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(vg_image_vertex, uv) },
+        { .location = 0, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(fx_image_vertex, pos) },
+        { .location = 1, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(fx_image_vertex, uv) },
     };
     VkPipelineVertexInputStateCreateInfo vi = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -218,7 +218,7 @@ static bool make_image_pipeline(vg_surface *s)
     };
 
     if (vkCreateGraphicsPipelines(s->ctx->device, VK_NULL_HANDLE, 1, &pci, NULL, &s->image_pipeline) != VK_SUCCESS) {
-        VG_LOGE(s->ctx, "vkCreateGraphicsPipelines (image) failed");
+        FX_LOGE(s->ctx, "vkCreateGraphicsPipelines (image) failed");
         goto fail;
     }
 
@@ -231,14 +231,14 @@ fail:
     return false;
 }
 
-static bool make_text_pipeline(vg_surface *s)
+static bool make_text_pipeline(fx_surface *s)
 {
     VkShaderModule vert = VK_NULL_HANDLE;
     VkShaderModule frag = VK_NULL_HANDLE;
     VkPushConstantRange push_range = {
         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
         .offset = 0,
-        .size = sizeof(vg_text_pc),
+        .size = sizeof(fx_text_pc),
     };
     VkPipelineLayoutCreateInfo lci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -248,13 +248,13 @@ static bool make_text_pipeline(vg_surface *s)
         .pPushConstantRanges = &push_range,
     };
     if (vkCreatePipelineLayout(s->ctx->device, &lci, NULL, &s->text_layout) != VK_SUCCESS) {
-        VG_LOGE(s->ctx, "vkCreatePipelineLayout failed");
+        FX_LOGE(s->ctx, "vkCreatePipelineLayout failed");
         return false;
     }
 
     VkPipelineShaderStageCreateInfo stages[2] = { 0 };
-    vert = make_shader_module(s->ctx, vg_image_vert_spv, sizeof(vg_image_vert_spv)); /* Reuse image vert */
-    frag = make_shader_module(s->ctx, vg_text_frag_spv, sizeof(vg_text_frag_spv));
+    vert = make_shader_module(s->ctx, fx_image_vert_spv, sizeof(fx_image_vert_spv)); /* Reuse image vert */
+    frag = make_shader_module(s->ctx, fx_text_frag_spv, sizeof(fx_text_frag_spv));
     if (!vert || !frag) goto fail;
 
     stages[0] = (VkPipelineShaderStageCreateInfo){
@@ -272,12 +272,12 @@ static bool make_text_pipeline(vg_surface *s)
 
     VkVertexInputBindingDescription binding = {
         .binding = 0,
-        .stride = sizeof(vg_image_vertex),
+        .stride = sizeof(fx_image_vertex),
         .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
     };
     VkVertexInputAttributeDescription attrs[2] = {
-        { .location = 0, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(vg_image_vertex, pos) },
-        { .location = 1, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(vg_image_vertex, uv) },
+        { .location = 0, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(fx_image_vertex, pos) },
+        { .location = 1, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(fx_image_vertex, uv) },
     };
     VkPipelineVertexInputStateCreateInfo vi = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -313,7 +313,7 @@ static bool make_text_pipeline(vg_surface *s)
     };
 
     if (vkCreateGraphicsPipelines(s->ctx->device, VK_NULL_HANDLE, 1, &pci, NULL, &s->text_pipeline) != VK_SUCCESS) {
-        VG_LOGE(s->ctx, "vkCreateGraphicsPipelines (text) failed");
+        FX_LOGE(s->ctx, "vkCreateGraphicsPipelines (text) failed");
         goto fail;
     }
 
@@ -326,14 +326,14 @@ fail:
     return false;
 }
 
-static bool make_bootstrap_pipeline(vg_surface *s)
+static bool make_bootstrap_pipeline(fx_surface *s)
 {
     VkShaderModule vert = VK_NULL_HANDLE;
     VkShaderModule frag = VK_NULL_HANDLE;
     VkPushConstantRange push_range = {
         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
         .offset = 0,
-        .size = sizeof(vg_solid_color_pc),
+        .size = sizeof(fx_solid_color_pc),
     };
     VkPipelineLayoutCreateInfo lci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -343,7 +343,7 @@ static bool make_bootstrap_pipeline(vg_surface *s)
     VkPipelineShaderStageCreateInfo stages[2] = { 0 };
     VkVertexInputBindingDescription binding = {
         .binding = 0,
-        .stride = sizeof(vg_solid_vertex),
+        .stride = sizeof(fx_solid_vertex),
         .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
     };
     VkVertexInputAttributeDescription attr = {
@@ -424,14 +424,14 @@ static bool make_bootstrap_pipeline(vg_surface *s)
 
     if (vkCreatePipelineLayout(s->ctx->device, &lci, NULL,
                                &s->solid_rect_layout) != VK_SUCCESS) {
-        VG_LOGE(s->ctx, "vkCreatePipelineLayout failed");
+        FX_LOGE(s->ctx, "vkCreatePipelineLayout failed");
         return false;
     }
 
-    vert = make_shader_module(s->ctx, vg_solid_color_vert_spv,
-                              sizeof(vg_solid_color_vert_spv));
-    frag = make_shader_module(s->ctx, vg_solid_color_frag_spv,
-                              sizeof(vg_solid_color_frag_spv));
+    vert = make_shader_module(s->ctx, fx_solid_color_vert_spv,
+                              sizeof(fx_solid_color_vert_spv));
+    frag = make_shader_module(s->ctx, fx_solid_color_frag_spv,
+                              sizeof(fx_solid_color_frag_spv));
     if (!vert || !frag) goto fail;
 
     stages[0] = (VkPipelineShaderStageCreateInfo){
@@ -450,7 +450,7 @@ static bool make_bootstrap_pipeline(vg_surface *s)
     if (vkCreateGraphicsPipelines(s->ctx->device, VK_NULL_HANDLE,
                                   1, &pci, NULL,
                                   &s->solid_rect_pipeline) != VK_SUCCESS) {
-        VG_LOGE(s->ctx, "vkCreateGraphicsPipelines failed");
+        FX_LOGE(s->ctx, "vkCreateGraphicsPipelines failed");
         goto fail;
     }
 
@@ -468,15 +468,15 @@ fail:
     return false;
 }
 
-static bool make_images(vg_surface *s)
+static bool make_images(fx_surface *s)
 {
     vkGetSwapchainImagesKHR(s->ctx->device, s->swapchain, &s->image_count, NULL);
-    if (s->image_count > VG_MAX_SWAPCHAIN_IMAGES) {
-        VG_LOGE(s->ctx, "swapchain image count %u exceeds cap %u",
-                s->image_count, VG_MAX_SWAPCHAIN_IMAGES);
+    if (s->image_count > FX_MAX_SWAPCHAIN_IMAGES) {
+        FX_LOGE(s->ctx, "swapchain image count %u exceeds cap %u",
+                s->image_count, FX_MAX_SWAPCHAIN_IMAGES);
         return false;
     }
-    VkImage images[VG_MAX_SWAPCHAIN_IMAGES];
+    VkImage images[FX_MAX_SWAPCHAIN_IMAGES];
     vkGetSwapchainImagesKHR(s->ctx->device, s->swapchain, &s->image_count,
                             images);
 
@@ -496,7 +496,7 @@ static bool make_images(vg_surface *s)
         };
         if (vkCreateImageView(s->ctx->device, &vci, NULL,
                               &s->images[i].view) != VK_SUCCESS) {
-            VG_LOGE(s->ctx, "vkCreateImageView failed");
+            FX_LOGE(s->ctx, "vkCreateImageView failed");
             return false;
         }
 
@@ -511,14 +511,14 @@ static bool make_images(vg_surface *s)
         };
         if (vkCreateFramebuffer(s->ctx->device, &fci, NULL,
                                 &s->images[i].framebuffer) != VK_SUCCESS) {
-            VG_LOGE(s->ctx, "vkCreateFramebuffer failed");
+            FX_LOGE(s->ctx, "vkCreateFramebuffer failed");
             return false;
         }
     }
     return true;
 }
 
-static bool make_frames(vg_surface *s)
+static bool make_frames(fx_surface *s)
 {
     VkCommandBufferAllocateInfo ai = {
         .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -542,7 +542,7 @@ static bool make_frames(vg_surface *s)
     };
     if (vkCreateSampler(s->ctx->device, &sci_sampler, NULL, &s->sampler) != VK_SUCCESS) return false;
 
-    for (uint32_t i = 0; i < VG_MAX_FRAMES_IN_FLIGHT; ++i) {
+    for (uint32_t i = 0; i < FX_MAX_FRAMES_IN_FLIGHT; ++i) {
         if (vkAllocateCommandBuffers(s->ctx->device, &ai,
                                      &s->frames[i].cmd) != VK_SUCCESS) return false;
         if (vkCreateSemaphore(s->ctx->device, &sci, NULL,
@@ -552,7 +552,7 @@ static bool make_frames(vg_surface *s)
         if (vkCreateFence(s->ctx->device, &fci, NULL,
                           &s->frames[i].in_flight) != VK_SUCCESS) return false;
 
-        vg_vbuf_pool_init(&s->frames[i].vbuf, s->ctx);
+        fx_vbuf_pool_init(&s->frames[i].vbuf, s->ctx);
 
         VkDescriptorPoolSize pool_sizes[] = {
             { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 64 },
@@ -568,7 +568,7 @@ static bool make_frames(vg_surface *s)
     return true;
 }
 
-bool vg_swapchain_build(vg_surface *s)
+bool fx_swapchain_build(fx_surface *s)
 {
     VkPhysicalDevice phys = s->ctx->phys;
     VkDevice         dev  = s->ctx->device;
@@ -602,8 +602,8 @@ bool vg_swapchain_build(vg_surface *s)
     uint32_t image_count = caps.minImageCount + 1;
     if (caps.maxImageCount > 0 && image_count > caps.maxImageCount)
         image_count = caps.maxImageCount;
-    if (image_count > VG_MAX_SWAPCHAIN_IMAGES)
-        image_count = VG_MAX_SWAPCHAIN_IMAGES;
+    if (image_count > FX_MAX_SWAPCHAIN_IMAGES)
+        image_count = FX_MAX_SWAPCHAIN_IMAGES;
 
     VkSwapchainCreateInfoKHR ci = {
         .sType            = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
@@ -634,7 +634,7 @@ bool vg_swapchain_build(vg_surface *s)
 
     VkResult r = vkCreateSwapchainKHR(dev, &ci, NULL, &s->swapchain);
     if (r != VK_SUCCESS) {
-        VG_LOGE(s->ctx, "vkCreateSwapchainKHR: %d", (int)r);
+        FX_LOGE(s->ctx, "vkCreateSwapchainKHR: %d", (int)r);
         return false;
     }
 
@@ -646,18 +646,18 @@ bool vg_swapchain_build(vg_surface *s)
     if (!make_images(s))      return false;
     if (!make_frames(s))      return false;
 
-    VG_LOGI(s->ctx, "swapchain %ux%u images=%u format=%d present=%d",
+    FX_LOGI(s->ctx, "swapchain %ux%u images=%u format=%d present=%d",
             s->extent.width, s->extent.height, s->image_count,
             (int)s->surface_format.format, (int)s->present_mode);
     s->needs_recreate = false;
     return true;
 }
 
-void vg_swapchain_destroy(vg_surface *s)
+void fx_swapchain_destroy(fx_surface *s)
 {
     VkDevice dev = s->ctx->device;
 
-    for (uint32_t i = 0; i < VG_MAX_FRAMES_IN_FLIGHT; ++i) {
+    for (uint32_t i = 0; i < FX_MAX_FRAMES_IN_FLIGHT; ++i) {
         if (s->frames[i].in_flight) {
             vkDestroyFence(dev, s->frames[i].in_flight, NULL);
             s->frames[i].in_flight = VK_NULL_HANDLE;
@@ -675,7 +675,7 @@ void vg_swapchain_destroy(vg_surface *s)
                                  &s->frames[i].cmd);
             s->frames[i].cmd = VK_NULL_HANDLE;
         }
-        vg_vbuf_pool_destroy(&s->frames[i].vbuf);
+        fx_vbuf_pool_destroy(&s->frames[i].vbuf);
         if (s->frames[i].desc_pool) {
             vkDestroyDescriptorPool(dev, s->frames[i].desc_pool, NULL);
             s->frames[i].desc_pool = VK_NULL_HANDLE;
@@ -736,12 +736,12 @@ void vg_swapchain_destroy(vg_surface *s)
     }
 }
 
-void vg_surface_wait_idle(vg_surface *s)
+void fx_surface_wait_idle(fx_surface *s)
 {
     if (!s->ctx || !s->ctx->device) return;
-    VkFence fences[VG_MAX_FRAMES_IN_FLIGHT];
+    VkFence fences[FX_MAX_FRAMES_IN_FLIGHT];
     uint32_t n = 0;
-    for (uint32_t i = 0; i < VG_MAX_FRAMES_IN_FLIGHT; ++i)
+    for (uint32_t i = 0; i < FX_MAX_FRAMES_IN_FLIGHT; ++i)
         if (s->frames[i].in_flight) fences[n++] = s->frames[i].in_flight;
     if (n) vkWaitForFences(s->ctx->device, n, fences, VK_TRUE, UINT64_MAX);
 }

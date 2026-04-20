@@ -19,10 +19,10 @@
 
 **Deliverables (shipped):**
 
-- **Dynamic Memory:** Per-frame linear allocator (`vg_vbuf_pool`) with automatic growth, replacing fixed vertex limits.
+- **Dynamic Memory:** Per-frame linear allocator (`fx_vbuf_pool`) with automatic growth, replacing fixed vertex limits.
 - **Batching:** Automatic draw call grouping for operations with identical colors.
-- **Transforms:** CPU-side affine matrix stack (`vg_save`, `vg_restore`, `vg_translate`, etc.). Immediate transformation ensures optimal path flattening quality.
-- **Paint System:** Introduced `vg_paint` to encapsulate color, stroke width, caps, joins, and miter limits.
+- **Transforms:** CPU-side affine matrix stack (`fx_save`, `fx_restore`, `fx_translate`, etc.). Immediate transformation ensures optimal path flattening quality.
+- **Paint System:** Introduced `fx_paint` to encapsulate color, stroke width, caps, joins, and miter limits.
 - **Advanced Stroking:** Full support for SVG-grade line caps (Butt, Round, Square) and joins (Miter, Round, Bevel) with miter fallback.
 - **GPU Images:** Automated upload of CPU pixels to `DEVICE_LOCAL` memory and hardware-accelerated textured quad rendering.
 - **Shaders:** Specialized GLSL pipelines for solid colors and textured quads with alpha blending.
@@ -53,9 +53,9 @@
 
 **Deliverables:**
 
-- `vg_mask_blur(sigma)` — separable horizontal + vertical pass to a ping-pong offscreen render target; composite back.
-- `vg_mask_drop_shadow(dx, dy, sigma, color)` — blur the mask, offset by `(dx, dy)`, composite beneath the original shape.
-- `vg_paint_set_mask_filter` — attach to any paint; executed during present.
+- `fx_mask_blur(sigma)` — separable horizontal + vertical pass to a ping-pong offscreen render target; composite back.
+- `fx_mask_drop_shadow(dx, dy, sigma, color)` — blur the mask, offset by `(dx, dy)`, composite beneath the original shape.
+- `fx_paint_set_mask_filter` — attach to any paint; executed during present.
 - `examples/blur_shadow.c`.
 - Golden tests: blurred rect, drop-shadowed text.
 
@@ -69,7 +69,7 @@
 - **Clipping:** Stencil-buffer or coverage-based clipping for arbitrary paths.
 - **HiDPI:** Explicit support for device scale factors in the atlas and flattening logic.
 - **SDF Text:** Signed Distance Field rendering for large glyphs.
-- **Offscreen Rendering:** `vg_surface_create_offscreen` for headless testing.
+- **Offscreen Rendering:** `fx_surface_create_offscreen` for headless testing.
 
 ---
 

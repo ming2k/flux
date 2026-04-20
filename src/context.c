@@ -1,19 +1,19 @@
 #include "internal.h"
 
-static void default_log(vg_log_level lvl, const char *msg, void *user)
+static void default_log(fx_log_level lvl, const char *msg, void *user)
 {
     (void)user;
     const char *tag = "?";
     switch (lvl) {
-        case VG_LOG_ERROR: tag = "E"; break;
-        case VG_LOG_WARN:  tag = "W"; break;
-        case VG_LOG_INFO:  tag = "I"; break;
-        case VG_LOG_DEBUG: tag = "D"; break;
+        case FX_LOG_ERROR: tag = "E"; break;
+        case FX_LOG_WARN:  tag = "W"; break;
+        case FX_LOG_INFO:  tag = "I"; break;
+        case FX_LOG_DEBUG: tag = "D"; break;
     }
-    fprintf(stderr, "[vgfx %s] %s\n", tag, msg);
+    fprintf(stderr, "[flux %s] %s\n", tag, msg);
 }
 
-void vg_log(const vg_context *ctx, vg_log_level lvl, const char *fmt, ...)
+void fx_log(const fx_context *ctx, fx_log_level lvl, const char *fmt, ...)
 {
     char buf[512];
     va_list ap;
@@ -30,9 +30,9 @@ static bool env_flag(const char *name)
     return v && v[0] && v[0] != '0';
 }
 
-vg_context *vg_context_create(const vg_context_desc *desc)
+fx_context *fx_context_create(const fx_context_desc *desc)
 {
-    vg_context *ctx = calloc(1, sizeof(*ctx));
+    fx_context *ctx = calloc(1, sizeof(*ctx));
     if (!ctx) return NULL;
     if (desc) {
         ctx->log      = desc->log;
@@ -40,7 +40,7 @@ vg_context *vg_context_create(const vg_context_desc *desc)
     }
 
     bool want_validation = desc && desc->enable_validation;
-    if (!want_validation) want_validation = env_flag("VG_ENABLE_VALIDATION");
+    if (!want_validation) want_validation = env_flag("FX_ENABLE_VALIDATION");
 
     /* Phase-0 always wants Wayland surface support. When we add
      * offscreen-only contexts we'll make this conditional. */
@@ -48,7 +48,7 @@ vg_context *vg_context_create(const vg_context_desc *desc)
         "VK_KHR_surface",
         "VK_KHR_wayland_surface",
     };
-    if (!vg_instance_create(ctx,
+    if (!fx_instance_create(ctx,
                             desc ? desc->app_name : NULL,
                             want_validation,
                             inst_exts,
@@ -60,15 +60,15 @@ vg_context *vg_context_create(const vg_context_desc *desc)
     /* Defer device creation until the first surface: surface support is
      * a queue-family selection input. */
     if (FT_Init_FreeType(&ctx->ft_lib) != 0) {
-        VG_LOGE(ctx, "failed to initialize FreeType");
-        vg_device_shutdown(ctx);
+        FX_LOGE(ctx, "failed to initialize FreeType");
+        fx_device_shutdown(ctx);
         free(ctx);
         return NULL;
     }
     return ctx;
 }
 
-bool vg_context_get_device_caps(const vg_context *ctx, vg_device_caps *out_caps)
+bool fx_context_get_device_caps(const fx_context *ctx, fx_device_caps *out_caps)
 {
     VkFormatProperties fmt_props;
 
@@ -97,10 +97,10 @@ bool vg_context_get_device_caps(const vg_context *ctx, vg_device_caps *out_caps)
     return true;
 }
 
-void vg_context_destroy(vg_context *ctx)
+void fx_context_destroy(fx_context *ctx)
 {
     if (!ctx) return;
     if (ctx->ft_lib) FT_Done_FreeType(ctx->ft_lib);
-    vg_device_shutdown(ctx);
+    fx_device_shutdown(ctx);
     free(ctx);
 }

@@ -3,8 +3,8 @@
  * filled rectangular path so both the clear path and the first
  * non-clear Vulkan execution path are exercised. */
 
-#include "vgfx/vgfx.h"
-#include "vgfx/vgfx_wayland.h"
+#include "flux/flux.h"
+#include "flux/flux_wayland.h"
 
 #include <errno.h>
 #include <signal.h>
@@ -130,8 +130,8 @@ int main(void)
     xdg_surface_add_listener(a.xdg_surface, &xdg_surface_listener, &a);
     a.toplevel    = xdg_surface_get_toplevel(a.xdg_surface);
     xdg_toplevel_add_listener(a.toplevel, &toplevel_listener, &a);
-    xdg_toplevel_set_title(a.toplevel, "vgfx hello_rect");
-    xdg_toplevel_set_app_id(a.toplevel, "io.vgfx.hello_rect");
+    xdg_toplevel_set_title(a.toplevel, "flux hello_rect");
+    xdg_toplevel_set_app_id(a.toplevel, "io.flux.hello_rect");
     wl_surface_commit(a.surface);
 
     while (!a.configured && wl_display_dispatch(a.display) != -1) { }
@@ -140,23 +140,23 @@ int main(void)
         return 1;
     }
 
-    vg_context *ctx = vg_context_create(&(vg_context_desc){
+    fx_context *ctx = fx_context_create(&(fx_context_desc){
         .app_name          = "hello_rect",
         .enable_validation = false,
     });
     if (!ctx) return 1;
 
-    vg_surface *vs = vg_surface_create_wayland(ctx, a.display, a.surface,
+    fx_surface *vs = fx_surface_create_wayland(ctx, a.display, a.surface,
                                                a.width, a.height,
-                                               VG_CS_SRGB);
+                                               FX_CS_SRGB);
     if (!vs) return 1;
 
     signal(SIGINT, sigint);
 
     struct timespec t0;
     clock_gettime(CLOCK_MONOTONIC, &t0);
-    vg_path *rect = vg_path_create();
-    vg_path *poly = vg_path_create();
+    fx_path *rect = fx_path_create();
+    fx_path *poly = fx_path_create();
     if (!rect || !poly) return 1;
 
     int32_t last_w = a.width, last_h = a.height;
@@ -165,12 +165,12 @@ int main(void)
         wl_display_flush(a.display);
 
         if (a.width != last_w || a.height != last_h) {
-            vg_surface_resize(vs, a.width, a.height);
+            fx_surface_resize(vs, a.width, a.height);
             last_w = a.width;
             last_h = a.height;
         }
 
-        vg_canvas *c = vg_surface_acquire(vs);
+        fx_canvas *c = fx_surface_acquire(vs);
         if (c) {
             struct timespec now;
             clock_gettime(CLOCK_MONOTONIC, &now);
@@ -188,42 +188,42 @@ int main(void)
             float cy = a.height * 0.34f;
             float pr = a.height * 0.12f;
 
-            vg_clear(c, vg_color_rgba(r, g, b, 255));
+            fx_clear(c, fx_color_rgba(r, g, b, 255));
 
-            vg_paint p;
-            vg_paint_init(&p, vg_color_rgba(255, 210, 90, 232));
+            fx_paint p;
+            fx_paint_init(&p, fx_color_rgba(255, 210, 90, 232));
 
-            vg_path_reset(poly);
-            vg_path_move_to(poly, cx - pr, cy - pr * 0.65f);
-            vg_path_line_to(poly, cx + pr, cy - pr * 0.65f);
-            vg_path_line_to(poly, cx + pr * 0.28f, cy);
-            vg_path_line_to(poly, cx + pr, cy + pr * 0.7f);
-            vg_path_line_to(poly, cx - pr, cy + pr * 0.7f);
-            vg_path_line_to(poly, cx - pr * 0.28f, cy);
-            vg_path_close(poly);
-            vg_fill_path(c, poly, &p);
+            fx_path_reset(poly);
+            fx_path_move_to(poly, cx - pr, cy - pr * 0.65f);
+            fx_path_line_to(poly, cx + pr, cy - pr * 0.65f);
+            fx_path_line_to(poly, cx + pr * 0.28f, cy);
+            fx_path_line_to(poly, cx + pr, cy + pr * 0.7f);
+            fx_path_line_to(poly, cx - pr, cy + pr * 0.7f);
+            fx_path_line_to(poly, cx - pr * 0.28f, cy);
+            fx_path_close(poly);
+            fx_fill_path(c, poly, &p);
 
-            p.color = vg_color_rgba(70, 35, 10, 220);
+            p.color = fx_color_rgba(70, 35, 10, 220);
             p.stroke_width = 4.0f;
-            vg_stroke_path(c, poly, &p);
+            fx_stroke_path(c, poly, &p);
 
-            vg_path_reset(rect);
-            vg_path_add_rect(rect, &(vg_rect){ rx, ry, rw, rh });
+            fx_path_reset(rect);
+            fx_path_add_rect(rect, &(fx_rect){ rx, ry, rw, rh });
             
-            p.color = vg_color_rgba(245, 245, 250, 220);
-            vg_fill_path(c, rect, &p);
+            p.color = fx_color_rgba(245, 245, 250, 220);
+            fx_fill_path(c, rect, &p);
 
-            p.color = vg_color_rgba(20, 20, 28, 220);
+            p.color = fx_color_rgba(20, 20, 28, 220);
             p.stroke_width = 6.0f;
-            vg_stroke_path(c, rect, &p);
-            vg_surface_present(vs);
+            fx_stroke_path(c, rect, &p);
+            fx_surface_present(vs);
         }
     }
 
-    vg_path_destroy(poly);
-    vg_path_destroy(rect);
-    vg_surface_destroy(vs);
-    vg_context_destroy(ctx);
+    fx_path_destroy(poly);
+    fx_path_destroy(rect);
+    fx_surface_destroy(vs);
+    fx_context_destroy(ctx);
 
     xdg_toplevel_destroy(a.toplevel);
     xdg_surface_destroy(a.xdg_surface);

@@ -1,4 +1,4 @@
-#include "vgfx/vgfx_wayland.h"
+#include "flux/flux_wayland.h"
 #include "internal.h"
 
 #include <math.h>
@@ -9,7 +9,7 @@
  * When targetting a SRGB swapchain format, Vulkan expects linear
  * floats — the presentation hardware applies the sRGB EOTF. We treat
  * the input color as sRGB 8-bit and convert to linear here. */
-static VkClearColorValue to_clear_color(vg_color c, VkFormat fmt)
+static VkClearColorValue to_clear_color(fx_color c, VkFormat fmt)
 {
     float a = ((c >> 24) & 0xFF) / 255.0f;
     float r = ((c >> 16) & 0xFF) / 255.0f;
@@ -35,12 +35,12 @@ static VkClearColorValue to_clear_color(vg_color c, VkFormat fmt)
     return out;
 }
 
-static bool rect_has_area(const vg_rect *rect)
+static bool rect_has_area(const fx_rect *rect)
 {
     return rect && rect->w > 0.0f && rect->h > 0.0f;
 }
 
-static void bind_solid_pipeline(vg_surface *s, VkCommandBuffer cmd)
+static void bind_solid_pipeline(fx_surface *s, VkCommandBuffer cmd)
 {
     VkViewport viewport = {
         .x = 0.0f,
@@ -61,10 +61,10 @@ static void bind_solid_pipeline(vg_surface *s, VkCommandBuffer cmd)
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 }
 
-static void push_solid_color(vg_surface *s, VkCommandBuffer cmd, vg_color color)
+static void push_solid_color(fx_surface *s, VkCommandBuffer cmd, fx_color color)
 {
     VkClearColorValue linear = to_clear_color(color, s->surface_format.format);
-    vg_solid_color_pc pc = {
+    fx_solid_color_pc pc = {
         .surface_size = { (float)s->extent.width, (float)s->extent.height },
         .pad = { 0.0f, 0.0f },
         .color = {
@@ -82,14 +82,14 @@ static void push_solid_color(vg_surface *s, VkCommandBuffer cmd, vg_color color)
 }
 
 typedef struct {
-    vg_color color;
+    fx_color color;
     VkBuffer vbuf;
     uint32_t first_vertex;
     uint32_t vertex_count;
     bool active;
-} vg_batch;
+} fx_batch;
 
-static void flush_batch(vg_surface *s, VkCommandBuffer cmd, vg_batch *batch)
+static void flush_batch(fx_surface *s, VkCommandBuffer cmd, fx_batch *batch)
 {
     if (!batch->active || batch->vertex_count == 0) return;
 
@@ -102,9 +102,9 @@ static void flush_batch(vg_surface *s, VkCommandBuffer cmd, vg_batch *batch)
     batch->active = false;
 }
 
-static bool add_to_batch(vg_surface *s, vg_frame *fr, VkCommandBuffer cmd,
-                         vg_batch *batch, vg_color color,
-                         const vg_solid_vertex *verts, size_t count)
+static bool add_to_batch(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
+                         fx_batch *batch, fx_color color,
+                         const fx_solid_vertex *verts, size_t count)
 {
     if (batch->active && (batch->color != color)) {
         flush_batch(s, cmd, batch);
@@ -112,19 +112,19 @@ static bool add_to_batch(vg_surface *s, vg_frame *fr, VkCommandBuffer cmd,
 
     VkBuffer vbuf;
     VkDeviceSize offset;
-    vg_solid_vertex *map = vg_vbuf_pool_alloc(&fr->vbuf, count * sizeof(vg_solid_vertex), &vbuf, &offset);
+    fx_solid_vertex *map = fx_vbuf_pool_alloc(&fr->vbuf, count * sizeof(fx_solid_vertex), &vbuf, &offset);
     if (!map) return false;
 
-    uint32_t first = (uint32_t)(offset / sizeof(vg_solid_vertex));
+    uint32_t first = (uint32_t)(offset / sizeof(fx_solid_vertex));
 
     if (batch->active && batch->vbuf == vbuf && (batch->first_vertex + batch->vertex_count == first)) {
         /* Continue existing batch */
-        memcpy(map, verts, count * sizeof(vg_solid_vertex));
+        memcpy(map, verts, count * sizeof(fx_solid_vertex));
         batch->vertex_count += (uint32_t)count;
     } else {
         /* Start new batch */
         flush_batch(s, cmd, batch);
-        memcpy(map, verts, count * sizeof(vg_solid_vertex));
+        memcpy(map, verts, count * sizeof(fx_solid_vertex));
         batch->active = true;
         batch->color = color;
         batch->vbuf = vbuf;
@@ -134,42 +134,42 @@ static bool add_to_batch(vg_surface *s, vg_frame *fr, VkCommandBuffer cmd,
     return true;
 }
 
-static bool draw_solid_rect(vg_surface *s, vg_frame *fr, VkCommandBuffer cmd,
-                            vg_batch *batch, const vg_rect *rect, vg_color color)
+static bool draw_solid_rect(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
+                            fx_batch *batch, const fx_rect *rect, fx_color color)
 {
-    vg_solid_vertex verts[6];
+    fx_solid_vertex verts[6];
 
     if (!rect_has_area(rect)) return false;
 
-    verts[0] = (vg_solid_vertex){ .pos = { rect->x, rect->y } };
-    verts[1] = (vg_solid_vertex){ .pos = { rect->x + rect->w, rect->y } };
-    verts[2] = (vg_solid_vertex){ .pos = { rect->x + rect->w, rect->y + rect->h } };
-    verts[3] = (vg_solid_vertex){ .pos = { rect->x, rect->y } };
-    verts[4] = (vg_solid_vertex){ .pos = { rect->x + rect->w, rect->y + rect->h } };
-    verts[5] = (vg_solid_vertex){ .pos = { rect->x, rect->y + rect->h } };
+    verts[0] = (fx_solid_vertex){ .pos = { rect->x, rect->y } };
+    verts[1] = (fx_solid_vertex){ .pos = { rect->x + rect->w, rect->y } };
+    verts[2] = (fx_solid_vertex){ .pos = { rect->x + rect->w, rect->y + rect->h } };
+    verts[3] = (fx_solid_vertex){ .pos = { rect->x, rect->y } };
+    verts[4] = (fx_solid_vertex){ .pos = { rect->x + rect->w, rect->y + rect->h } };
+    verts[5] = (fx_solid_vertex){ .pos = { rect->x, rect->y + rect->h } };
 
     return add_to_batch(s, fr, cmd, batch, color, verts, 6);
 }
 
-static bool draw_polygon_fill(vg_surface *s, vg_frame *fr, VkCommandBuffer cmd,
-                              vg_batch *batch, const vg_point *points, size_t count,
-                              vg_color color)
+static bool draw_polygon_fill(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
+                              fx_batch *batch, const fx_point *points, size_t count,
+                              fx_color color)
 {
-    vg_point *tris = NULL;
+    fx_point *tris = NULL;
     size_t tri_points = 0;
-    vg_solid_vertex *verts = NULL;
+    fx_solid_vertex *verts = NULL;
     bool ok = false;
 
     if (!points || count < 3) return false;
 
-    if (!vg_tessellate_simple_polygon(points, count, &tris, &tri_points))
+    if (!fx_tessellate_simple_polygon(points, count, &tris, &tri_points))
         return false;
 
     verts = malloc(tri_points * sizeof(*verts));
     if (!verts) goto done;
 
     for (size_t i = 0; i < tri_points; ++i)
-        verts[i] = (vg_solid_vertex){ .pos = { tris[i].x, tris[i].y } };
+        verts[i] = (fx_solid_vertex){ .pos = { tris[i].x, tris[i].y } };
 
     ok = add_to_batch(s, fr, cmd, batch, color, verts, tri_points);
 
@@ -179,25 +179,25 @@ done:
     return ok;
 }
 
-static bool draw_rect_stroke(vg_surface *s, vg_frame *fr, VkCommandBuffer cmd,
-                             vg_batch *batch, const vg_rect *rect, float width,
-                             vg_color color)
+static bool draw_rect_stroke(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
+                             fx_batch *batch, const fx_rect *rect, float width,
+                             fx_color color)
 {
     float half_w;
-    vg_rect outer;
-    vg_rect inner;
+    fx_rect outer;
+    fx_rect inner;
     bool emitted = false;
 
     if (!rect || width <= 0.0f) return false;
 
     half_w = width * 0.5f;
-    outer = (vg_rect){
+    outer = (fx_rect){
         .x = rect->x - half_w,
         .y = rect->y - half_w,
         .w = rect->w + width,
         .h = rect->h + width,
     };
-    inner = (vg_rect){
+    inner = (fx_rect){
         .x = rect->x + half_w,
         .y = rect->y + half_w,
         .w = rect->w - width,
@@ -207,25 +207,25 @@ static bool draw_rect_stroke(vg_surface *s, vg_frame *fr, VkCommandBuffer cmd,
     if (inner.w <= 0.0f || inner.h <= 0.0f)
         return draw_solid_rect(s, fr, cmd, batch, &outer, color);
 
-    emitted |= draw_solid_rect(s, fr, cmd, batch, &(vg_rect){
+    emitted |= draw_solid_rect(s, fr, cmd, batch, &(fx_rect){
         .x = outer.x,
         .y = outer.y,
         .w = outer.w,
         .h = inner.y - outer.y,
     }, color);
-    emitted |= draw_solid_rect(s, fr, cmd, batch, &(vg_rect){
+    emitted |= draw_solid_rect(s, fr, cmd, batch, &(fx_rect){
         .x = outer.x,
         .y = inner.y + inner.h,
         .w = outer.w,
         .h = (outer.y + outer.h) - (inner.y + inner.h),
     }, color);
-    emitted |= draw_solid_rect(s, fr, cmd, batch, &(vg_rect){
+    emitted |= draw_solid_rect(s, fr, cmd, batch, &(fx_rect){
         .x = outer.x,
         .y = inner.y,
         .w = inner.x - outer.x,
         .h = inner.h,
     }, color);
-    emitted |= draw_solid_rect(s, fr, cmd, batch, &(vg_rect){
+    emitted |= draw_solid_rect(s, fr, cmd, batch, &(fx_rect){
         .x = inner.x + inner.w,
         .y = inner.y,
         .w = (outer.x + outer.w) - (inner.x + inner.w),
@@ -235,28 +235,28 @@ static bool draw_rect_stroke(vg_surface *s, vg_frame *fr, VkCommandBuffer cmd,
     return emitted;
 }
 
-static bool draw_image_quad(vg_surface *s, vg_frame *fr, VkCommandBuffer cmd,
-                            vg_batch *batch, const vg_image *image,
-                            const vg_rect *src, const vg_rect *dst)
+static bool draw_image_quad(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
+                            fx_batch *batch, const fx_image *image,
+                            const fx_rect *src, const fx_rect *dst)
 {
     flush_batch(s, cmd, batch);
 
-    vg_image_vertex verts[6];
+    fx_image_vertex verts[6];
     float sw = (float)image->desc.width;
     float sh = (float)image->desc.height;
     float u0 = src->x / sw, v0 = src->y / sh;
     float u1 = (src->x + src->w) / sw, v1 = (src->y + src->h) / sh;
 
-    verts[0] = (vg_image_vertex){ { dst->x, dst->y }, { u0, v0 } };
-    verts[1] = (vg_image_vertex){ { dst->x + dst->w, dst->y }, { u1, v0 } };
-    verts[2] = (vg_image_vertex){ { dst->x + dst->w, dst->y + dst->h }, { u1, v1 } };
-    verts[3] = (vg_image_vertex){ { dst->x, dst->y }, { u0, v0 } };
-    verts[4] = (vg_image_vertex){ { dst->x + dst->w, dst->y + dst->h }, { u1, v1 } };
-    verts[5] = (vg_image_vertex){ { dst->x, dst->y + dst->h }, { u0, v1 } };
+    verts[0] = (fx_image_vertex){ { dst->x, dst->y }, { u0, v0 } };
+    verts[1] = (fx_image_vertex){ { dst->x + dst->w, dst->y }, { u1, v0 } };
+    verts[2] = (fx_image_vertex){ { dst->x + dst->w, dst->y + dst->h }, { u1, v1 } };
+    verts[3] = (fx_image_vertex){ { dst->x, dst->y }, { u0, v0 } };
+    verts[4] = (fx_image_vertex){ { dst->x + dst->w, dst->y + dst->h }, { u1, v1 } };
+    verts[5] = (fx_image_vertex){ { dst->x, dst->y + dst->h }, { u0, v1 } };
 
     VkBuffer vbuf;
     VkDeviceSize offset;
-    void *map = vg_vbuf_pool_alloc(&fr->vbuf, sizeof(verts), &vbuf, &offset);
+    void *map = fx_vbuf_pool_alloc(&fr->vbuf, sizeof(verts), &vbuf, &offset);
     if (!map) return false;
     memcpy(map, verts, sizeof(verts));
 
@@ -288,7 +288,7 @@ static bool draw_image_quad(vg_surface *s, vg_frame *fr, VkCommandBuffer cmd,
     /* Draw */
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->image_pipeline);
     
-    vg_image_pc pc = { .surface_size = { (float)s->extent.width, (float)s->extent.height } };
+    fx_image_pc pc = { .surface_size = { (float)s->extent.width, (float)s->extent.height } };
     vkCmdPushConstants(cmd, s->image_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
     
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->image_layout, 0, 1, &ds, 0, NULL);
@@ -300,33 +300,33 @@ static bool draw_image_quad(vg_surface *s, vg_frame *fr, VkCommandBuffer cmd,
     return true;
 }
 
-static bool draw_glyph_run(vg_surface *s, vg_frame *fr, VkCommandBuffer cmd,
-                           vg_batch *batch, const vg_draw_glyphs_op *op)
+static bool draw_glyph_run(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
+                           fx_batch *batch, const fx_draw_glyphs_op *op)
 {
     flush_batch(s, cmd, batch);
 
-    size_t count = vg_glyph_run_count(op->run);
-    const vg_glyph *glyphs = vg_glyph_run_data(op->run);
-    vg_image_vertex *verts = malloc(count * 6 * sizeof(vg_image_vertex));
+    size_t count = fx_glyph_run_count(op->run);
+    const fx_glyph *glyphs = fx_glyph_run_data(op->run);
+    fx_image_vertex *verts = malloc(count * 6 * sizeof(fx_image_vertex));
     if (!verts) return false;
 
     size_t active_count = 0;
     for (size_t i = 0; i < count; ++i) {
-        vg_atlas_entry ent;
-        if (!vg_atlas_ensure_glyph(s->ctx, (vg_font *)op->font, glyphs[i].glyph_id, &ent)) continue;
+        fx_atlas_entry ent;
+        if (!fx_atlas_ensure_glyph(s->ctx, (fx_font *)op->font, glyphs[i].glyph_id, &ent)) continue;
 
         float x = op->x + glyphs[i].x + (float)ent.bearing_x;
         float y = op->y + glyphs[i].y - (float)ent.bearing_y;
         float w = (float)ent.w;
         float h = (float)ent.h;
 
-        vg_image_vertex *v = &verts[active_count * 6];
-        v[0] = (vg_image_vertex){ { x,     y     }, { ent.u0, ent.v0 } };
-        v[1] = (vg_image_vertex){ { x + w, y     }, { ent.u1, ent.v0 } };
-        v[2] = (vg_image_vertex){ { x + w, y + h }, { ent.u1, ent.v1 } };
-        v[3] = (vg_image_vertex){ { x,     y     }, { ent.u0, ent.v0 } };
-        v[4] = (vg_image_vertex){ { x + w, y + h }, { ent.u1, ent.v1 } };
-        v[5] = (vg_image_vertex){ { x,     y + h }, { ent.u0, ent.v1 } };
+        fx_image_vertex *v = &verts[active_count * 6];
+        v[0] = (fx_image_vertex){ { x,     y     }, { ent.u0, ent.v0 } };
+        v[1] = (fx_image_vertex){ { x + w, y     }, { ent.u1, ent.v0 } };
+        v[2] = (fx_image_vertex){ { x + w, y + h }, { ent.u1, ent.v1 } };
+        v[3] = (fx_image_vertex){ { x,     y     }, { ent.u0, ent.v0 } };
+        v[4] = (fx_image_vertex){ { x + w, y + h }, { ent.u1, ent.v1 } };
+        v[5] = (fx_image_vertex){ { x,     y + h }, { ent.u0, ent.v1 } };
         active_count++;
     }
 
@@ -337,9 +337,9 @@ static bool draw_glyph_run(vg_surface *s, vg_frame *fr, VkCommandBuffer cmd,
 
     VkBuffer vbuf;
     VkDeviceSize offset;
-    void *map = vg_vbuf_pool_alloc(&fr->vbuf, active_count * 6 * sizeof(vg_image_vertex), &vbuf, &offset);
+    void *map = fx_vbuf_pool_alloc(&fr->vbuf, active_count * 6 * sizeof(fx_image_vertex), &vbuf, &offset);
     if (!map) { free(verts); return false; }
-    memcpy(map, verts, active_count * 6 * sizeof(vg_image_vertex));
+    memcpy(map, verts, active_count * 6 * sizeof(fx_image_vertex));
     free(verts);
 
     /* Descriptor Set for Atlas */
@@ -371,7 +371,7 @@ static bool draw_glyph_run(vg_surface *s, vg_frame *fr, VkCommandBuffer cmd,
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->text_pipeline);
     
     VkClearColorValue linear = to_clear_color(op->paint.color, s->surface_format.format);
-    vg_text_pc pc = {
+    fx_text_pc pc = {
         .surface_size = { (float)s->extent.width, (float)s->extent.height },
         .color = { linear.float32[0], linear.float32[1], linear.float32[2], linear.float32[3] },
     };
@@ -386,59 +386,59 @@ static bool draw_glyph_run(vg_surface *s, vg_frame *fr, VkCommandBuffer cmd,
     return true;
 }
 
-static size_t record_bootstrap_ops(vg_surface *s, vg_frame *fr, VkCommandBuffer cmd)
+static size_t record_bootstrap_ops(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd)
 {
     size_t executed = 0;
-    vg_batch batch = { .active = false };
+    fx_batch batch = { .active = false };
 
     bind_solid_pipeline(s, cmd);
 
     for (size_t i = 0; i < s->canvas.op_count; ++i) {
-        const vg_op *op = &s->canvas.ops[i];
-        vg_rect rect;
-        const vg_point *points = NULL;
+        const fx_op *op = &s->canvas.ops[i];
+        fx_rect rect;
+        const fx_point *points = NULL;
         size_t point_count = 0;
-        vg_point *flattened = NULL;
+        fx_point *flattened = NULL;
         bool closed = false;
-        vg_point *stroke_tris = NULL;
+        fx_point *stroke_tris = NULL;
         size_t stroke_count = 0;
 
-        if (op->kind == VG_OP_FILL_PATH) {
-            if (vg_path_is_axis_aligned_rect(op->u.fill_path.path, &rect)) {
+        if (op->kind == FX_OP_FILL_PATH) {
+            if (fx_path_is_axis_aligned_rect(op->u.fill_path.path, &rect)) {
                 if (draw_solid_rect(s, fr, cmd, &batch, &rect, op->u.fill_path.paint.color))
                     executed++;
                 continue;
             }
-            if (vg_path_get_line_loop(op->u.fill_path.path,
+            if (fx_path_get_line_loop(op->u.fill_path.path,
                                       &points, &point_count) &&
                 draw_polygon_fill(s, fr, cmd, &batch, points, point_count,
                                   op->u.fill_path.paint.color)) {
                 executed++;
                 continue;
             }
-            if (vg_path_flatten_line_loop(op->u.fill_path.path, 0.25f,
+            if (fx_path_flatten_line_loop(op->u.fill_path.path, 0.25f,
                                           &flattened, &point_count) &&
                 draw_polygon_fill(s, fr, cmd, &batch, flattened, point_count,
                                   op->u.fill_path.paint.color)) {
                 executed++;
             }
             free(flattened);
-        } else if (op->kind == VG_OP_STROKE_PATH) {
-            if (op->u.stroke_path.paint.line_join == VG_JOIN_MITER &&
-                vg_path_is_axis_aligned_rect(op->u.stroke_path.path, &rect)) {
+        } else if (op->kind == FX_OP_STROKE_PATH) {
+            if (op->u.stroke_path.paint.line_join == FX_JOIN_MITER &&
+                fx_path_is_axis_aligned_rect(op->u.stroke_path.path, &rect)) {
                 if (draw_rect_stroke(s, fr, cmd, &batch, &rect,
                                      op->u.stroke_path.paint.stroke_width,
                                      op->u.stroke_path.paint.color))
                     executed++;
                 continue;
             }
-            if (!vg_path_flatten_polyline(op->u.stroke_path.path, 0.25f,
+            if (!fx_path_flatten_polyline(op->u.stroke_path.path, 0.25f,
                                           &flattened, &point_count, &closed))
                 continue;
-            if (vg_stroke_polyline(flattened, point_count, closed,
+            if (fx_stroke_polyline(flattened, point_count, closed,
                                    &op->u.stroke_path.paint,
                                    &stroke_tris, &stroke_count)) {
-                vg_solid_vertex *verts = (vg_solid_vertex *)stroke_tris;
+                fx_solid_vertex *verts = (fx_solid_vertex *)stroke_tris;
                 if (add_to_batch(s, fr, cmd, &batch, op->u.stroke_path.paint.color,
                                  verts, stroke_count)) {
                     executed++;
@@ -446,11 +446,11 @@ static size_t record_bootstrap_ops(vg_surface *s, vg_frame *fr, VkCommandBuffer 
             }
             free(stroke_tris);
             free(flattened);
-        } else if (op->kind == VG_OP_DRAW_IMAGE) {
+        } else if (op->kind == FX_OP_DRAW_IMAGE) {
             if (draw_image_quad(s, fr, cmd, &batch, op->u.draw_image.image,
                                 &op->u.draw_image.src, &op->u.draw_image.dst))
                 executed++;
-        } else if (op->kind == VG_OP_DRAW_GLYPHS) {
+        } else if (op->kind == FX_OP_DRAW_GLYPHS) {
             if (draw_glyph_run(s, fr, cmd, &batch, &op->u.draw_glyphs))
                 executed++;
         }
@@ -460,15 +460,15 @@ static size_t record_bootstrap_ops(vg_surface *s, vg_frame *fr, VkCommandBuffer 
     return executed;
 }
 
-vg_surface *vg_surface_create_wayland(vg_context *ctx,
+fx_surface *fx_surface_create_wayland(fx_context *ctx,
                                       struct wl_display *display,
                                       struct wl_surface *wl_surface,
                                       int32_t width, int32_t height,
-                                      vg_color_space cs)
+                                      fx_color_space cs)
 {
     if (!ctx || !display || !wl_surface) return NULL;
 
-    vg_surface *s = calloc(1, sizeof(*s));
+    fx_surface *s = calloc(1, sizeof(*s));
     if (!s) return NULL;
     s->ctx          = ctx;
     s->requested_w  = width;
@@ -485,18 +485,18 @@ vg_surface *vg_surface_create_wayland(vg_context *ctx,
         (PFN_vkCreateWaylandSurfaceKHR)
         vkGetInstanceProcAddr(ctx->instance, "vkCreateWaylandSurfaceKHR");
     if (!create_fn) {
-        VG_LOGE(ctx, "vkCreateWaylandSurfaceKHR not exposed");
+        FX_LOGE(ctx, "vkCreateWaylandSurfaceKHR not exposed");
         free(s);
         return NULL;
     }
     if (create_fn(ctx->instance, &wsci, NULL, &s->vk_surface) != VK_SUCCESS) {
-        VG_LOGE(ctx, "vkCreateWaylandSurfaceKHR failed");
+        FX_LOGE(ctx, "vkCreateWaylandSurfaceKHR failed");
         free(s);
         return NULL;
     }
 
     if (!ctx->device) {
-        if (!vg_device_init(ctx, s->vk_surface)) {
+        if (!fx_device_init(ctx, s->vk_surface)) {
             vkDestroySurfaceKHR(ctx->instance, s->vk_surface, NULL);
             free(s);
             return NULL;
@@ -506,14 +506,14 @@ vg_surface *vg_surface_create_wayland(vg_context *ctx,
         vkGetPhysicalDeviceSurfaceSupportKHR(ctx->phys, ctx->graphics_family,
                                              s->vk_surface, &supported);
         if (!supported) {
-            VG_LOGE(ctx, "device cannot present to this wl_surface");
+            FX_LOGE(ctx, "device cannot present to this wl_surface");
             vkDestroySurfaceKHR(ctx->instance, s->vk_surface, NULL);
             free(s);
             return NULL;
         }
     }
 
-    if (!vg_swapchain_build(s)) {
+    if (!fx_swapchain_build(s)) {
         vkDestroySurfaceKHR(ctx->instance, s->vk_surface, NULL);
         free(s);
         return NULL;
@@ -521,7 +521,7 @@ vg_surface *vg_surface_create_wayland(vg_context *ctx,
     return s;
 }
 
-void vg_surface_resize(vg_surface *s, int32_t w, int32_t h)
+void fx_surface_resize(fx_surface *s, int32_t w, int32_t h)
 {
     if (!s) return;
     s->requested_w   = w;
@@ -529,18 +529,18 @@ void vg_surface_resize(vg_surface *s, int32_t w, int32_t h)
     s->needs_recreate = true;
 }
 
-static bool recreate_swapchain(vg_surface *s)
+static bool recreate_swapchain(fx_surface *s)
 {
-    vg_surface_wait_idle(s);
+    fx_surface_wait_idle(s);
     vkDeviceWaitIdle(s->ctx->device);
-    vg_swapchain_destroy(s);
-    return vg_swapchain_build(s);
+    fx_swapchain_destroy(s);
+    return fx_swapchain_build(s);
 }
 
-static void destroy_surface(vg_surface *s)
+static void destroy_surface(fx_surface *s)
 {
-    vg_swapchain_destroy(s);
-    vg_canvas_dispose(&s->canvas);
+    fx_swapchain_destroy(s);
+    fx_canvas_dispose(&s->canvas);
     if (s->vk_surface) {
         vkDestroySurfaceKHR(s->ctx->instance, s->vk_surface, NULL);
         s->vk_surface = VK_NULL_HANDLE;
@@ -548,15 +548,15 @@ static void destroy_surface(vg_surface *s)
     free(s);
 }
 
-void vg_surface_destroy(vg_surface *s)
+void fx_surface_destroy(fx_surface *s)
 {
     if (!s) return;
-    vg_surface_wait_idle(s);
+    fx_surface_wait_idle(s);
     vkDeviceWaitIdle(s->ctx->device);
     destroy_surface(s);
 }
 
-vg_canvas *vg_surface_acquire(vg_surface *s)
+fx_canvas *fx_surface_acquire(fx_surface *s)
 {
     if (!s) return NULL;
 
@@ -565,7 +565,7 @@ vg_canvas *vg_surface_acquire(vg_surface *s)
         if (s->needs_recreate) return NULL;  /* still zero extent */
     }
 
-    vg_frame *fr = &s->frames[s->frame_index];
+    fx_frame *fr = &s->frames[s->frame_index];
     vkWaitForFences(s->ctx->device, 1, &fr->in_flight, VK_TRUE, UINT64_MAX);
 
     VkResult ar = vkAcquireNextImageKHR(s->ctx->device, s->swapchain,
@@ -576,26 +576,26 @@ vg_canvas *vg_surface_acquire(vg_surface *s)
     if (ar == VK_ERROR_OUT_OF_DATE_KHR) {
         s->needs_recreate = true;
         if (!recreate_swapchain(s)) return NULL;
-        return vg_surface_acquire(s);
+        return fx_surface_acquire(s);
     }
     if (ar != VK_SUCCESS && ar != VK_SUBOPTIMAL_KHR) {
-        VG_LOGE(s->ctx, "vkAcquireNextImageKHR: %d", (int)ar);
+        FX_LOGE(s->ctx, "vkAcquireNextImageKHR: %d", (int)ar);
         return NULL;
     }
 
     vkResetFences(s->ctx->device, 1, &fr->in_flight);
-    vg_vbuf_pool_reset(&fr->vbuf);
+    fx_vbuf_pool_reset(&fr->vbuf);
     vkResetDescriptorPool(s->ctx->device, fr->desc_pool, 0);
 
     /* Reset display list for the new frame. */
-    vg_canvas_reset(&s->canvas);
+    fx_canvas_reset(&s->canvas);
     return &s->canvas;
 }
 
-void vg_surface_present(vg_surface *s)
+void fx_surface_present(fx_surface *s)
 {
     if (!s) return;
-    vg_frame *fr = &s->frames[s->frame_index];
+    fx_frame *fr = &s->frames[s->frame_index];
 
     VkCommandBufferBeginInfo bi = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -620,7 +620,7 @@ void vg_surface_present(vg_surface *s)
     vkCmdBeginRenderPass(fr->cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
     size_t executed_ops = record_bootstrap_ops(s, fr, fr->cmd);
     if (s->canvas.op_count > executed_ops && !s->reported_unimplemented_ops) {
-        VG_LOGI(s->ctx,
+        FX_LOGI(s->ctx,
                 "executed %zu/%zu recorded canvas ops; remaining ops still "
                 "wait for the Vulkan raster backend",
                 executed_ops, s->canvas.op_count);
@@ -641,7 +641,7 @@ void vg_surface_present(vg_surface *s)
         .signalSemaphoreCount = 1,
         .pSignalSemaphores    = &fr->render_finished,
     };
-    VG_CHECK_VK(s->ctx, vkQueueSubmit(s->ctx->graphics_queue, 1, &si,
+    FX_CHECK_VK(s->ctx, vkQueueSubmit(s->ctx->graphics_queue, 1, &si,
                                       fr->in_flight));
 
     VkPresentInfoKHR pi = {
@@ -656,8 +656,8 @@ void vg_surface_present(vg_surface *s)
     if (pr == VK_ERROR_OUT_OF_DATE_KHR || pr == VK_SUBOPTIMAL_KHR) {
         s->needs_recreate = true;
     } else if (pr != VK_SUCCESS) {
-        VG_LOGE(s->ctx, "vkQueuePresentKHR: %d", (int)pr);
+        FX_LOGE(s->ctx, "vkQueuePresentKHR: %d", (int)pr);
     }
 
-    s->frame_index = (s->frame_index + 1) % VG_MAX_FRAMES_IN_FLIGHT;
+    s->frame_index = (s->frame_index + 1) % FX_MAX_FRAMES_IN_FLIGHT;
 }

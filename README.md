@@ -1,4 +1,4 @@
-# vgfx
+# flux
 
 Low-level 2D graphics foundation on Vulkan. C11, meson, Wayland.
 
@@ -38,11 +38,11 @@ Opens an xdg-toplevel and clears it to a slowly sweeping color.
 The demo records a concave filled and stroked polygon plus a filled and
 stroked rectangular path so the current solid-color geometry execution
 paths are exercised. Close the window or Ctrl-C to exit. Set
-`VG_ENABLE_VALIDATION=1` to turn on the Vulkan validation layer.
+`FX_ENABLE_VALIDATION=1` to turn on the Vulkan validation layer.
 
 ## Layout
 
-    include/vgfx/*.h   — public API headers
+    include/flux/*.h   — public API headers
     src/               — implementation
     src/vk/            — Vulkan backend
     examples/          — runnable demos

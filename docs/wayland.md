@@ -2,28 +2,28 @@
 
 ## Ownership split
 
-vgfx takes a "bring your own surface" approach:
+flux takes a "bring your own surface" approach:
 
 | Object | Owner |
 |---|---|
 | `wl_display` | **host application** |
 | `wl_surface` | **host application** |
-| `VkSurfaceKHR` | **vgfx** (created from the above two) |
-| `VkSwapchainKHR` | **vgfx** |
+| `VkSurfaceKHR` | **flux** (created from the above two) |
+| `VkSwapchainKHR` | **flux** |
 
 The host sets up a Wayland connection and a shell surface
-(`xdg_toplevel`, `zwlr_layer_surface`, etc.) without vgfx's
+(`xdg_toplevel`, `zwlr_layer_surface`, etc.) without flux's
 involvement. Once a `wl_surface` exists, the host hands it to:
 
 ```c
-vg_surface *s = vg_surface_create_wayland(ctx, display, surface,
-                                          w, h, VG_CS_SRGB);
+fx_surface *s = fx_surface_create_wayland(ctx, display, surface,
+                                          w, h, FX_CS_SRGB);
 ```
 
-vgfx then owns the Vulkan presentation chain and drives submission.
+flux then owns the Vulkan presentation chain and drives submission.
 The host continues to own and dispatch the Wayland connection.
 
-This split means vgfx has no dependency on xdg-shell, layer-shell, or
+This split means flux has no dependency on xdg-shell, layer-shell, or
 any other shell protocol. The examples use xdg-shell as a practical
 choice; you can use any protocol that gives you a `wl_surface`.
 
@@ -42,15 +42,15 @@ xdg-shell.xml
 If you want a layer-shell surface (e.g. for status bars, overlays),
 generate `wlr-layer-shell-unstable-v1` the same way and use
 `zwlr_layer_shell_v1_get_layer_surface` instead of
-`xdg_wm_base_get_xdg_surface`. Nothing changes on the vgfx side.
+`xdg_wm_base_get_xdg_surface`. Nothing changes on the flux side.
 
 ## Resize flow
 
 1. xdg-toplevel fires a `configure` event with a new size.
 2. App calls `xdg_surface_ack_configure`, then
-   `vg_surface_resize(s, new_w, new_h)`.
-3. vgfx sets `needs_recreate = true`.
-4. On the next `vg_surface_acquire`, vgfx rebuilds the swapchain at
+   `fx_surface_resize(s, new_w, new_h)`.
+3. flux sets `needs_recreate = true`.
+4. On the next `fx_surface_acquire`, flux rebuilds the swapchain at
    the new extent.
 
 ```c
@@ -64,7 +64,7 @@ static void toplevel_configure(void *data, struct xdg_toplevel *tl,
 
 // in the event loop, after dispatching:
 if (a->width != last_w || a->height != last_h) {
-    vg_surface_resize(vs, a->width, a->height);
+    fx_surface_resize(vs, a->width, a->height);
     last_w = a->width;
     last_h = a->height;
 }
@@ -79,7 +79,7 @@ Wayland announces output scale factors via `wl_output.scale` (integer
 scale, protocol version 2+) or, for fractional scaling,
 `wp-fractional-scale-v1` (a newer Wayland extension).
 
-vgfx accepts a `scale` parameter at surface creation time (planned for
+flux accepts a `scale` parameter at surface creation time (planned for
 phase 1). The projection matrix at the GPU level is:
 
 ```
@@ -93,18 +93,18 @@ font on a 2× display rasterizes into 28-px glyphs.
 When you receive an `output.scale` change:
 
 ```c
-// re-create or resize the vg_surface with the new scale
-vg_surface_set_scale(s, new_scale);  // phase 1+
+// re-create or resize the fx_surface with the new scale
+fx_surface_set_scale(s, new_scale);  // phase 1+
 ```
 
-Until `vg_surface_set_scale` ships, call
-`vg_surface_destroy` + `vg_surface_create_wayland` with the new scale.
+Until `fx_surface_set_scale` ships, call
+`fx_surface_destroy` + `fx_surface_create_wayland` with the new scale.
 
 ## Composite alpha
 
 Some compositors (particularly those that implement transparency or
 blur-behind effects) may require `VK_COMPOSITE_ALPHA_PRE_MULTIPLIED`
-rather than `VK_COMPOSITE_ALPHA_OPAQUE`. vgfx queries
+rather than `VK_COMPOSITE_ALPHA_OPAQUE`. flux queries
 `VkSurfaceCapabilitiesKHR.supportedCompositeAlpha` and prefers
 `OPAQUE`, falling back to `INHERIT` → `PRE_MULTIPLIED` →
 `POST_MULTIPLIED` as supported. No user configuration is needed.
@@ -117,7 +117,7 @@ Wayland's recommended pattern is:
 2. Render and commit.
 3. Queue the next frame callback before committing.
 
-vgfx phase 0 does not integrate with `wl_surface.frame` callbacks.
+flux phase 0 does not integrate with `wl_surface.frame` callbacks.
 The frame loop in `hello_rect.c` is a busy loop gated by the Vulkan
 `FIFO_RELAXED` present mode, which naturally throttles to the
 compositor's refresh rate. Phase 4 will add an explicit frame-callback

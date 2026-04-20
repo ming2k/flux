@@ -76,7 +76,7 @@ window manager or Ctrl-C.
 ## Validation layers
 
 ```sh
-VG_ENABLE_VALIDATION=1 build/examples/hello_rect
+FX_ENABLE_VALIDATION=1 build/examples/hello_rect
 ```
 
 This enables `VK_LAYER_KHRONOS_validation` and a debug messenger that
@@ -94,7 +94,7 @@ pacman -S vulkan-validation-layers
 apt install vulkan-validationlayers
 ```
 
-If the layer is not installed, vgfx logs at `INFO` level that
+If the layer is not installed, flux logs at `INFO` level that
 validation was requested but the layer was not found, then continues
 without it.
 
@@ -103,12 +103,12 @@ without it.
 ### Verbose logging
 
 There is no runtime log-level toggle in phase 0. To get debug-level
-messages, add `VG_LOG_DEBUG` calls in the area of interest and
-rebuild. A runtime flag (`VG_LOG_LEVEL=debug`) is planned for phase 1.
+messages, add `FX_LOG_DEBUG` calls in the area of interest and
+rebuild. A runtime flag (`FX_LOG_LEVEL=debug`) is planned for phase 1.
 
 ### GDB / LLDB
 
-Both work normally — vgfx is a standard shared library. Build with
+Both work normally — flux is a standard shared library. Build with
 `--buildtype=debug` for full symbols and no optimisation:
 
 ```sh
@@ -119,7 +119,7 @@ gdb --args build-debug/examples/hello_rect
 
 ### RenderDoc
 
-RenderDoc can capture Vulkan frames from any vgfx application. Launch
+RenderDoc can capture Vulkan frames from any flux application. Launch
 via the RenderDoc GUI or:
 
 ```sh
@@ -147,7 +147,7 @@ VK_INSTANCE_LAYERS=VK_LAYER_LUNARG_api_dump build/examples/hello_rect
 For tight iteration on a single file:
 
 ```sh
-ninja -C build src/libvgfx.so && build/examples/hello_rect
+ninja -C build src/libflux.so && build/examples/hello_rect
 ```
 
 Ninja's dependency graph means only the modified TU recompiles.
@@ -177,9 +177,9 @@ meson setup build --prefix=/usr/local
 ninja -C build install
 ```
 
-This installs `libvgfx.so`, the public headers under `include/vgfx/`,
-and `vgfx.pc` for pkg-config. After installation:
+This installs `libflux.so`, the public headers under `include/flux/`,
+and `flux.pc` for pkg-config. After installation:
 
 ```sh
-pkg-config --cflags --libs vgfx
+pkg-config --cflags --libs flux
 ```

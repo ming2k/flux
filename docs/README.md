@@ -1,6 +1,6 @@
-# vgfx documentation
+# flux documentation
 
-vgfx is a C11 library that exposes a Skia-class 2D drawing API on top
+flux is a C11 library that exposes a Skia-class 2D drawing API on top
 of Vulkan. This directory is the long-form home for design decisions,
 coding conventions, and contributor workflow. Short-form user docs
 live in the top-level `README.md`.
@@ -9,11 +9,11 @@ live in the top-level `README.md`.
 
 | You are… | Start with |
 |---|---|
-| Trying to understand what layer vgfx is supposed to occupy | [positioning.md](positioning.md) |
+| Trying to understand what layer flux is supposed to occupy | [positioning.md](positioning.md) |
 | A first-time consumer of the library | [api.md](api.md) |
 | Trying to build or run the project locally | [development.md](development.md) |
 | Writing a pull request | [contributing.md](contributing.md) + [conventions.md](conventions.md) |
-| Tracing how a `vg_draw_*` call becomes a `vkQueueSubmit` | [architecture.md](architecture.md) → [rendering.md](rendering.md) → [vulkan-backend.md](vulkan-backend.md) |
+| Tracing how a `fx_draw_*` call becomes a `vkQueueSubmit` | [architecture.md](architecture.md) → [rendering.md](rendering.md) → [vulkan-backend.md](vulkan-backend.md) |
 | Tracking what's shipped vs planned | [roadmap.md](roadmap.md) |
 
 ## Contents

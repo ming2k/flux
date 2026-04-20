@@ -18,18 +18,18 @@ every file in the codebase.
 
 | Entity | Convention | Example |
 |---|---|---|
-| Public types | `vg_snake_case` | `vg_canvas`, `vg_color_space` |
-| Public functions | `vg_verb_noun` | `vg_surface_acquire`, `vg_path_line_to` |
-| Public enumerators | `VG_SCREAMING_SNAKE` | `VG_BLEND_SRC_OVER`, `VG_CAP_ROUND` |
-| Public macros | `VG_SCREAMING_SNAKE` | `VG_API`, `VG_MAX_FRAMES_IN_FLIGHT` |
-| Internal functions | `vg_verb_noun` (no `VGFX_API`) | `vg_swapchain_build` |
-| Internal types | `vg_snake_case` | `vg_sc_image`, `vg_draw_op` |
+| Public types | `fx_snake_case` | `fx_canvas`, `fx_color_space` |
+| Public functions | `fx_verb_noun` | `fx_surface_acquire`, `fx_path_line_to` |
+| Public enumerators | `FX_SCREAMING_SNAKE` | `FX_BLEND_SRC_OVER`, `FX_CAP_ROUND` |
+| Public macros | `FX_SCREAMING_SNAKE` | `FX_API`, `FX_MAX_FRAMES_IN_FLIGHT` |
+| Internal functions | `fx_verb_noun` (no `FX_API`) | `fx_swapchain_build` |
+| Internal types | `fx_snake_case` | `fx_sc_image`, `fx_draw_op` |
 | Local variables | `snake_case` | `image_count`, `fr` |
 | Struct members | `snake_case` | `surface_format`, `needs_recreate` |
 
 Abbreviations are acceptable where they are unambiguous in context:
-`fr` for `vg_frame`, `s` for `vg_surface`, `ctx` for `vg_context`,
-`c` for `vg_canvas`, `p` for `vg_paint` or `vg_path` (distinguish by
+`fr` for `fx_frame`, `s` for `fx_surface`, `ctx` for `fx_context`,
+`c` for `fx_canvas`, `p` for `fx_paint` or `fx_path` (distinguish by
 argument position or local alias). Avoid abbreviating names that would
 require a reader to look up the meaning.
 
@@ -43,7 +43,7 @@ require a reader to look up the meaning.
    function takes ownership, it says so. If a pointer is borrowed, the
    caller's docs say "borrowed: must remain alive until X."
 
-3. **Null-safe draw calls.** All `vg_draw_*` and `vg_canvas` state
+3. **Null-safe draw calls.** All `fx_draw_*` and `fx_canvas` state
    setters silently no-op when passed `NULL`. This lets a frame loop
    degrade gracefully when a resource fails to load.
 
@@ -71,7 +71,7 @@ require a reader to look up the meaning.
 - No function-level docstring blocks for internal functions. The
   declaration in `internal.h` can carry a one-line note if the
   semantics are not obvious from the name.
-- Public API functions in `vgfx.h` / `vgfx_text.h` may have a
+- Public API functions in `flux.h` / `flux_text.h` may have a
   one-line comment explaining the lifetime contract if it is
   non-trivial (e.g., borrowed pointers).
 
@@ -79,49 +79,49 @@ require a reader to look up the meaning.
 
 ```c
 // Creating something: return NULL, log before returning
-vg_surface *vg_surface_create_wayland(...) {
+fx_surface *fx_surface_create_wayland(...) {
     ...
     if (something_failed) {
-        VG_LOGE(ctx, "meaningful message: %d", code);
+        FX_LOGE(ctx, "meaningful message: %d", code);
         free(s);
         return NULL;
     }
 }
 
-// Vulkan calls: VG_CHECK_VK logs and continues
-VG_CHECK_VK(ctx, vkQueueSubmit(queue, 1, &si, fence));
+// Vulkan calls: FX_CHECK_VK logs and continues
+FX_CHECK_VK(ctx, vkQueueSubmit(queue, 1, &si, fence));
 
 // Draw calls: silent no-op on null inputs
-void vg_clear(vg_canvas *c, vg_color color) {
+void fx_clear(fx_canvas *c, fx_color color) {
     if (!c) return;
     ...
 }
 ```
 
 Never use `assert` for input validation on paths reachable from
-user code. Use `if (!x) { VG_LOGE...; return; }`. Reserve `assert`
+user code. Use `if (!x) { FX_LOGE...; return; }`. Reserve `assert`
 for internal invariants that should be impossible to violate at
 runtime (loop postconditions, etc.).
 
 ## Logging
 
 ```c
-VG_LOGE(ctx, "format %s", arg);   // error — always printed
-VG_LOGW(ctx, "format %s", arg);   // warning
-VG_LOGI(ctx, "format %s", arg);   // info — startup events, sizes
-VG_LOGD(ctx, "format %s", arg);   // debug — per-frame events
+FX_LOGE(ctx, "format %s", arg);   // error — always printed
+FX_LOGW(ctx, "format %s", arg);   // warning
+FX_LOGI(ctx, "format %s", arg);   // info — startup events, sizes
+FX_LOGD(ctx, "format %s", arg);   // debug — per-frame events
 ```
 
-In hot-path code, wrap `VG_LOGD` calls behind a compile-time check:
+In hot-path code, wrap `FX_LOGD` calls behind a compile-time check:
 
 ```c
-#ifdef VGFX_DEBUG
-    VG_LOGD(ctx, "ring grew to %zu bytes", new_size);
+#ifdef FX_DEBUG
+    FX_LOGD(ctx, "ring grew to %zu bytes", new_size);
 #endif
 ```
 
 The default log sink writes to `stderr`. Users can supply their own
-`vg_log_fn` through `vg_context_desc`.
+`fx_log_fn` through `fx_context_desc`.
 
 ## Memory
 
@@ -136,7 +136,7 @@ The default log sink writes to `stderr`. Users can supply their own
 
 ## Threading
 
-vgfx is **single-threaded per context**: recording, submission, and
+flux is **single-threaded per context**: recording, submission, and
 presentation all happen on the context-owning thread. No internal
 mutexes. This is explicit: the header says it, the docs say it, and
 code that would require a lock should not be written until the
@@ -165,7 +165,7 @@ threading model is extended.
 
 ## Versioning
 
-vgfx follows **semantic versioning**. The `meson.build` version is the
+flux follows **semantic versioning**. The `meson.build` version is the
 source of truth. ABI compatibility is maintained within a major version.
-Adding a new `vg_*` symbol is a minor bump; breaking an existing symbol
+Adding a new `fx_*` symbol is a minor bump; breaking an existing symbol
 is a major bump.

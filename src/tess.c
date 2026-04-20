@@ -2,31 +2,31 @@
 
 #include <math.h>
 
-static float signed_area(const vg_point *points, size_t count)
+static float signed_area(const fx_point *points, size_t count)
 {
     float area = 0.0f;
 
     for (size_t i = 0; i < count; ++i) {
-        const vg_point *a = &points[i];
-        const vg_point *b = &points[(i + 1) % count];
+        const fx_point *a = &points[i];
+        const fx_point *b = &points[(i + 1) % count];
         area += a->x * b->y - b->x * a->y;
     }
 
     return area * 0.5f;
 }
 
-static float orient2d(vg_point a, vg_point b, vg_point c)
+static float orient2d(fx_point a, fx_point b, fx_point c)
 {
     return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }
 
-static bool is_convex(vg_point a, vg_point b, vg_point c, bool ccw)
+static bool is_convex(fx_point a, fx_point b, fx_point c, bool ccw)
 {
     float cross = orient2d(a, b, c);
     return ccw ? cross > 0.0f : cross < 0.0f;
 }
 
-static bool point_in_triangle(vg_point p, vg_point a, vg_point b, vg_point c)
+static bool point_in_triangle(fx_point p, fx_point a, fx_point b, fx_point c)
 {
     float ab = orient2d(a, b, p);
     float bc = orient2d(b, c, p);
@@ -36,11 +36,11 @@ static bool point_in_triangle(vg_point p, vg_point a, vg_point b, vg_point c)
     return !(has_neg && has_pos);
 }
 
-bool vg_tessellate_simple_polygon(const vg_point *points, size_t count,
-                                  vg_point **out_tris, size_t *out_count)
+bool fx_tessellate_simple_polygon(const fx_point *points, size_t count,
+                                  fx_point **out_tris, size_t *out_count)
 {
     int *indices = NULL;
-    vg_point *tris = NULL;
+    fx_point *tris = NULL;
     size_t tri_cap;
     size_t tri_count = 0;
     size_t rem = count;
@@ -73,16 +73,16 @@ bool vg_tessellate_simple_polygon(const vg_point *points, size_t count,
         for (size_t i = 0; i < rem; ++i) {
             size_t ip = (i + rem - 1) % rem;
             size_t in = (i + 1) % rem;
-            vg_point a = points[indices[ip]];
-            vg_point b = points[indices[i]];
-            vg_point c = points[indices[in]];
+            fx_point a = points[indices[ip]];
+            fx_point b = points[indices[i]];
+            fx_point c = points[indices[in]];
             bool ear = true;
 
             if (!is_convex(a, b, c, ccw)) continue;
             if (orient2d(a, b, c) == 0.0f) continue;
 
             for (size_t j = 0; j < rem; ++j) {
-                vg_point p;
+                fx_point p;
                 if (j == ip || j == i || j == in) continue;
                 p = points[indices[j]];
                 if (point_in_triangle(p, a, b, c)) {
@@ -113,9 +113,9 @@ bool vg_tessellate_simple_polygon(const vg_point *points, size_t count,
     }
 
     if (rem == 3) {
-        vg_point a = points[indices[0]];
-        vg_point b = points[indices[1]];
-        vg_point c = points[indices[2]];
+        fx_point a = points[indices[0]];
+        fx_point b = points[indices[1]];
+        fx_point c = points[indices[2]];
         if (ccw) {
             tris[tri_count++] = a;
             tris[tri_count++] = b;

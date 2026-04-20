@@ -13,17 +13,17 @@ debug_cb(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
          void                                   *user)
 {
     (void)types;
-    vg_context *ctx = user;
-    vg_log_level lvl = VG_LOG_INFO;
+    fx_context *ctx = user;
+    fx_log_level lvl = FX_LOG_INFO;
     if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
-        lvl = VG_LOG_ERROR;
+        lvl = FX_LOG_ERROR;
     else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
-        lvl = VG_LOG_WARN;
+        lvl = FX_LOG_WARN;
     else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
-        lvl = VG_LOG_INFO;
+        lvl = FX_LOG_INFO;
     else
-        lvl = VG_LOG_DEBUG;
-    vg_log(ctx, lvl, "[vk] %s", data->pMessage);
+        lvl = FX_LOG_DEBUG;
+    fx_log(ctx, lvl, "[vk] %s", data->pMessage);
     return VK_FALSE;
 }
 
@@ -43,7 +43,7 @@ static bool has_ext(const char *name,
     return false;
 }
 
-bool vg_instance_create(vg_context *ctx, const char *app_name,
+bool fx_instance_create(fx_context *ctx, const char *app_name,
                         bool want_validation,
                         const char *const *exts_wanted, uint32_t exts_wanted_n)
 {
@@ -69,7 +69,7 @@ bool vg_instance_create(vg_context *ctx, const char *app_name,
     uint32_t n_enabled = 0;
     for (uint32_t i = 0; i < exts_wanted_n && n_enabled < 16; ++i) {
         if (!has_ext(exts_wanted[i], inst_exts, n_inst_exts)) {
-            VG_LOGE(ctx, "missing required instance extension: %s",
+            FX_LOGE(ctx, "missing required instance extension: %s",
                     exts_wanted[i]);
             free(inst_exts);
             return false;
@@ -84,9 +84,9 @@ bool vg_instance_create(vg_context *ctx, const char *app_name,
 
     VkApplicationInfo app = {
         .sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-        .pApplicationName   = app_name ? app_name : "vgfx",
+        .pApplicationName   = app_name ? app_name : "flux",
         .applicationVersion = VK_MAKE_VERSION(0, 0, 1),
-        .pEngineName        = "vgfx",
+        .pEngineName        = "flux",
         .engineVersion      = VK_MAKE_VERSION(0, 0, 1),
         .apiVersion         = VK_API_VERSION_1_2,
     };
@@ -104,7 +104,7 @@ bool vg_instance_create(vg_context *ctx, const char *app_name,
 
     VkResult r = vkCreateInstance(&ci, NULL, &ctx->instance);
     if (r != VK_SUCCESS) {
-        VG_LOGE(ctx, "vkCreateInstance failed: %d", (int)r);
+        FX_LOGE(ctx, "vkCreateInstance failed: %d", (int)r);
         return false;
     }
     ctx->validation_enabled = have_validation;
@@ -133,7 +133,7 @@ bool vg_instance_create(vg_context *ctx, const char *app_name,
     return true;
 }
 
-void vg_instance_destroy(vg_context *ctx)
+void fx_instance_destroy(fx_context *ctx)
 {
     if (ctx->debug_messenger) {
         PFN_vkDestroyDebugUtilsMessengerEXT destroy_fn =
@@ -184,12 +184,12 @@ static int score_device(VkPhysicalDevice p)
     return s;
 }
 
-bool vg_device_init(vg_context *ctx, VkSurfaceKHR probe_surface)
+bool fx_device_init(fx_context *ctx, VkSurfaceKHR probe_surface)
 {
     uint32_t n = 0;
     vkEnumeratePhysicalDevices(ctx->instance, &n, NULL);
     if (!n) {
-        VG_LOGE(ctx, "no Vulkan physical devices found");
+        FX_LOGE(ctx, "no Vulkan physical devices found");
         return false;
     }
     VkPhysicalDevice *devs = calloc(n, sizeof(*devs));
@@ -224,7 +224,7 @@ bool vg_device_init(vg_context *ctx, VkSurfaceKHR probe_surface)
     free(devs);
 
     if (best == VK_NULL_HANDLE) {
-        VG_LOGE(ctx, "no suitable physical device");
+        FX_LOGE(ctx, "no suitable physical device");
         return false;
     }
     ctx->phys = best;
@@ -232,7 +232,7 @@ bool vg_device_init(vg_context *ctx, VkSurfaceKHR probe_surface)
     ctx->queue_supports_present = probe_surface != VK_NULL_HANDLE;
     vkGetPhysicalDeviceProperties(ctx->phys, &ctx->phys_props);
     vkGetPhysicalDeviceMemoryProperties(ctx->phys, &ctx->mem_props);
-    VG_LOGI(ctx, "picked GPU: %s (api %u.%u.%u)",
+    FX_LOGI(ctx, "picked GPU: %s (api %u.%u.%u)",
             ctx->phys_props.deviceName,
             VK_VERSION_MAJOR(ctx->phys_props.apiVersion),
             VK_VERSION_MINOR(ctx->phys_props.apiVersion),
@@ -256,7 +256,7 @@ bool vg_device_init(vg_context *ctx, VkSurfaceKHR probe_surface)
     };
     VkResult r = vkCreateDevice(ctx->phys, &dci, NULL, &ctx->device);
     if (r != VK_SUCCESS) {
-        VG_LOGE(ctx, "vkCreateDevice failed: %d", (int)r);
+        FX_LOGE(ctx, "vkCreateDevice failed: %d", (int)r);
         return false;
     }
     vkGetDeviceQueue(ctx->device, ctx->graphics_family, 0,
@@ -267,12 +267,12 @@ bool vg_device_init(vg_context *ctx, VkSurfaceKHR probe_surface)
         .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         .queueFamilyIndex = ctx->graphics_family,
     };
-    VG_CHECK_VK(ctx, vkCreateCommandPool(ctx->device, &pci, NULL,
+    FX_CHECK_VK(ctx, vkCreateCommandPool(ctx->device, &pci, NULL,
                                          &ctx->frame_cmd_pool));
     return true;
 }
 
-void vg_device_shutdown(vg_context *ctx)
+void fx_device_shutdown(fx_context *ctx)
 {
     if (ctx->device) {
         vkDeviceWaitIdle(ctx->device);
@@ -284,5 +284,5 @@ void vg_device_shutdown(vg_context *ctx)
         ctx->device = VK_NULL_HANDLE;
     }
     ctx->queue_supports_present = false;
-    vg_instance_destroy(ctx);
+    fx_instance_destroy(ctx);
 }

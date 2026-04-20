@@ -20,7 +20,7 @@
 3. Make your changes. Write or update tests as appropriate.
 4. Run the full suite:
    ```sh
-   VG_ENABLE_VALIDATION=1 meson test -C build
+   FX_ENABLE_VALIDATION=1 meson test -C build
    ```
 5. Open a pull request against `main`. Fill in the template below.
 
@@ -61,7 +61,7 @@ fix(swapchain): handle VK_SUBOPTIMAL_KHR on first present
 
 test(tess): add concave polygon coverage assertion
 
-docs(api): document vg_surface_resize lifetime contract
+docs(api): document fx_surface_resize lifetime contract
 ```
 
 Keep the subject line under 72 characters. Do not end it with a
@@ -81,7 +81,7 @@ One paragraph describing what this change does and why.
 
 ## Testing
 
-- [ ] meson test passes with VG_ENABLE_VALIDATION=1
+- [ ] meson test passes with FX_ENABLE_VALIDATION=1
 - [ ] golden images updated if rendering changed (diff attached)
 - [ ] new unit tests added for new code paths
 - [ ] examples run clean
@@ -121,11 +121,11 @@ The reviewer checks:
 - [ ] No phase-N+1 work sneaked into a phase-N PR.
 - [ ] No partial implementations without a `/* TODO phase N */` marker.
 
-## Adding a new `vg_draw_*` call (checklist)
+## Adding a new `fx_draw_*` call (checklist)
 
 For contributors implementing a new drawing primitive:
 
-1. Add the declaration to `include/vgfx/vgfx.h` with a lifetime
+1. Add the declaration to `include/flux/flux.h` with a lifetime
    comment if any argument is borrowed.
 2. Append a `draw_op` in `src/canvas.c` — no GPU work.
 3. Add the tessellation / geometry emit path in `src/tess.c` or
@@ -138,7 +138,7 @@ For contributors implementing a new drawing primitive:
 
 ## Adding a Vulkan extension
 
-1. Check for the extension in `vg_device_init` (or instance creation).
+1. Check for the extension in `fx_device_init` (or instance creation).
 2. Fall back gracefully if not present — never make it required.
 3. Guard the use site with a runtime boolean (`ctx->has_<ext>`).
 4. Document the extension in [vulkan-backend.md](vulkan-backend.md)
@@ -160,4 +160,4 @@ Open a GitHub issue with:
 - OS, compositor, GPU make/model, Vulkan driver version.
 - Steps to reproduce (minimal example preferred).
 - Observed vs expected output (screenshot or pixel diff if visual).
-- Output of `VG_ENABLE_VALIDATION=1 <command>` if applicable.
+- Output of `FX_ENABLE_VALIDATION=1 <command>` if applicable.

@@ -2,7 +2,7 @@
 
 layout(location = 0) out vec4 out_color;
 
-layout(push_constant) uniform vg_solid_color_pc {
+layout(push_constant) uniform fx_solid_color_pc {
     vec2 surface_size;
     vec2 pad;
     vec4 color;
