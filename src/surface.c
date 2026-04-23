@@ -60,15 +60,20 @@ static void bind_solid_pipeline(fx_surface *s, VkCommandBuffer cmd)
         .minDepth = 0.0f,
         .maxDepth = 1.0f,
     };
-    VkRect2D scissor = {
-        .offset = { 0, 0 },
-        .extent = s->extent,
-    };
-
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                       s->solid_rect_pipeline);
     vkCmdSetViewport(cmd, 0, 1, &viewport);
-    vkCmdSetScissor(cmd, 0, 1, &scissor);
+}
+
+static void set_viewport(fx_surface *s, VkCommandBuffer cmd)
+{
+    VkViewport viewport = {
+        .x = 0.0f, .y = 0.0f,
+        .width = (float)s->extent.width,
+        .height = (float)s->extent.height,
+        .minDepth = 0.0f, .maxDepth = 1.0f,
+    };
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
 }
 
 static void push_solid_color(fx_surface *s, VkCommandBuffer cmd, fx_color color)
@@ -240,6 +245,87 @@ static bool draw_rect_stroke(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
     return emitted;
 }
 
+static void bind_gradient_pipeline(fx_surface *s, VkCommandBuffer cmd,
+                                   const fx_gradient *gradient)
+{
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->gradient_pipeline);
+    set_viewport(s, cmd);
+
+    fx_gradient_pc pc = {
+        .surface_size = { (float)s->extent.width, (float)s->extent.height },
+        .mode = gradient->mode,
+        .stop_count = gradient->stop_count,
+        .start = { gradient->start[0], gradient->start[1] },
+        .end = { gradient->end[0], gradient->end[1] },
+    };
+    memcpy(pc.colors, gradient->colors, sizeof(pc.colors));
+    memcpy(pc.stops, gradient->stops, sizeof(pc.stops));
+
+    vkCmdPushConstants(cmd, s->gradient_layout,
+                       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                       0, sizeof(pc), &pc);
+}
+
+static bool draw_gradient_tris(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
+                               fx_batch *batch, const fx_solid_vertex *verts,
+                               size_t count, const fx_gradient *gradient)
+{
+    flush_batch(s, cmd, batch);
+
+    VkBuffer vbuf;
+    VkDeviceSize offset;
+    void *map = fx_vbuf_pool_alloc(&fr->vbuf, count * sizeof(*verts), &vbuf, &offset);
+    if (!map) return false;
+    memcpy(map, verts, count * sizeof(*verts));
+
+    bind_gradient_pipeline(s, cmd, gradient);
+    vkCmdBindVertexBuffers(cmd, 0, 1, &vbuf, &offset);
+    vkCmdDraw(cmd, (uint32_t)count, 1, 0, 0);
+
+    bind_solid_pipeline(s, cmd);
+    return true;
+}
+
+static bool draw_gradient_rect(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
+                               fx_batch *batch, const fx_rect *rect,
+                               const fx_gradient *gradient)
+{
+    fx_solid_vertex verts[6];
+
+    if (!rect_has_area(rect)) return false;
+
+    verts[0] = (fx_solid_vertex){ .pos = { rect->x, rect->y } };
+    verts[1] = (fx_solid_vertex){ .pos = { rect->x + rect->w, rect->y } };
+    verts[2] = (fx_solid_vertex){ .pos = { rect->x + rect->w, rect->y + rect->h } };
+    verts[3] = (fx_solid_vertex){ .pos = { rect->x, rect->y } };
+    verts[4] = (fx_solid_vertex){ .pos = { rect->x + rect->w, rect->y + rect->h } };
+    verts[5] = (fx_solid_vertex){ .pos = { rect->x, rect->y + rect->h } };
+
+    return draw_gradient_tris(s, fr, cmd, batch, verts, 6, gradient);
+}
+
+static bool draw_gradient_polygon_fill(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
+                                       fx_batch *batch, const fx_point *points,
+                                       size_t count, const fx_gradient *gradient)
+{
+    fx_point *tris = NULL;
+    size_t tri_points = 0;
+    fx_solid_vertex *verts = NULL;
+
+    if (!points || count < 3) return false;
+
+    if (!fx_tessellate_simple_polygon(points, count, &fr->arena, &tris, &tri_points))
+        return false;
+
+    verts = fx_arena_alloc(&fr->arena, tri_points * sizeof(*verts));
+    if (!verts) return false;
+
+    for (size_t i = 0; i < tri_points; ++i)
+        verts[i] = (fx_solid_vertex){ .pos = { tris[i].x, tris[i].y } };
+
+    return draw_gradient_tris(s, fr, cmd, batch, verts, tri_points, gradient);
+}
+
 static bool draw_image_quad(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
                             fx_batch *batch, const fx_image *image,
                             const fx_rect *src, const fx_rect *dst)
@@ -292,6 +378,7 @@ static bool draw_image_quad(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
 
     /* Draw */
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->image_pipeline);
+    set_viewport(s, cmd);
     
     fx_image_pc pc = { .surface_size = { (float)s->extent.width, (float)s->extent.height } };
     vkCmdPushConstants(cmd, s->image_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
@@ -372,6 +459,7 @@ static bool draw_glyph_run(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
 
     /* Draw */
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->text_pipeline);
+    set_viewport(s, cmd);
     
     VkClearColorValue linear = to_clear_color(op->paint.color, s->surface_format.format);
     fx_text_pc pc = {
@@ -393,11 +481,89 @@ static size_t record_bootstrap_ops(fx_surface *s, fx_frame *fr, VkCommandBuffer 
 {
     size_t executed = 0;
     fx_batch batch = { .active = false };
+    VkRect2D full_scissor = { .offset = {0, 0}, .extent = s->extent };
+    VkRect2D current_scissor = full_scissor;
+    uint32_t current_stencil_ref = 0;
 
     bind_solid_pipeline(s, cmd);
+    vkCmdSetScissor(cmd, 0, 1, &current_scissor);
+    vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, current_stencil_ref);
 
     for (size_t i = 0; i < s->canvas.op_count; ++i) {
         const fx_op *op = &s->canvas.ops[i];
+
+        if (op->kind == FX_OP_CLIP_RECT) {
+            flush_batch(s, cmd, &batch);
+            fx_rect r = op->u.clip_rect.rect;
+            int32_t x = (int32_t)roundf(r.x);
+            int32_t y = (int32_t)roundf(r.y);
+            int32_t w = (int32_t)roundf(r.w);
+            int32_t h = (int32_t)roundf(r.h);
+            if (x < 0) { w += x; x = 0; }
+            if (y < 0) { h += y; y = 0; }
+            if (x + w > (int32_t)s->extent.width)  w = (int32_t)s->extent.width - x;
+            if (y + h > (int32_t)s->extent.height) h = (int32_t)s->extent.height - y;
+            if (w < 0) w = 0;
+            if (h < 0) h = 0;
+            current_scissor.offset.x = x;
+            current_scissor.offset.y = y;
+            current_scissor.extent.width  = (uint32_t)w;
+            current_scissor.extent.height = (uint32_t)h;
+            vkCmdSetScissor(cmd, 0, 1, &current_scissor);
+            continue;
+        } else if (op->kind == FX_OP_RESET_CLIP) {
+            flush_batch(s, cmd, &batch);
+            current_scissor = full_scissor;
+            vkCmdSetScissor(cmd, 0, 1, &current_scissor);
+            VkClearAttachment clear = {
+                .aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT,
+                .clearValue = { .depthStencil = { .stencil = 0 } },
+            };
+            VkClearRect rect = {
+                .rect = full_scissor,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            };
+            vkCmdClearAttachments(cmd, 1, &clear, 1, &rect);
+            current_stencil_ref = 0;
+            vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, current_stencil_ref);
+            continue;
+        } else if (op->kind == FX_OP_CLIP_PATH) {
+            flush_batch(s, cmd, &batch);
+            fx_rect r;
+            if (fx_path_get_bounds(op->u.clip_path.path, &r)) {
+                int32_t x = (int32_t)roundf(r.x);
+                int32_t y = (int32_t)roundf(r.y);
+                int32_t w = (int32_t)roundf(r.w);
+                int32_t h = (int32_t)roundf(r.h);
+                if (x < 0) { w += x; x = 0; }
+                if (y < 0) { h += y; y = 0; }
+                if (x + w > (int32_t)s->extent.width)  w = (int32_t)s->extent.width - x;
+                if (y + h > (int32_t)s->extent.height) h = (int32_t)s->extent.height - y;
+                if (w < 0) w = 0;
+                if (h < 0) h = 0;
+                current_scissor.offset.x = x;
+                current_scissor.offset.y = y;
+                current_scissor.extent.width  = (uint32_t)w;
+                current_scissor.extent.height = (uint32_t)h;
+                vkCmdSetScissor(cmd, 0, 1, &current_scissor);
+
+                VkClearAttachment clear = {
+                    .aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT,
+                    .clearValue = { .depthStencil = { .stencil = 1 } },
+                };
+                VkClearRect crect = {
+                    .rect = current_scissor,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                };
+                vkCmdClearAttachments(cmd, 1, &clear, 1, &crect);
+            }
+            current_stencil_ref = 1;
+            vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, current_stencil_ref);
+            continue;
+        }
+
         fx_rect rect;
         const fx_point *points = NULL;
         size_t point_count = 0;
@@ -407,23 +573,39 @@ static size_t record_bootstrap_ops(fx_surface *s, fx_frame *fr, VkCommandBuffer 
         size_t stroke_count = 0;
 
         if (op->kind == FX_OP_FILL_PATH) {
+            const fx_gradient *gradient = op->u.fill_path.paint.gradient;
             if (fx_path_is_axis_aligned_rect(op->u.fill_path.path, &rect)) {
-                if (draw_solid_rect(s, fr, cmd, &batch, &rect, op->u.fill_path.paint.color))
-                    executed++;
+                if (gradient) {
+                    if (draw_gradient_rect(s, fr, cmd, &batch, &rect, gradient))
+                        executed++;
+                } else {
+                    if (draw_solid_rect(s, fr, cmd, &batch, &rect, op->u.fill_path.paint.color))
+                        executed++;
+                }
                 continue;
             }
             if (fx_path_get_line_loop(op->u.fill_path.path,
-                                      &points, &point_count) &&
-                draw_polygon_fill(s, fr, cmd, &batch, points, point_count,
-                                  op->u.fill_path.paint.color)) {
-                executed++;
+                                      &points, &point_count)) {
+                if (gradient) {
+                    if (draw_gradient_polygon_fill(s, fr, cmd, &batch, points, point_count, gradient))
+                        executed++;
+                } else {
+                    if (draw_polygon_fill(s, fr, cmd, &batch, points, point_count,
+                                          op->u.fill_path.paint.color))
+                        executed++;
+                }
                 continue;
             }
             if (fx_path_flatten_line_loop(op->u.fill_path.path, 0.25f, &fr->arena,
-                                          &flattened, &point_count) &&
-                draw_polygon_fill(s, fr, cmd, &batch, flattened, point_count,
-                                  op->u.fill_path.paint.color)) {
-                executed++;
+                                          &flattened, &point_count)) {
+                if (gradient) {
+                    if (draw_gradient_polygon_fill(s, fr, cmd, &batch, flattened, point_count, gradient))
+                        executed++;
+                } else {
+                    if (draw_polygon_fill(s, fr, cmd, &batch, flattened, point_count,
+                                          op->u.fill_path.paint.color))
+                        executed++;
+                }
             }
         } else if (op->kind == FX_OP_STROKE_PATH) {
             if (op->u.stroke_path.paint.line_join == FX_JOIN_MITER &&
@@ -560,7 +742,7 @@ fx_surface *fx_surface_create_wayland(fx_context *ctx,
     return s;
 }
 
-static uint32_t find_memory_type(fx_context *ctx, uint32_t type_filter,
+uint32_t find_memory_type(fx_context *ctx, uint32_t type_filter,
                                   VkMemoryPropertyFlags props)
 {
     VkPhysicalDeviceMemoryProperties mem = ctx->mem_props;
@@ -613,7 +795,8 @@ fx_surface *fx_surface_create_offscreen(fx_context *ctx, int32_t width,
         .samples     = VK_SAMPLE_COUNT_1_BIT,
         .tiling      = VK_IMAGE_TILING_OPTIMAL,
         .usage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                       VK_IMAGE_USAGE_SAMPLED_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
@@ -658,20 +841,68 @@ fx_surface *fx_surface_create_offscreen(fx_context *ctx, int32_t width,
         goto fail;
     }
 
+    /* Stencil attachment for offscreen clipping */
+    VkImageCreateInfo sici = {
+        .sType       = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType   = VK_IMAGE_TYPE_2D,
+        .format      = VK_FORMAT_S8_UINT,
+        .extent      = { (uint32_t)width, (uint32_t)height, 1 },
+        .mipLevels   = 1,
+        .arrayLayers = 1,
+        .samples     = VK_SAMPLE_COUNT_1_BIT,
+        .tiling      = VK_IMAGE_TILING_OPTIMAL,
+        .usage       = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+    r = vkCreateImage(ctx->device, &sici, NULL, &s->stencil_image);
+    if (r != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreateImage (stencil): %d", (int)r);
+        goto fail;
+    }
+    vkGetImageMemoryRequirements(ctx->device, s->stencil_image, &memreq);
+    mai.allocationSize  = memreq.size;
+    mai.memoryTypeIndex = find_memory_type(ctx, memreq.memoryTypeBits,
+                                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    r = vkAllocateMemory(ctx->device, &mai, NULL, &s->stencil_memory);
+    if (r != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkAllocateMemory (stencil): %d", (int)r);
+        goto fail;
+    }
+    vkBindImageMemory(ctx->device, s->stencil_image, s->stencil_memory, 0);
+
+    VkImageViewCreateInfo svci = {
+        .sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image    = s->stencil_image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format   = VK_FORMAT_S8_UINT,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT,
+            .levelCount = 1,
+            .layerCount = 1,
+        },
+    };
+    r = vkCreateImageView(ctx->device, &svci, NULL, &s->stencil_view);
+    if (r != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreateImageView (stencil): %d", (int)r);
+        goto fail;
+    }
+
     if (!fx_make_render_pass(s, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)) goto fail;
-    s->offscreen_render_pass = s->render_pass;
-    s->render_pass = VK_NULL_HANDLE; /* prevent swapchain_destroy from touching it twice */
 
     if (!fx_make_image_dsl(s)) goto fail;
     if (!fx_make_image_pipeline(s)) goto fail;
     if (!fx_make_text_pipeline(s)) goto fail;
+    if (!fx_make_gradient_pipeline(s)) goto fail;
     if (!fx_make_bootstrap_pipeline(s)) goto fail;
+    if (!fx_make_stencil_pipeline(s)) goto fail;
 
+    VkImageView offscreen_attachments[2] = { s->offscreen_view, s->stencil_view };
     VkFramebufferCreateInfo fci = {
         .sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass      = s->offscreen_render_pass,
-        .attachmentCount = 1,
-        .pAttachments    = &s->offscreen_view,
+        .renderPass      = s->render_pass,
+        .attachmentCount = 2,
+        .pAttachments    = offscreen_attachments,
         .width           = (uint32_t)width,
         .height          = (uint32_t)height,
         .layers          = 1,
@@ -879,13 +1110,41 @@ static void destroy_surface(fx_surface *s)
             vkDestroyPipelineLayout(dev, s->text_layout, NULL);
             s->text_layout = VK_NULL_HANDLE;
         }
+        if (s->blur_pipeline) {
+            vkDestroyPipeline(dev, s->blur_pipeline, NULL);
+            s->blur_pipeline = VK_NULL_HANDLE;
+        }
+        if (s->blur_layout) {
+            vkDestroyPipelineLayout(dev, s->blur_layout, NULL);
+            s->blur_layout = VK_NULL_HANDLE;
+        }
+        if (s->stencil_pipeline) {
+            vkDestroyPipeline(dev, s->stencil_pipeline, NULL);
+            s->stencil_pipeline = VK_NULL_HANDLE;
+        }
+        if (s->stencil_layout) {
+            vkDestroyPipelineLayout(dev, s->stencil_layout, NULL);
+            s->stencil_layout = VK_NULL_HANDLE;
+        }
         if (s->image_dsl) {
             vkDestroyDescriptorSetLayout(dev, s->image_dsl, NULL);
             s->image_dsl = VK_NULL_HANDLE;
         }
-        if (s->offscreen_render_pass) {
-            vkDestroyRenderPass(dev, s->offscreen_render_pass, NULL);
-            s->offscreen_render_pass = VK_NULL_HANDLE;
+        if (s->render_pass) {
+            vkDestroyRenderPass(dev, s->render_pass, NULL);
+            s->render_pass = VK_NULL_HANDLE;
+        }
+        if (s->stencil_view) {
+            vkDestroyImageView(dev, s->stencil_view, NULL);
+            s->stencil_view = VK_NULL_HANDLE;
+        }
+        if (s->stencil_image) {
+            vkDestroyImage(dev, s->stencil_image, NULL);
+            s->stencil_image = VK_NULL_HANDLE;
+        }
+        if (s->stencil_memory) {
+            vkFreeMemory(dev, s->stencil_memory, NULL);
+            s->stencil_memory = VK_NULL_HANDLE;
         }
         if (s->offscreen_view) {
             vkDestroyImageView(dev, s->offscreen_view, NULL);
@@ -916,6 +1175,17 @@ void fx_surface_destroy(fx_surface *s)
     fx_surface_wait_idle(s);
     vkDeviceWaitIdle(s->ctx->device);
     destroy_surface(s);
+}
+
+void fx_surface_set_dpr(fx_surface *s, float dpr)
+{
+    if (!s || dpr <= 0.0f) return;
+    s->canvas.dpr = dpr;
+}
+
+float fx_surface_get_dpr(const fx_surface *s)
+{
+    return s ? s->canvas.dpr : 1.0f;
 }
 
 fx_canvas *fx_surface_acquire(fx_surface *s)
@@ -958,6 +1228,7 @@ fx_canvas *fx_surface_acquire(fx_surface *s)
 
     /* Reset display list for the new frame. */
     fx_canvas_reset(&s->canvas);
+    s->canvas.dpr = s->canvas.dpr > 0.0f ? s->canvas.dpr : 1.0f;
     return &s->canvas;
 }
 
@@ -980,7 +1251,7 @@ void fx_surface_present(fx_surface *s)
 
     VkRenderPassBeginInfo rpbi = {
         .sType       = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass  = s->is_offscreen ? s->offscreen_render_pass : s->render_pass,
+        .renderPass  = s->is_offscreen ? s->render_pass : s->render_pass,
         .framebuffer = s->is_offscreen ? s->offscreen_framebuffer
                                        : s->images[s->acquired_image].framebuffer,
         .renderArea  = { .offset = {0,0}, .extent = s->extent },

@@ -147,6 +147,16 @@ struct fx_glyph_run {
     size_t    cap;
 };
 
+struct fx_gradient {
+    fx_context *ctx;
+    uint32_t    mode;   /* 0 = linear, 1 = radial */
+    float       start[2];
+    float       end[2];
+    float       colors[4][4];
+    float       stops[4];
+    uint32_t    stop_count;
+};
+
 struct fx_font {
     fx_context *ctx;
     char   *family;
@@ -156,6 +166,8 @@ struct fx_font {
     bool    italic;
     FT_Face      ft_face;
     hb_font_t   *hb_font;
+    float   ascender;    /* pixels, from baseline to top */
+    float   descender;   /* pixels, from baseline to bottom (negative) */
 };
 
 /* ---------- fx_image ---------- */
@@ -196,6 +208,17 @@ typedef struct {
     uint32_t mode; float pad;
 } fx_image_pc;
 
+/* Gradient push constants: 112 bytes total */
+typedef struct {
+    float    surface_size[2];
+    uint32_t mode;
+    uint32_t stop_count;
+    float    start[2];
+    float    end[2];
+    float    colors[4][4];
+    float    stops[4];
+} fx_gradient_pc;
+
 typedef struct {
     float pos[2];
     float uv[2];
@@ -220,6 +243,9 @@ typedef enum {
     FX_OP_STROKE_PATH = 1,
     FX_OP_DRAW_IMAGE = 2,
     FX_OP_DRAW_GLYPHS = 3,
+    FX_OP_CLIP_RECT = 4,
+    FX_OP_RESET_CLIP = 5,
+    FX_OP_CLIP_PATH = 6,
 } fx_op_kind;
 
 typedef struct {
@@ -250,12 +276,18 @@ typedef struct {
 } fx_draw_glyphs_op;
 
 typedef struct {
+    fx_rect rect;
+} fx_clip_rect_op;
+
+typedef struct {
     fx_op_kind kind;
     union {
         fx_fill_path_op    fill_path;
         fx_stroke_path_op  stroke_path;
         fx_draw_image_op   draw_image;
         fx_draw_glyphs_op  draw_glyphs;
+        fx_clip_rect_op    clip_rect;
+        fx_fill_path_op    clip_path;  /* reuses fill_path shape, paint ignored */
     } u;
 } fx_op;
 
@@ -280,11 +312,26 @@ struct fx_surface {
     VkPipelineLayout  text_layout;
     VkPipeline        text_pipeline;
 
+    VkPipelineLayout  gradient_layout;
+    VkPipeline        gradient_pipeline;
+
+    VkPipelineLayout  stencil_layout;
+    VkPipeline        stencil_pipeline;
+
+    VkPipelineLayout  blur_layout;
+    VkPipeline        blur_pipeline;
+
     VkSampler         sampler;
+    VkSampler         text_sampler;
 
 
     fx_sc_image       images[FX_MAX_SWAPCHAIN_IMAGES];
     uint32_t          image_count;
+
+    /* Stencil attachment for clipping */
+    VkImage           stencil_image;
+    VkDeviceMemory    stencil_memory;
+    VkImageView       stencil_view;
 
     fx_frame          frames[FX_MAX_FRAMES_IN_FLIGHT];
     uint32_t          frame_index;      /* cycles 0..MAX_FRAMES-1 */
@@ -302,7 +349,7 @@ struct fx_surface {
     VkDeviceMemory    offscreen_memory;
     VkImageView       offscreen_view;
     VkFramebuffer     offscreen_framebuffer;
-    VkRenderPass      offscreen_render_pass;
+
 
     /* Canvas recording state: commands are appended CPU-side. */
     struct fx_canvas {
@@ -317,9 +364,17 @@ struct fx_surface {
         size_t      state_count;
         size_t      state_cap;
         fx_matrix   current_matrix;
+        float       dpr;   /* device pixel ratio */
+        float       shadow_dx;
+        float       shadow_dy;
+        float       shadow_blur;
+        fx_color    shadow_color;
+        bool        has_shadow;
     } canvas;
 };
 
+uint32_t find_memory_type(fx_context *ctx, uint32_t type_filter,
+                          VkMemoryPropertyFlags props);
 bool fx_swapchain_build(fx_surface *s);
 void fx_swapchain_destroy(fx_surface *s);
 /* Waits on all in-flight frame fences and destroys per-frame objects. */
@@ -330,6 +385,9 @@ bool fx_make_render_pass(fx_surface *s, VkImageLayout final_layout);
 bool fx_make_image_dsl(fx_surface *s);
 bool fx_make_image_pipeline(fx_surface *s);
 bool fx_make_text_pipeline(fx_surface *s);
+bool fx_make_gradient_pipeline(fx_surface *s);
+bool fx_make_blur_pipeline(fx_surface *s);
+bool fx_make_stencil_pipeline(fx_surface *s);
 bool fx_make_bootstrap_pipeline(fx_surface *s);
 bool fx_make_frames(fx_surface *s);
 void fx_canvas_reset(fx_canvas *c);

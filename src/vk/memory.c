@@ -3,17 +3,6 @@
 
 #define INITIAL_CHUNK_SIZE (4 * 1024 * 1024)
 
-static uint32_t find_memory_type(fx_context *ctx, uint32_t filter, VkMemoryPropertyFlags props)
-{
-    for (uint32_t i = 0; i < ctx->mem_props.memoryTypeCount; ++i) {
-        if ((filter & (1 << i)) &&
-            (ctx->mem_props.memoryTypes[i].propertyFlags & props) == props) {
-            return i;
-        }
-    }
-    return UINT32_MAX;
-}
-
 static fx_vbuf_chunk *chunk_create(fx_context *ctx, size_t size)
 {
     fx_vbuf_chunk *chunk = calloc(1, sizeof(*chunk));

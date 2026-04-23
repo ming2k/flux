@@ -40,6 +40,38 @@ text_frag_spv = custom_target('text_frag_spv',
             '@INPUT@', '-o', '@OUTPUT@'],
 )
 
+gradient_vert_spv = custom_target('gradient_vert_spv',
+  input  : 'shaders/gradient.vert',
+  output : 'gradient_vert_spv.inc',
+  command: [glslang, '-V', '--target-env', 'vulkan1.2',
+            '--quiet', '--vn', 'fx_gradient_vert_spv',
+            '@INPUT@', '-o', '@OUTPUT@'],
+)
+
+gradient_frag_spv = custom_target('gradient_frag_spv',
+  input  : 'shaders/gradient.frag',
+  output : 'gradient_frag_spv.inc',
+  command: [glslang, '-V', '--target-env', 'vulkan1.2',
+            '--quiet', '--vn', 'fx_gradient_frag_spv',
+            '@INPUT@', '-o', '@OUTPUT@'],
+)
+
+stencil_frag_spv = custom_target('stencil_frag_spv',
+  input  : 'shaders/stencil.frag',
+  output : 'stencil_frag_spv.inc',
+  command: [glslang, '-V', '--target-env', 'vulkan1.2',
+            '--quiet', '--vn', 'fx_stencil_frag_spv',
+            '@INPUT@', '-o', '@OUTPUT@'],
+)
+
+blur_frag_spv = custom_target('blur_frag_spv',
+  input  : 'shaders/blur.frag',
+  output : 'blur_frag_spv.inc',
+  command: [glslang, '-V', '--target-env', 'vulkan1.2',
+            '--quiet', '--vn', 'fx_blur_frag_spv',
+            '@INPUT@', '-o', '@OUTPUT@'],
+)
+
 flux_sources = files(
   'context.c',
   'canvas.c',
@@ -59,6 +91,10 @@ flux_sources = files(
   image_vert_spv,
   image_frag_spv,
   text_frag_spv,
+  gradient_vert_spv,
+  gradient_frag_spv,
+  stencil_frag_spv,
+  blur_frag_spv,
 ]
 
 flux_c_args = [

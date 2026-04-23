@@ -22,17 +22,6 @@ static VkFormat to_vk_format(fx_pixel_format fmt)
     return VK_FORMAT_UNDEFINED;
 }
 
-static uint32_t find_memory_type(fx_context *ctx, uint32_t filter, VkMemoryPropertyFlags props)
-{
-    for (uint32_t i = 0; i < ctx->mem_props.memoryTypeCount; ++i) {
-        if ((filter & (1 << i)) &&
-            (ctx->mem_props.memoryTypes[i].propertyFlags & props) == props) {
-            return i;
-        }
-    }
-    return UINT32_MAX;
-}
-
 fx_image *fx_image_create(fx_context *ctx, const fx_image_desc *desc)
 {
     fx_image *image;

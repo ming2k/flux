@@ -180,6 +180,8 @@ fx_font *fx_font_create(fx_context *ctx, const fx_font_desc *desc)
     FT_Set_Pixel_Sizes(font->ft_face, 0, (FT_UInt)desc->size);
     font->hb_font = hb_ft_font_create(font->ft_face, NULL);
     font->size = desc->size;
+    font->ascender  = (float)(font->ft_face->size->metrics.ascender  >> 6);
+    font->descender = (float)(font->ft_face->size->metrics.descender >> 6);
     return font;
 }
 
@@ -207,6 +209,14 @@ bool fx_font_get_desc(const fx_font *font, fx_font_desc *out_desc)
 struct hb_font_t *fx_font_get_hb_font(fx_font *font)
 {
     return font ? font->hb_font : NULL;
+}
+
+void fx_font_get_metrics(const fx_font *font, float *out_ascender,
+                         float *out_descender)
+{
+    if (!font) return;
+    if (out_ascender)  *out_ascender  = font->ascender;
+    if (out_descender) *out_descender = font->descender;
 }
 
 fx_glyph_run *fx_glyph_run_create(size_t reserve_glyphs)

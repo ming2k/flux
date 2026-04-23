@@ -35,6 +35,7 @@ typedef struct fx_canvas   fx_canvas;
 typedef struct fx_image    fx_image;
 typedef struct fx_path     fx_path;
 typedef struct fx_font     fx_font;
+typedef struct fx_gradient fx_gradient;
 typedef struct fx_glyph_run fx_glyph_run;
 
 typedef uint32_t fx_color;   /* 0xAARRGGBB, premultiplied */
@@ -73,6 +74,7 @@ typedef struct {
     float        miter_limit;
     fx_line_cap  line_cap;
     fx_line_join line_join;
+    fx_gradient *gradient;    /* NULL = solid color */
 } fx_paint;
 
 typedef enum {
@@ -140,6 +142,22 @@ typedef struct {
 } fx_font_desc;
 
 typedef struct {
+    fx_point start;
+    fx_point end;
+    fx_color colors[4];       /* color stops */
+    float    stops[4];        /* 0.0 .. 1.0, monotonic */
+    uint32_t stop_count;      /* 2 .. 4 */
+} fx_linear_gradient_desc;
+
+typedef struct {
+    fx_point center;
+    float    radius;
+    fx_color colors[4];
+    float    stops[4];
+    uint32_t stop_count;
+} fx_radial_gradient_desc;
+
+typedef struct {
     uint32_t glyph_id;
     float    x;
     float    y;
@@ -153,6 +171,8 @@ FX_API bool        fx_context_get_device_caps(const fx_context *ctx,
 
 FX_API void fx_surface_destroy(fx_surface *s);
 FX_API void fx_surface_resize(fx_surface *s, int32_t w, int32_t h);
+FX_API void fx_surface_set_dpr(fx_surface *s, float dpr);
+FX_API float fx_surface_get_dpr(const fx_surface *s);
 FX_API fx_surface *fx_surface_create_vulkan(fx_context *ctx, VkSurfaceKHR vk_surface, int32_t width, int32_t height, fx_color_space cs);
 
 /*
@@ -196,6 +216,19 @@ FX_API void fx_set_matrix(fx_canvas *c, const fx_matrix *m);
 FX_API void fx_get_matrix(const fx_canvas *c, fx_matrix *out_m);
 
 FX_API void fx_paint_init(fx_paint *paint, fx_color color);
+FX_API void fx_paint_set_gradient(fx_paint *paint, fx_gradient *gradient);
+
+/* Scissor-based clipping.  clip_rect is transformed by the current matrix
+ * and intersected with the surface bounds; subsequent draws are restricted
+ * to the intersection until fx_reset_clip is called. */
+FX_API void fx_clip_rect(fx_canvas *c, const fx_rect *rect);
+FX_API void fx_reset_clip(fx_canvas *c);
+
+/* Stencil-based path clipping.  The path is filled into the stencil buffer;
+ * subsequent draws are restricted to the interior of the path until
+ * fx_reset_clip is called.  clip_path uses the stencil buffer and therefore
+ * works for arbitrary shapes, not just axis-aligned rectangles. */
+FX_API void fx_clip_path(fx_canvas *c, const fx_path *path);
 
 /*
  * Images are context-owned resource objects. In the current runtime
@@ -244,6 +277,12 @@ FX_API size_t   fx_path_point_count(const fx_path *path);
  * upstream components such as HarfBuzz/Pango; flux consumes positioned
  * glyph runs.
  */
+FX_API fx_gradient *fx_gradient_create_linear(fx_context *ctx,
+                                                  const fx_linear_gradient_desc *desc);
+FX_API fx_gradient *fx_gradient_create_radial(fx_context *ctx,
+                                                  const fx_radial_gradient_desc *desc);
+FX_API void         fx_gradient_destroy(fx_gradient *gradient);
+
 FX_API fx_font *fx_font_create(fx_context *ctx, const fx_font_desc *desc);
 FX_API void     fx_font_destroy(fx_font *font);
 FX_API bool     fx_font_get_desc(const fx_font *font, fx_font_desc *out_desc);
@@ -252,6 +291,12 @@ FX_API bool     fx_font_get_desc(const fx_font *font, fx_font_desc *out_desc);
  * The returned pointer is borrowed and valid for the lifetime of `font`. */
 struct hb_font_t;
 FX_API struct hb_font_t *fx_font_get_hb_font(fx_font *font);
+
+/* Font metrics in pixels (after the size set at creation time).
+ * ascender  > 0 : distance from baseline to the top of the EM square.
+ * descender < 0 : distance from baseline to the bottom (negative). */
+FX_API void fx_font_get_metrics(const fx_font *font, float *out_ascender,
+                                 float *out_descender);
 
 FX_API fx_glyph_run *fx_glyph_run_create(size_t reserve_glyphs);
 FX_API void          fx_glyph_run_destroy(fx_glyph_run *run);

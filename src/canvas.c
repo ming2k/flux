@@ -1,6 +1,26 @@
 #include "internal.h"
 #include <math.h>
 
+static fx_matrix canvas_transform(const fx_canvas *c)
+{
+    float dpr = (c->dpr > 0.0f) ? c->dpr : 1.0f;
+    fx_matrix m = c->current_matrix;
+    if (dpr != 1.0f) {
+        fx_matrix dpr_m = { .m = { dpr, 0, 0, dpr, 0, 0 } };
+        fx_matrix combined;
+        fx_matrix_multiply(&combined, &m, &dpr_m);
+        m = combined;
+    }
+    return m;
+}
+
+static fx_rect scale_rect_by_dpr(const fx_rect *r, float dpr)
+{
+    if (!r) return (fx_rect){0};
+    if (dpr <= 0.0f || dpr == 1.0f) return *r;
+    return (fx_rect){ r->x * dpr, r->y * dpr, r->w * dpr, r->h * dpr };
+}
+
 static bool ensure_op_capacity(fx_canvas *c, size_t extra)
 {
     size_t need = c->op_count + extra;
@@ -44,6 +64,7 @@ void fx_canvas_reset(fx_canvas *c)
 
     c->state_count = 0;
     fx_matrix_identity(&c->current_matrix);
+    c->dpr = 1.0f;
 }
 
 void fx_canvas_dispose(fx_canvas *c)
@@ -75,14 +96,22 @@ void fx_paint_init(fx_paint *paint, fx_color color)
     paint->miter_limit = 4.0f;
     paint->line_cap = FX_CAP_BUTT;
     paint->line_join = FX_JOIN_MITER;
+    paint->gradient = NULL;
+}
+
+void fx_paint_set_gradient(fx_paint *paint, fx_gradient *gradient)
+{
+    if (!paint) return;
+    paint->gradient = gradient;
 }
 
 bool fx_fill_rect(fx_canvas *c, const fx_rect *rect, fx_color color)
 {
     if (!c || !rect) return false;
+    fx_rect r = scale_rect_by_dpr(rect, c->dpr);
     fx_path *path = fx_path_create();
     if (!path) return false;
-    fx_path_add_rect(path, rect);
+    fx_path_add_rect(path, &r);
     
     fx_paint p;
     fx_paint_init(&p, color);
@@ -96,8 +125,9 @@ bool fx_fill_rect(fx_canvas *c, const fx_rect *rect, fx_color color)
         },
     };
 
-    if (!fx_matrix_is_identity(&c->current_matrix)) {
-        fx_path *trans = fx_path_transform(path, &c->current_matrix);
+    fx_matrix m = canvas_transform(c);
+    if (!fx_matrix_is_identity(&m)) {
+        fx_path *trans = fx_path_transform(path, &m);
         fx_path_destroy(path);
         if (!trans) return false;
         op.u.fill_path.path = trans;
@@ -119,8 +149,9 @@ bool fx_fill_path(fx_canvas *c, const fx_path *path, const fx_paint *paint)
         },
     };
 
-    if (!fx_matrix_is_identity(&c->current_matrix)) {
-        op.u.fill_path.path = fx_path_transform(path, &c->current_matrix);
+    fx_matrix m = canvas_transform(c);
+    if (!fx_matrix_is_identity(&m)) {
+        op.u.fill_path.path = fx_path_transform(path, &m);
         op.u.fill_path.owns_path = true;
         if (!op.u.fill_path.path) return false;
     }
@@ -141,8 +172,9 @@ bool fx_stroke_path(fx_canvas *c, const fx_path *path, const fx_paint *paint)
         },
     };
 
-    if (!fx_matrix_is_identity(&c->current_matrix)) {
-        op.u.stroke_path.path = fx_path_transform(path, &c->current_matrix);
+    fx_matrix m = canvas_transform(c);
+    if (!fx_matrix_is_identity(&m)) {
+        op.u.stroke_path.path = fx_path_transform(path, &m);
         op.u.stroke_path.owns_path = true;
         if (!op.u.stroke_path.path) return false;
         /* Note: stroke width is not transformed here; it follows
@@ -165,12 +197,13 @@ bool fx_draw_image_ex(fx_canvas *c, const fx_image *image,
                       const fx_rect *src, const fx_rect *dst)
 {
     fx_rect full_src = { 0 };
+    fx_rect scaled_dst = scale_rect_by_dpr(dst, c->dpr);
     fx_op op = {
         .kind = FX_OP_DRAW_IMAGE,
         .u.draw_image = {
             .image = image,
             .src = { 0 },
-            .dst = dst ? *dst : (fx_rect){ 0 },
+            .dst = scaled_dst,
         },
     };
 
@@ -194,12 +227,134 @@ bool fx_draw_image_ex(fx_canvas *c, const fx_image *image,
     return push_op(c, &op);
 }
 
+static void fx_color_to_floats(fx_color c, float out[4])
+{
+    out[0] = ((c >> 16) & 0xFF) / 255.0f;
+    out[1] = ((c >>  8) & 0xFF) / 255.0f;
+    out[2] = ((c      ) & 0xFF) / 255.0f;
+    out[3] = ((c >> 24) & 0xFF) / 255.0f;
+}
+
+fx_gradient *fx_gradient_create_linear(fx_context *ctx,
+                                       const fx_linear_gradient_desc *desc)
+{
+    if (!ctx || !desc || desc->stop_count < 2 || desc->stop_count > 4)
+        return NULL;
+    fx_gradient *g = calloc(1, sizeof(*g));
+    if (!g) return NULL;
+    g->ctx = ctx;
+    g->mode = 0;
+    g->start[0] = desc->start.x;
+    g->start[1] = desc->start.y;
+    g->end[0]   = desc->end.x;
+    g->end[1]   = desc->end.y;
+    g->stop_count = desc->stop_count;
+    for (uint32_t i = 0; i < desc->stop_count; ++i) {
+        fx_color_to_floats(desc->colors[i], g->colors[i]);
+        g->stops[i] = desc->stops[i];
+    }
+    return g;
+}
+
+fx_gradient *fx_gradient_create_radial(fx_context *ctx,
+                                       const fx_radial_gradient_desc *desc)
+{
+    if (!ctx || !desc || desc->stop_count < 2 || desc->stop_count > 4)
+        return NULL;
+    fx_gradient *g = calloc(1, sizeof(*g));
+    if (!g) return NULL;
+    g->ctx = ctx;
+    g->mode = 1;
+    g->start[0] = desc->center.x;
+    g->start[1] = desc->center.y;
+    g->end[0]   = desc->radius;
+    g->end[1]   = 0.0f;
+    g->stop_count = desc->stop_count;
+    for (uint32_t i = 0; i < desc->stop_count; ++i) {
+        fx_color_to_floats(desc->colors[i], g->colors[i]);
+        g->stops[i] = desc->stops[i];
+    }
+    return g;
+}
+
+void fx_gradient_destroy(fx_gradient *gradient)
+{
+    if (!gradient) return;
+    free(gradient);
+}
+
+void fx_clip_rect(fx_canvas *c, const fx_rect *rect)
+{
+    if (!c || !rect) return;
+
+    fx_rect r = scale_rect_by_dpr(rect, c->dpr);
+    fx_matrix m = canvas_transform(c);
+    if (!fx_matrix_is_identity(&m)) {
+        float x0 = r.x, y0 = r.y;
+        float x1 = r.x + r.w, y1 = r.y + r.h;
+        float x2 = r.x + r.w, y2 = r.y;
+        float x3 = r.x, y3 = r.y + r.h;
+        fx_matrix_transform_point(&m, &x0, &y0);
+        fx_matrix_transform_point(&m, &x1, &y1);
+        fx_matrix_transform_point(&m, &x2, &y2);
+        fx_matrix_transform_point(&m, &x3, &y3);
+        float minx = x0, maxx = x0, miny = y0, maxy = y0;
+        if (x1 < minx) minx = x1; if (x1 > maxx) maxx = x1;
+        if (y1 < miny) miny = y1; if (y1 > maxy) maxy = y1;
+        if (x2 < minx) minx = x2; if (x2 > maxx) maxx = x2;
+        if (y2 < miny) miny = y2; if (y2 > maxy) maxy = y2;
+        if (x3 < minx) minx = x3; if (x3 > maxx) maxx = x3;
+        if (y3 < miny) miny = y3; if (y3 > maxy) maxy = y3;
+        r.x = minx; r.y = miny;
+        r.w = maxx - minx;
+        r.h = maxy - miny;
+    }
+
+    fx_op op = {
+        .kind = FX_OP_CLIP_RECT,
+        .u.clip_rect = { .rect = r },
+    };
+    push_op(c, &op);
+}
+
+void fx_reset_clip(fx_canvas *c)
+{
+    if (!c) return;
+    fx_op op = { .kind = FX_OP_RESET_CLIP };
+    push_op(c, &op);
+}
+
+void fx_clip_path(fx_canvas *c, const fx_path *path)
+{
+    if (!c || !path) return;
+
+    fx_op op = {
+        .kind = FX_OP_CLIP_PATH,
+        .u.clip_path = {
+            .path = path,
+            .paint = {0},
+            .owns_path = false,
+        },
+    };
+
+    fx_matrix m = canvas_transform(c);
+    if (!fx_matrix_is_identity(&m)) {
+        op.u.clip_path.path = fx_path_transform(path, &m);
+        op.u.clip_path.owns_path = true;
+        if (!op.u.clip_path.path) return;
+    }
+
+    push_op(c, &op);
+}
+
 bool fx_draw_glyph_run(fx_canvas *c, const fx_font *font,
                        const fx_glyph_run *run,
                        float x, float y, const fx_paint *paint)
 {
     if (!c || !font || !run || !paint || fx_glyph_run_count(run) == 0) return false;
 
+    x *= c->dpr;
+    y *= c->dpr;
     fx_matrix_transform_point(&c->current_matrix, &x, &y);
 
     fx_op op = {
