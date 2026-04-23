@@ -805,7 +805,9 @@ void fx_surface_resize(fx_surface *s, int32_t w, int32_t h)
     if (!s) return;
     s->requested_w   = w;
     s->requested_h   = h;
-    s->needs_recreate = true;
+    if (w != (int32_t)s->extent.width || h != (int32_t)s->extent.height) {
+        s->needs_recreate = true;
+    }
 }
 
 static bool recreate_swapchain(fx_surface *s)
