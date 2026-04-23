@@ -37,6 +37,7 @@ static bool point_in_triangle(fx_point p, fx_point a, fx_point b, fx_point c)
 }
 
 bool fx_tessellate_simple_polygon(const fx_point *points, size_t count,
+                                  fx_arena *arena,
                                   fx_point **out_tris, size_t *out_count)
 {
     int *indices = NULL;
@@ -52,23 +53,23 @@ bool fx_tessellate_simple_polygon(const fx_point *points, size_t count,
     if (!points || !out_tris || !out_count || count < 3) return false;
 
     tri_cap = (count - 2) * 3;
-    tris = malloc(tri_cap * sizeof(*tris));
-    indices = malloc(count * sizeof(*indices));
-    if (!tris || !indices) goto fail;
+    tris = fx_arena_alloc(arena, tri_cap * sizeof(*tris));
+    indices = fx_arena_alloc(arena, count * sizeof(*indices));
+    if (!tris || !indices) return false;
 
     for (size_t i = 0; i < count; ++i)
         indices[i] = (int)i;
 
     {
         float area = signed_area(points, count);
-        if (area == 0.0f) goto fail;
+        if (area == 0.0f) return false;
         ccw = area > 0.0f;
     }
 
     while (rem > 3) {
         bool clipped = false;
 
-        if (++guard > count * count) goto fail;
+        if (++guard > count * count) return false;
 
         for (size_t i = 0; i < rem; ++i) {
             size_t ip = (i + rem - 1) % rem;
@@ -109,7 +110,7 @@ bool fx_tessellate_simple_polygon(const fx_point *points, size_t count,
             break;
         }
 
-        if (!clipped) goto fail;
+        if (!clipped) return false;
     }
 
     if (rem == 3) {
@@ -127,13 +128,7 @@ bool fx_tessellate_simple_polygon(const fx_point *points, size_t count,
         }
     }
 
-    free(indices);
     *out_tris = tris;
     *out_count = tri_count;
     return true;
-
-fail:
-    free(indices);
-    free(tris);
-    return false;
 }

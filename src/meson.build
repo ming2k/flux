@@ -49,6 +49,7 @@ flux_sources = files(
   'stroker.c',
   'tess.c',
   'text.c',
+  'arena.c',
   'vk/device.c',
   'vk/swapchain.c',
   'vk/memory.c',
@@ -76,8 +77,8 @@ flux_lib = library('flux',
 
 flux_dep = declare_dependency(
   link_with           : flux_lib,
-  include_directories : include_directories('../include'),
-  dependencies        : [vulkan_dep],
+  include_directories : flux_inc,
+  dependencies        : [vulkan_dep, ft_dep, hb_dep],
 )
 
 install_headers('../include/flux/flux.h',         subdir : 'flux')

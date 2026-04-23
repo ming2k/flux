@@ -68,6 +68,11 @@ fx_context *fx_context_create(const fx_context_desc *desc)
     return ctx;
 }
 
+VkInstance fx_context_get_instance(fx_context *ctx)
+{
+    return ctx ? ctx->instance : VK_NULL_HANDLE;
+}
+
 bool fx_context_get_device_caps(const fx_context *ctx, fx_device_caps *out_caps)
 {
     VkFormatProperties fmt_props;
@@ -83,8 +88,6 @@ bool fx_context_get_device_caps(const fx_context *ctx, fx_device_caps *out_caps)
         ctx->phys_props.limits.maxImageDimension2D;
     out_caps->max_color_attachments =
         ctx->phys_props.limits.maxColorAttachments;
-    out_caps->max_compute_workgroup_invocations =
-        ctx->phys_props.limits.maxComputeWorkGroupInvocations;
 
     vkGetPhysicalDeviceFormatProperties(ctx->phys, VK_FORMAT_R8G8B8A8_UNORM,
                                         &fmt_props);

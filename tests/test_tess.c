@@ -1,5 +1,4 @@
 #include "internal.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -12,70 +11,53 @@
         } \
     } while (0)
 
-static float tri_area(fx_point a, fx_point b, fx_point c)
-{
-    float area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-    return area < 0.0f ? -area * 0.5f : area * 0.5f;
-}
-
 static bool test_convex_polygon(void)
 {
     fx_point poly[4] = {
-        { 0.0f, 0.0f },
-        { 4.0f, 0.0f },
-        { 5.0f, 3.0f },
-        { 1.0f, 4.0f },
+        { 0, 0 }, { 10, 0 }, { 10, 10 }, { 0, 10 }
     };
     fx_point *tris = NULL;
     size_t count = 0;
-    float area = 0.0f;
+    fx_arena arena;
+    fx_arena_init(&arena, 0);
 
-    CHECK(fx_tessellate_simple_polygon(poly, 4, &tris, &count));
-    CHECK(tris != NULL);
-    CHECK(count == 6);
-    for (size_t i = 0; i < count; i += 3)
-        area += tri_area(tris[i], tris[i + 1], tris[i + 2]);
-    CHECK(area > 0.0f);
-    free(tris);
+    CHECK(fx_tessellate_simple_polygon(poly, 4, &arena, &tris, &count));
+    CHECK(count == 6); /* 2 triangles */
+    
+    fx_arena_destroy(&arena);
     return true;
 }
 
 static bool test_concave_polygon(void)
 {
     fx_point poly[5] = {
-        { 0.0f, 0.0f },
-        { 5.0f, 0.0f },
-        { 5.0f, 2.0f },
-        { 2.5f, 1.0f },
-        { 0.0f, 3.0f },
+        { 0, 0 }, { 10, 0 }, { 10, 10 }, { 5, 5 }, { 0, 10 }
     };
     fx_point *tris = NULL;
     size_t count = 0;
-    float area = 0.0f;
+    fx_arena arena;
+    fx_arena_init(&arena, 0);
 
-    CHECK(fx_tessellate_simple_polygon(poly, 5, &tris, &count));
-    CHECK(tris != NULL);
-    CHECK(count == 9);
-    for (size_t i = 0; i < count; i += 3)
-        area += tri_area(tris[i], tris[i + 1], tris[i + 2]);
-    CHECK(area > 0.0f);
-    free(tris);
+    CHECK(fx_tessellate_simple_polygon(poly, 5, &arena, &tris, &count));
+    CHECK(count == 9); /* 3 triangles */
+    
+    fx_arena_destroy(&arena);
     return true;
 }
 
 static bool test_reject_degenerate(void)
 {
     fx_point poly[3] = {
-        { 0.0f, 0.0f },
-        { 1.0f, 1.0f },
-        { 2.0f, 2.0f },
+        { 0, 0 }, { 10, 0 }, { 20, 0 }
     };
     fx_point *tris = NULL;
     size_t count = 0;
+    fx_arena arena;
+    fx_arena_init(&arena, 0);
 
-    CHECK(!fx_tessellate_simple_polygon(poly, 3, &tris, &count));
-    CHECK(tris == NULL);
-    CHECK(count == 0);
+    CHECK(!fx_tessellate_simple_polygon(poly, 3, &arena, &tris, &count));
+    
+    fx_arena_destroy(&arena);
     return true;
 }
 

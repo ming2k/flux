@@ -49,6 +49,7 @@ flux is optimized for:
 - Not a layout engine.
 - Not a text shaping engine.
 - Not a browser engine.
+- Not an SVG document parser.
 - Not a general 3D renderer.
 
 ## Relationship to existing projects

@@ -55,9 +55,8 @@ fx_image *fx_image_create(fx_context *ctx, const fx_image_desc *desc)
     image->desc = *desc;
     image->desc.data = NULL;
     image->desc.stride = stride;
-    if (!image->desc.usage) {
-        image->desc.usage = FX_IMAGE_USAGE_SAMPLED |
-                            FX_IMAGE_USAGE_TRANSFER_DST;
+    if (image->desc.usage == 0) {
+        image->desc.usage = FX_IMAGE_USAGE_SAMPLED | FX_IMAGE_USAGE_TRANSFER_DST;
     }
 
     if (desc->data) {
@@ -240,4 +239,111 @@ const void *fx_image_data(const fx_image *image,
     if (out_size) *out_size = image->data_size;
     if (out_stride) *out_stride = image->desc.stride;
     return image->data;
+}
+bool fx_image_update(fx_image *image, const void *data, size_t stride)
+{
+    if (!image || !data) return false;
+
+    size_t bpp = bytes_per_pixel(image->desc.format);
+    if (!bpp) return false;
+
+    size_t expected_stride = stride ? stride : (size_t)image->desc.width * bpp;
+    if (expected_stride < (size_t)image->desc.width * bpp) return false;
+
+    size_t new_data_size = expected_stride * (size_t)image->desc.height;
+    
+    if (!image->data || new_data_size != image->data_size) {
+        void *new_data = realloc(image->data, new_data_size);
+        if (!new_data) return false;
+        image->data = new_data;
+        image->data_size = new_data_size;
+    }
+    
+    memcpy(image->data, data, new_data_size);
+    image->desc.stride = expected_stride;
+
+    if (!image->ctx->device) return true;
+
+    fx_context *ctx = image->ctx;
+
+    /* Create staging buffer */
+    VkBuffer staging;
+    VkDeviceMemory staging_mem;
+
+    VkBufferCreateInfo bci = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = image->data_size,
+        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+    if (vkCreateBuffer(ctx->device, &bci, NULL, &staging) != VK_SUCCESS) return false;
+    
+    VkMemoryRequirements bmr;
+    vkGetBufferMemoryRequirements(ctx->device, staging, &bmr);
+    
+    VkMemoryAllocateInfo bmai = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = bmr.size,
+        .memoryTypeIndex = find_memory_type(ctx, bmr.memoryTypeBits, 
+                                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
+                                           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+    };
+    if (vkAllocateMemory(ctx->device, &bmai, NULL, &staging_mem) != VK_SUCCESS) {
+        vkDestroyBuffer(ctx->device, staging, NULL);
+        return false;
+    }
+    vkBindBufferMemory(ctx->device, staging, staging_mem, 0);
+
+    void *mapped;
+    vkMapMemory(ctx->device, staging_mem, 0, image->data_size, 0, &mapped);
+    memcpy(mapped, image->data, image->data_size);
+    vkUnmapMemory(ctx->device, staging_mem);
+
+    /* Copy command */
+    VkCommandBufferAllocateInfo cai = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = ctx->frame_cmd_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    VkCommandBuffer cb;
+    vkAllocateCommandBuffers(ctx->device, &cai, &cb);
+
+    VkCommandBufferBeginInfo bi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
+    vkBeginCommandBuffer(cb, &bi);
+
+    VkImageMemoryBarrier barrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, /* Need to transition from current to TRANSFER_DST */
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .image = image->vk_image,
+        .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
+    };
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+
+    VkBufferImageCopy region = {
+        .imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
+        .imageExtent = { image->desc.width, image->desc.height, 1 },
+    };
+    vkCmdCopyBufferToImage(cb, staging, image->vk_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+
+    vkEndCommandBuffer(cb);
+
+    VkSubmitInfo si = { .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &cb };
+    vkQueueSubmit(ctx->graphics_queue, 1, &si, VK_NULL_HANDLE);
+    vkQueueWaitIdle(ctx->graphics_queue);
+
+    vkFreeCommandBuffers(ctx->device, ctx->frame_cmd_pool, 1, &cb);
+    vkDestroyBuffer(ctx->device, staging, NULL);
+    vkFreeMemory(ctx->device, staging_mem, NULL);
+
+    return true;
 }

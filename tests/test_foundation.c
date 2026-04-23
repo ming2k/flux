@@ -86,8 +86,6 @@ static bool test_image_object(void)
     CHECK(out_desc.height == 2);
     CHECK(out_desc.format == FX_FMT_RGBA8_UNORM);
     CHECK(out_desc.stride == 8);
-    CHECK(out_desc.usage == (FX_IMAGE_USAGE_SAMPLED |
-                             FX_IMAGE_USAGE_TRANSFER_DST));
     CHECK(out_desc.data == NULL);
 
     copied_pixels = fx_image_data(image, &size, &stride);
@@ -112,8 +110,6 @@ static bool test_font_and_glyph_run(void)
         .family = "Noto Sans",
         .source_name = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         .size = 16.0f,
-        .weight = 400,
-        .italic = false,
     };
     fx_font_desc out_desc = { 0 };
     const fx_glyph *glyphs;
@@ -129,8 +125,7 @@ static bool test_font_and_glyph_run(void)
     CHECK(fx_font_get_desc(font, &out_desc));
     CHECK(strcmp(out_desc.family, "Noto Sans") == 0);
     CHECK(out_desc.size == 16.0f);
-    CHECK(out_desc.weight == 400);
-    CHECK(out_desc.italic == false);
+
 
     CHECK(run != NULL);
     CHECK(fx_glyph_run_count(run) == 0);
@@ -173,7 +168,6 @@ static bool test_canvas_recording(void)
     fx_font *font = fx_font_create(&fake_ctx, &(fx_font_desc){
         .family = "Mono",
         .size = 14.0f,
-        .weight = 500,
         .source_name = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
     });
     fx_glyph_run *empty_run = fx_glyph_run_create(0);

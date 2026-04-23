@@ -12,7 +12,7 @@ void main(void)
 {
     vec2 ndc = vec2(
         in_pos.x / pc.surface_size.x * 2.0 - 1.0,
-        1.0 - in_pos.y / pc.surface_size.y * 2.0
+        in_pos.y / pc.surface_size.y * 2.0 - 1.0
     );
     gl_Position = vec4(ndc, 0.0, 1.0);
 }

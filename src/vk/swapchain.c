@@ -53,7 +53,7 @@ static VkExtent2D clamp_extent(VkSurfaceCapabilitiesKHR caps,
     return e;
 }
 
-static bool make_render_pass(fx_surface *s)
+bool fx_make_render_pass(fx_surface *s, VkImageLayout final_layout)
 {
     VkAttachmentDescription color = {
         .format         = s->surface_format.format,
@@ -63,7 +63,7 @@ static bool make_render_pass(fx_surface *s)
         .stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
         .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
         .initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .finalLayout    = final_layout,
     };
     VkAttachmentReference color_ref = {
         .attachment = 0,
@@ -116,7 +116,7 @@ static VkShaderModule make_shader_module(fx_context *ctx,
     return module;
 }
 
-static bool make_image_dsl(fx_surface *s)
+bool fx_make_image_dsl(fx_surface *s)
 {
     VkDescriptorSetLayoutBinding binding = {
         .binding = 0,
@@ -136,7 +136,7 @@ static bool make_image_dsl(fx_surface *s)
     return true;
 }
 
-static bool make_image_pipeline(fx_surface *s)
+bool fx_make_image_pipeline(fx_surface *s)
 {
     VkShaderModule vert = VK_NULL_HANDLE;
     VkShaderModule frag = VK_NULL_HANDLE;
@@ -231,7 +231,7 @@ fail:
     return false;
 }
 
-static bool make_text_pipeline(fx_surface *s)
+bool fx_make_text_pipeline(fx_surface *s)
 {
     VkShaderModule vert = VK_NULL_HANDLE;
     VkShaderModule frag = VK_NULL_HANDLE;
@@ -326,7 +326,7 @@ fail:
     return false;
 }
 
-static bool make_bootstrap_pipeline(fx_surface *s)
+bool fx_make_bootstrap_pipeline(fx_surface *s)
 {
     VkShaderModule vert = VK_NULL_HANDLE;
     VkShaderModule frag = VK_NULL_HANDLE;
@@ -468,7 +468,7 @@ fail:
     return false;
 }
 
-static bool make_images(fx_surface *s)
+bool fx_make_images(fx_surface *s)
 {
     vkGetSwapchainImagesKHR(s->ctx->device, s->swapchain, &s->image_count, NULL);
     if (s->image_count > FX_MAX_SWAPCHAIN_IMAGES) {
@@ -518,7 +518,7 @@ static bool make_images(fx_surface *s)
     return true;
 }
 
-static bool make_frames(fx_surface *s)
+bool fx_make_frames(fx_surface *s)
 {
     VkCommandBufferAllocateInfo ai = {
         .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -638,13 +638,13 @@ bool fx_swapchain_build(fx_surface *s)
         return false;
     }
 
-    if (!make_render_pass(s)) return false;
-    if (!make_image_dsl(s)) return false;
-    if (!make_image_pipeline(s)) return false;
-    if (!make_text_pipeline(s)) return false;
-    if (!make_bootstrap_pipeline(s)) return false;
-    if (!make_images(s))      return false;
-    if (!make_frames(s))      return false;
+    if (!fx_make_render_pass(s, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)) return false;
+    if (!fx_make_image_dsl(s)) return false;
+    if (!fx_make_image_pipeline(s)) return false;
+    if (!fx_make_text_pipeline(s)) return false;
+    if (!fx_make_bootstrap_pipeline(s)) return false;
+    if (!fx_make_images(s))      return false;
+    if (!fx_make_frames(s))      return false;
 
     FX_LOGI(s->ctx, "swapchain %ux%u images=%u format=%d present=%d",
             s->extent.width, s->extent.height, s->image_count,
@@ -676,6 +676,7 @@ void fx_swapchain_destroy(fx_surface *s)
             s->frames[i].cmd = VK_NULL_HANDLE;
         }
         fx_vbuf_pool_destroy(&s->frames[i].vbuf);
+        fx_arena_destroy(&s->frames[i].arena);
         if (s->frames[i].desc_pool) {
             vkDestroyDescriptorPool(dev, s->frames[i].desc_pool, NULL);
             s->frames[i].desc_pool = VK_NULL_HANDLE;

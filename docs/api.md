@@ -89,6 +89,14 @@ fx_fill_path(c, path, &paint);
 fx_stroke_path(c, path, &paint);
 ```
 
+Available functions:
+- `fx_path_move_to`, `fx_path_line_to`, `fx_path_quad_to`, `fx_path_cubic_to`, `fx_path_close`
+- `fx_path_add_rect` — convenience for an axis-aligned rectangle.
+- `fx_path_arc_to` — approximates an SVG elliptical arc as a sequence of cubic Bézier curves.
+
+> **Fill limitations:** `fx_fill_path` tessellates simple polygons (concave is OK).
+> Self-intersecting paths and the even-odd fill rule are not yet supported.
+
 ### Images
 `fx_image` handles GPU-resident pixel data.
 

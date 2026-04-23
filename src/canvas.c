@@ -77,6 +77,35 @@ void fx_paint_init(fx_paint *paint, fx_color color)
     paint->line_join = FX_JOIN_MITER;
 }
 
+bool fx_fill_rect(fx_canvas *c, const fx_rect *rect, fx_color color)
+{
+    if (!c || !rect) return false;
+    fx_path *path = fx_path_create();
+    if (!path) return false;
+    fx_path_add_rect(path, rect);
+    
+    fx_paint p;
+    fx_paint_init(&p, color);
+    
+    fx_op op = {
+        .kind = FX_OP_FILL_PATH,
+        .u.fill_path = {
+            .path = path,
+            .paint = p,
+            .owns_path = true,
+        },
+    };
+
+    if (!fx_matrix_is_identity(&c->current_matrix)) {
+        fx_path *trans = fx_path_transform(path, &c->current_matrix);
+        fx_path_destroy(path);
+        if (!trans) return false;
+        op.u.fill_path.path = trans;
+    }
+
+    return push_op(c, &op);
+}
+
 bool fx_fill_path(fx_canvas *c, const fx_path *path, const fx_paint *paint)
 {
     if (!c || !path || !paint) return false;
@@ -128,6 +157,12 @@ bool fx_stroke_path(fx_canvas *c, const fx_path *path, const fx_paint *paint)
 
 bool fx_draw_image(fx_canvas *c, const fx_image *image,
                    const fx_rect *src, const fx_rect *dst)
+{
+    return fx_draw_image_ex(c, image, src, dst);
+}
+
+bool fx_draw_image_ex(fx_canvas *c, const fx_image *image,
+                      const fx_rect *src, const fx_rect *dst)
 {
     fx_rect full_src = { 0 };
     fx_op op = {

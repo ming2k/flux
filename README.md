@@ -6,7 +6,7 @@ Status: **Phase 2 (Text Rendering)** — Full 2D vector primitives, dynamic memo
 
 ## Features
 
-- **Vector Primitives:** Concave path filling and stroking (SVG-grade caps and joins).
+- **Vector Primitives:** Concave path filling and stroking with SVG-grade caps and joins. (flux renders paths; it does not parse SVG documents.)
 - **Transformation:** Full 3x3 affine matrix stack with CPU-side resolution-independent flattening.
 - **Text Rendering:** FreeType glyph rasterization and HarfBuzz-ready glyph runs.
 - **Dynamic Atlas:** 2048x2048 dynamic GPU glyph cache with shelf-packing.

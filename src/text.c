@@ -11,7 +11,6 @@ static bool ensure_atlas_image(fx_context *ctx)
         .width = ATLAS_SIZE,
         .height = ATLAS_SIZE,
         .format = FX_FMT_A8_UNORM,
-        .usage = FX_IMAGE_USAGE_SAMPLED | FX_IMAGE_USAGE_TRANSFER_DST,
     };
     ctx->atlas.image = fx_image_create(ctx, &desc);
     if (!ctx->atlas.image) return false;
@@ -181,8 +180,6 @@ fx_font *fx_font_create(fx_context *ctx, const fx_font_desc *desc)
     FT_Set_Pixel_Sizes(font->ft_face, 0, (FT_UInt)desc->size);
     font->hb_font = hb_ft_font_create(font->ft_face, NULL);
     font->size = desc->size;
-    font->weight = desc->weight;
-    font->italic = desc->italic;
     return font;
 }
 
@@ -203,10 +200,13 @@ bool fx_font_get_desc(const fx_font *font, fx_font_desc *out_desc)
         out_desc->family = font->family;
         out_desc->source_name = font->source_name;
         out_desc->size = font->size;
-        out_desc->weight = font->weight;
-        out_desc->italic = font->italic;
     }
     return true;
+}
+
+struct hb_font_t *fx_font_get_hb_font(fx_font *font)
+{
+    return font ? font->hb_font : NULL;
 }
 
 fx_glyph_run *fx_glyph_run_create(size_t reserve_glyphs)

@@ -20,6 +20,25 @@
 #define FX_MAX_FRAMES_IN_FLIGHT 2
 #define FX_MAX_SWAPCHAIN_IMAGES 8
 
+/* ---------- memory management ---------- */
+
+typedef struct fx_arena_block {
+    struct fx_arena_block *next;
+    size_t size;
+    size_t used;
+    uint8_t data[];
+} fx_arena_block;
+
+typedef struct {
+    fx_arena_block *head;
+    size_t block_size;
+} fx_arena;
+
+FX_API void fx_arena_init(fx_arena *arena, size_t block_size);
+FX_API void fx_arena_destroy(fx_arena *arena);
+FX_API void *fx_arena_alloc(fx_arena *arena, size_t size);
+FX_API void fx_arena_reset(fx_arena *arena);
+
 /* ---------- logging ---------- */
 
 void fx_log(const fx_context *ctx, fx_log_level lvl,
@@ -86,11 +105,6 @@ struct fx_context {
     struct fx_atlas atlas;
 };
 
-/* Picks a physical device and creates the logical device. Graphics
- * family is chosen to also support presentation to `probe_surface`.
- * `probe_surface` may be VK_NULL_HANDLE; in that case any graphics
- * queue suffices (useful for offscreen contexts; phase-0 always has a
- * wayland surface, but this keeps the seam clean). */
 bool fx_instance_create(fx_context *ctx, const char *app_name,
                         bool want_validation,
                         const char *const *exts_wanted,
@@ -100,6 +114,32 @@ void fx_device_shutdown(fx_context *ctx);
 void fx_instance_destroy(fx_context *ctx);
 
 /* ---------- fx_font ---------- */
+
+struct fx_path {
+    uint8_t  *verbs;
+    size_t    verb_count;
+    size_t    verb_cap;
+    fx_point *points;
+    size_t    point_count;
+    size_t    point_cap;
+    fx_rect   bounds;
+    bool      has_bounds;
+
+    /* Geometry Cache */
+    uint32_t  generation;
+
+    uint32_t  fill_generation;
+    fx_point *fill_tris;
+    size_t    fill_tri_count;
+
+    uint32_t  stroke_generation;
+    float     stroke_width;
+    uint32_t  stroke_join;
+    uint32_t  stroke_cap;
+    float     stroke_miter_limit;
+    fx_point *stroke_tris;
+    size_t    stroke_tri_count;
+};
 
 struct fx_glyph_run {
     fx_glyph *glyphs;
@@ -114,7 +154,6 @@ struct fx_font {
     float   size;
     int32_t weight;
     bool    italic;
-
     FT_Face      ft_face;
     hb_font_t   *hb_font;
 };
@@ -142,19 +181,19 @@ typedef struct {
 
 typedef struct {
     float surface_size[2];
-    float pad[2];
+    uint32_t mode; float pad;
     float color[4];
 } fx_solid_color_pc;
 
 typedef struct {
     float surface_size[2];
-    float pad[2];
+    uint32_t mode; float pad;
     float color[4];
 } fx_text_pc;
 
 typedef struct {
     float surface_size[2];
-    float pad[2];
+    uint32_t mode; float pad;
 } fx_image_pc;
 
 typedef struct {
@@ -173,6 +212,7 @@ typedef struct {
     VkCommandBuffer cmd;
     fx_vbuf_pool    vbuf;
     VkDescriptorPool desc_pool;
+    fx_arena        arena;
 } fx_frame;
 
 typedef enum {
@@ -198,6 +238,7 @@ typedef struct {
     const fx_image *image;
     fx_rect         src;
     fx_rect         dst;
+uint32_t        mode;
 } fx_draw_image_op;
 
 typedef struct {
@@ -251,9 +292,17 @@ struct fx_surface {
 
     bool              needs_recreate;
     int32_t           requested_w, requested_h;
-    bool              reported_unimplemented_ops;
+
 
     fx_color_space    color_space;
+
+    /* Offscreen rendering state (no swapchain, no VkSurfaceKHR). */
+    bool              is_offscreen;
+    VkImage           offscreen_image;
+    VkDeviceMemory    offscreen_memory;
+    VkImageView       offscreen_view;
+    VkFramebuffer     offscreen_framebuffer;
+    VkRenderPass      offscreen_render_pass;
 
     /* Canvas recording state: commands are appended CPU-side. */
     struct fx_canvas {
@@ -275,21 +324,33 @@ bool fx_swapchain_build(fx_surface *s);
 void fx_swapchain_destroy(fx_surface *s);
 /* Waits on all in-flight frame fences and destroys per-frame objects. */
 void fx_surface_wait_idle(fx_surface *s);
+
+/* Internal pipeline/frame helpers used by both swapchain and offscreen paths. */
+bool fx_make_render_pass(fx_surface *s, VkImageLayout final_layout);
+bool fx_make_image_dsl(fx_surface *s);
+bool fx_make_image_pipeline(fx_surface *s);
+bool fx_make_text_pipeline(fx_surface *s);
+bool fx_make_bootstrap_pipeline(fx_surface *s);
+bool fx_make_frames(fx_surface *s);
 void fx_canvas_reset(fx_canvas *c);
 void fx_canvas_dispose(fx_canvas *c);
 bool fx_path_is_axis_aligned_rect(const fx_path *path, fx_rect *out_rect);
 bool fx_path_get_line_loop(const fx_path *path,
                            const fx_point **out_points,
                            size_t *out_count);
-bool fx_path_flatten_polyline(const fx_path *path, float tolerance,
-                              fx_point **out_points, size_t *out_count,
-                              bool *out_closed);
-bool fx_path_flatten_line_loop(const fx_path *path, float tolerance,
-                               fx_point **out_points, size_t *out_count);
-bool fx_tessellate_simple_polygon(const fx_point *points, size_t count,
-                                  fx_point **out_tris, size_t *out_count);
-bool fx_stroke_polyline(const fx_point *points, size_t count, bool closed,
-                        const fx_paint *paint, fx_point **out_tris, size_t *out_count);
+FX_API bool fx_path_flatten_polyline(const fx_path *path, float tolerance,
+                                       fx_arena *arena,
+                                       fx_point **out_points, size_t *out_count,
+                                       bool *out_closed);
+FX_API bool fx_path_flatten_line_loop(const fx_path *path, float tolerance,
+                                        fx_arena *arena,
+                                        fx_point **out_points, size_t *out_count);
+FX_API bool fx_tessellate_simple_polygon(const fx_point *points, size_t count,
+                                           fx_arena *arena,
+                                           fx_point **out_tris, size_t *out_count);
+FX_API bool fx_stroke_polyline(const fx_point *points, size_t count, bool closed,
+                                 const fx_paint *paint, fx_arena *arena,
+                                 fx_point **out_tris, size_t *out_count);
 
 bool fx_atlas_ensure_glyph(fx_context *ctx, fx_font *font, uint32_t glyph_id, fx_atlas_entry *out_entry);
 
@@ -308,11 +369,5 @@ static inline bool fx_matrix_is_identity(const fx_matrix *m)
            m->m[2] == 0.0f && m->m[3] == 1.0f &&
            m->m[4] == 0.0f && m->m[5] == 0.0f;
 }
-
-void fx_matrix_multiply(fx_matrix *out, const fx_matrix *a, const fx_matrix *b);
-void fx_matrix_transform_point(const fx_matrix *m, float *x, float *y);
-
-/* Returns a newly allocated path with coordinates transformed by m. */
-fx_path *fx_path_transform(const fx_path *src, const fx_matrix *m);
 
 #endif /* FX_INTERNAL_H */

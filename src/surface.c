@@ -40,6 +40,16 @@ static bool rect_has_area(const fx_rect *rect)
     return rect && rect->w > 0.0f && rect->h > 0.0f;
 }
 
+static VkFormat pixel_format_to_vk(fx_pixel_format fmt)
+{
+    switch (fmt) {
+    case FX_FMT_BGRA8_UNORM: return VK_FORMAT_B8G8R8A8_UNORM;
+    case FX_FMT_RGBA8_UNORM: return VK_FORMAT_R8G8B8A8_UNORM;
+    case FX_FMT_A8_UNORM:    return VK_FORMAT_R8_UNORM;
+    default:                 return VK_FORMAT_B8G8R8A8_UNORM;
+    }
+}
+
 static void bind_solid_pipeline(fx_surface *s, VkCommandBuffer cmd)
 {
     VkViewport viewport = {
@@ -66,7 +76,7 @@ static void push_solid_color(fx_surface *s, VkCommandBuffer cmd, fx_color color)
     VkClearColorValue linear = to_clear_color(color, s->surface_format.format);
     fx_solid_color_pc pc = {
         .surface_size = { (float)s->extent.width, (float)s->extent.height },
-        .pad = { 0.0f, 0.0f },
+        .mode = 0, .pad = 0.0f,
         .color = {
             linear.float32[0],
             linear.float32[1],
@@ -158,25 +168,20 @@ static bool draw_polygon_fill(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
     fx_point *tris = NULL;
     size_t tri_points = 0;
     fx_solid_vertex *verts = NULL;
-    bool ok = false;
 
     if (!points || count < 3) return false;
 
-    if (!fx_tessellate_simple_polygon(points, count, &tris, &tri_points))
+    if (!fx_tessellate_simple_polygon(points, count, &fr->arena, &tris, &tri_points))
         return false;
 
-    verts = malloc(tri_points * sizeof(*verts));
-    if (!verts) goto done;
+    /* vertices can be allocated in the arena too */
+    verts = fx_arena_alloc(&fr->arena, tri_points * sizeof(*verts));
+    if (!verts) return false;
 
     for (size_t i = 0; i < tri_points; ++i)
         verts[i] = (fx_solid_vertex){ .pos = { tris[i].x, tris[i].y } };
 
-    ok = add_to_batch(s, fr, cmd, batch, color, verts, tri_points);
-
-done:
-    free(verts);
-    free(tris);
-    return ok;
+    return add_to_batch(s, fr, cmd, batch, color, verts, tri_points);
 }
 
 static bool draw_rect_stroke(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
@@ -307,7 +312,9 @@ static bool draw_glyph_run(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
 
     size_t count = fx_glyph_run_count(op->run);
     const fx_glyph *glyphs = fx_glyph_run_data(op->run);
-    fx_image_vertex *verts = malloc(count * 6 * sizeof(fx_image_vertex));
+    
+    /* vertices can be allocated in the arena */
+    fx_image_vertex *verts = fx_arena_alloc(&fr->arena, count * 6 * sizeof(fx_image_vertex));
     if (!verts) return false;
 
     size_t active_count = 0;
@@ -330,17 +337,13 @@ static bool draw_glyph_run(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
         active_count++;
     }
 
-    if (active_count == 0) {
-        free(verts);
-        return true;
-    }
+    if (active_count == 0) return true;
 
     VkBuffer vbuf;
     VkDeviceSize offset;
     void *map = fx_vbuf_pool_alloc(&fr->vbuf, active_count * 6 * sizeof(fx_image_vertex), &vbuf, &offset);
-    if (!map) { free(verts); return false; }
+    if (!map) return false;
     memcpy(map, verts, active_count * 6 * sizeof(fx_image_vertex));
-    free(verts);
 
     /* Descriptor Set for Atlas */
     VkDescriptorSetAllocateInfo ai = {
@@ -416,13 +419,12 @@ static size_t record_bootstrap_ops(fx_surface *s, fx_frame *fr, VkCommandBuffer 
                 executed++;
                 continue;
             }
-            if (fx_path_flatten_line_loop(op->u.fill_path.path, 0.25f,
+            if (fx_path_flatten_line_loop(op->u.fill_path.path, 0.25f, &fr->arena,
                                           &flattened, &point_count) &&
                 draw_polygon_fill(s, fr, cmd, &batch, flattened, point_count,
                                   op->u.fill_path.paint.color)) {
                 executed++;
             }
-            free(flattened);
         } else if (op->kind == FX_OP_STROKE_PATH) {
             if (op->u.stroke_path.paint.line_join == FX_JOIN_MITER &&
                 fx_path_is_axis_aligned_rect(op->u.stroke_path.path, &rect)) {
@@ -432,11 +434,11 @@ static size_t record_bootstrap_ops(fx_surface *s, fx_frame *fr, VkCommandBuffer 
                     executed++;
                 continue;
             }
-            if (!fx_path_flatten_polyline(op->u.stroke_path.path, 0.25f,
+            if (!fx_path_flatten_polyline(op->u.stroke_path.path, 0.25f, &fr->arena,
                                           &flattened, &point_count, &closed))
                 continue;
             if (fx_stroke_polyline(flattened, point_count, closed,
-                                   &op->u.stroke_path.paint,
+                                   &op->u.stroke_path.paint, &fr->arena,
                                    &stroke_tris, &stroke_count)) {
                 fx_solid_vertex *verts = (fx_solid_vertex *)stroke_tris;
                 if (add_to_batch(s, fr, cmd, &batch, op->u.stroke_path.paint.color,
@@ -444,8 +446,6 @@ static size_t record_bootstrap_ops(fx_surface *s, fx_frame *fr, VkCommandBuffer 
                     executed++;
                 }
             }
-            free(stroke_tris);
-            free(flattened);
         } else if (op->kind == FX_OP_DRAW_IMAGE) {
             if (draw_image_quad(s, fr, cmd, &batch, op->u.draw_image.image,
                                 &op->u.draw_image.src, &op->u.draw_image.dst))
@@ -458,6 +458,45 @@ static size_t record_bootstrap_ops(fx_surface *s, fx_frame *fr, VkCommandBuffer 
 
     flush_batch(s, cmd, &batch);
     return executed;
+}
+
+fx_surface *fx_surface_create_vulkan(fx_context *ctx,
+                                     VkSurfaceKHR vk_surface,
+                                     int32_t width, int32_t height,
+                                     fx_color_space cs)
+{
+    if (!ctx || vk_surface == VK_NULL_HANDLE) return NULL;
+
+    fx_surface *s = calloc(1, sizeof(*s));
+    if (!s) return NULL;
+    s->ctx          = ctx;
+    s->vk_surface   = vk_surface;
+    s->requested_w  = width;
+    s->requested_h  = height;
+    s->color_space  = cs;
+    s->canvas.owner = s;
+
+    if (!ctx->device) {
+        if (!fx_device_init(ctx, s->vk_surface)) {
+            free(s);
+            return NULL;
+        }
+    } else {
+        VkBool32 supported = VK_FALSE;
+        vkGetPhysicalDeviceSurfaceSupportKHR(ctx->phys, ctx->graphics_family,
+                                             s->vk_surface, &supported);
+        if (!supported) {
+            FX_LOGE(ctx, "device cannot present to this surface");
+            free(s);
+            return NULL;
+        }
+    }
+
+    if (!fx_swapchain_build(s)) {
+        free(s);
+        return NULL;
+    }
+    return s;
 }
 
 fx_surface *fx_surface_create_wayland(fx_context *ctx,
@@ -521,6 +560,246 @@ fx_surface *fx_surface_create_wayland(fx_context *ctx,
     return s;
 }
 
+static uint32_t find_memory_type(fx_context *ctx, uint32_t type_filter,
+                                  VkMemoryPropertyFlags props)
+{
+    VkPhysicalDeviceMemoryProperties mem = ctx->mem_props;
+    for (uint32_t i = 0; i < mem.memoryTypeCount; ++i) {
+        if ((type_filter & (1u << i)) &&
+            (mem.memoryTypes[i].propertyFlags & props) == props) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+fx_surface *fx_surface_create_offscreen(fx_context *ctx, int32_t width,
+                                        int32_t height, fx_pixel_format format,
+                                        fx_color_space cs)
+{
+    if (!ctx || width <= 0 || height <= 0) return NULL;
+
+    fx_surface *s = calloc(1, sizeof(*s));
+    if (!s) return NULL;
+    s->ctx          = ctx;
+    s->requested_w  = width;
+    s->requested_h  = height;
+    s->extent.width  = (uint32_t)width;
+    s->extent.height = (uint32_t)height;
+    s->color_space  = cs;
+    s->canvas.owner = s;
+    s->is_offscreen = true;
+
+    VkFormat vkfmt = pixel_format_to_vk(format);
+    s->surface_format.format     = vkfmt;
+    s->surface_format.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+
+    /* Ensure device is initialized. Offscreen does not need a VkSurfaceKHR. */
+    if (!ctx->device) {
+        if (!fx_device_init(ctx, VK_NULL_HANDLE)) {
+            FX_LOGE(ctx, "offscreen surface: device init failed");
+            free(s);
+            return NULL;
+        }
+    }
+
+    VkImageCreateInfo ici = {
+        .sType       = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType   = VK_IMAGE_TYPE_2D,
+        .format      = vkfmt,
+        .extent      = { (uint32_t)width, (uint32_t)height, 1 },
+        .mipLevels   = 1,
+        .arrayLayers = 1,
+        .samples     = VK_SAMPLE_COUNT_1_BIT,
+        .tiling      = VK_IMAGE_TILING_OPTIMAL,
+        .usage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+    VkResult r = vkCreateImage(ctx->device, &ici, NULL, &s->offscreen_image);
+    if (r != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreateImage (offscreen): %d", (int)r);
+        free(s);
+        return NULL;
+    }
+
+    VkMemoryRequirements memreq;
+    vkGetImageMemoryRequirements(ctx->device, s->offscreen_image, &memreq);
+    VkMemoryAllocateInfo mai = {
+        .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize  = memreq.size,
+        .memoryTypeIndex = find_memory_type(ctx, memreq.memoryTypeBits,
+                                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+    };
+    r = vkAllocateMemory(ctx->device, &mai, NULL, &s->offscreen_memory);
+    if (r != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkAllocateMemory (offscreen): %d", (int)r);
+        vkDestroyImage(ctx->device, s->offscreen_image, NULL);
+        free(s);
+        return NULL;
+    }
+    vkBindImageMemory(ctx->device, s->offscreen_image, s->offscreen_memory, 0);
+
+    VkImageViewCreateInfo vci = {
+        .sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image    = s->offscreen_image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format   = vkfmt,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .levelCount = 1,
+            .layerCount = 1,
+        },
+    };
+    r = vkCreateImageView(ctx->device, &vci, NULL, &s->offscreen_view);
+    if (r != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreateImageView (offscreen): %d", (int)r);
+        goto fail;
+    }
+
+    if (!fx_make_render_pass(s, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)) goto fail;
+    s->offscreen_render_pass = s->render_pass;
+    s->render_pass = VK_NULL_HANDLE; /* prevent swapchain_destroy from touching it twice */
+
+    if (!fx_make_image_dsl(s)) goto fail;
+    if (!fx_make_image_pipeline(s)) goto fail;
+    if (!fx_make_text_pipeline(s)) goto fail;
+    if (!fx_make_bootstrap_pipeline(s)) goto fail;
+
+    VkFramebufferCreateInfo fci = {
+        .sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass      = s->offscreen_render_pass,
+        .attachmentCount = 1,
+        .pAttachments    = &s->offscreen_view,
+        .width           = (uint32_t)width,
+        .height          = (uint32_t)height,
+        .layers          = 1,
+    };
+    r = vkCreateFramebuffer(ctx->device, &fci, NULL, &s->offscreen_framebuffer);
+    if (r != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreateFramebuffer (offscreen): %d", (int)r);
+        goto fail;
+    }
+
+    if (!fx_make_frames(s)) goto fail;
+
+    FX_LOGI(ctx, "offscreen surface %dx%d format=%d", width, height, (int)vkfmt);
+    return s;
+
+fail:
+    fx_surface_destroy(s);
+    return NULL;
+}
+
+bool fx_surface_read_pixels(fx_surface *s, void *data, size_t stride)
+{
+    if (!s || !s->is_offscreen || !data) return false;
+    if (stride == 0) stride = s->extent.width * 4;
+
+    fx_context *ctx = s->ctx;
+    VkDeviceSize image_size = s->extent.height * stride;
+
+    /* Create a staging buffer. */
+    VkBufferCreateInfo bci = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size  = image_size,
+        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+    VkBuffer staging = VK_NULL_HANDLE;
+    VkResult r = vkCreateBuffer(ctx->device, &bci, NULL, &staging);
+    if (r != VK_SUCCESS) return false;
+
+    VkMemoryRequirements memreq;
+    vkGetBufferMemoryRequirements(ctx->device, staging, &memreq);
+    VkMemoryAllocateInfo mai = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = memreq.size,
+        .memoryTypeIndex = find_memory_type(ctx, memreq.memoryTypeBits,
+                                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+    };
+    VkDeviceMemory staging_mem = VK_NULL_HANDLE;
+    r = vkAllocateMemory(ctx->device, &mai, NULL, &staging_mem);
+    if (r != VK_SUCCESS) {
+        vkDestroyBuffer(ctx->device, staging, NULL);
+        return false;
+    }
+    vkBindBufferMemory(ctx->device, staging, staging_mem, 0);
+
+    /* Copy image to buffer. */
+    VkCommandBufferAllocateInfo ai = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = ctx->frame_cmd_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    VkCommandBuffer cmd = VK_NULL_HANDLE;
+    vkAllocateCommandBuffers(ctx->device, &ai, &cmd);
+
+    VkCommandBufferBeginInfo bi = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    vkBeginCommandBuffer(cmd, &bi);
+
+    VkImageMemoryBarrier barrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = s->offscreen_image,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .levelCount = 1,
+            .layerCount = 1,
+        },
+    };
+    vkCmdPipelineBarrier(cmd,
+                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         0, 0, NULL, 0, NULL, 1, &barrier);
+
+    VkBufferImageCopy region = {
+        .imageSubresource = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .layerCount = 1,
+        },
+        .imageExtent = { s->extent.width, s->extent.height, 1 },
+    };
+    vkCmdCopyImageToBuffer(cmd, s->offscreen_image,
+                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           staging, 1, &region);
+
+    vkEndCommandBuffer(cmd);
+
+    VkSubmitInfo si = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cmd,
+    };
+    VkFence fence = VK_NULL_HANDLE;
+    VkFenceCreateInfo fci = { .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+    vkCreateFence(ctx->device, &fci, NULL, &fence);
+    vkQueueSubmit(ctx->graphics_queue, 1, &si, fence);
+    vkWaitForFences(ctx->device, 1, &fence, VK_TRUE, UINT64_MAX);
+
+    void *mapped = NULL;
+    vkMapMemory(ctx->device, staging_mem, 0, image_size, 0, &mapped);
+    memcpy(data, mapped, image_size);
+    vkUnmapMemory(ctx->device, staging_mem);
+
+    vkDestroyFence(ctx->device, fence, NULL);
+    vkFreeCommandBuffers(ctx->device, ctx->frame_cmd_pool, 1, &cmd);
+    vkFreeMemory(ctx->device, staging_mem, NULL);
+    vkDestroyBuffer(ctx->device, staging, NULL);
+    return true;
+}
+
 void fx_surface_resize(fx_surface *s, int32_t w, int32_t h)
 {
     if (!s) return;
@@ -539,12 +818,93 @@ static bool recreate_swapchain(fx_surface *s)
 
 static void destroy_surface(fx_surface *s)
 {
-    fx_swapchain_destroy(s);
-    fx_canvas_dispose(&s->canvas);
-    if (s->vk_surface) {
-        vkDestroySurfaceKHR(s->ctx->instance, s->vk_surface, NULL);
-        s->vk_surface = VK_NULL_HANDLE;
+    if (s->is_offscreen) {
+        VkDevice dev = s->ctx->device;
+        for (uint32_t i = 0; i < FX_MAX_FRAMES_IN_FLIGHT; ++i) {
+            if (s->frames[i].in_flight) {
+                vkDestroyFence(dev, s->frames[i].in_flight, NULL);
+                s->frames[i].in_flight = VK_NULL_HANDLE;
+            }
+            if (s->frames[i].image_available) {
+                vkDestroySemaphore(dev, s->frames[i].image_available, NULL);
+                s->frames[i].image_available = VK_NULL_HANDLE;
+            }
+            if (s->frames[i].render_finished) {
+                vkDestroySemaphore(dev, s->frames[i].render_finished, NULL);
+                s->frames[i].render_finished = VK_NULL_HANDLE;
+            }
+            if (s->frames[i].cmd) {
+                vkFreeCommandBuffers(dev, s->ctx->frame_cmd_pool, 1,
+                                     &s->frames[i].cmd);
+                s->frames[i].cmd = VK_NULL_HANDLE;
+            }
+            fx_vbuf_pool_destroy(&s->frames[i].vbuf);
+            fx_arena_destroy(&s->frames[i].arena);
+            if (s->frames[i].desc_pool) {
+                vkDestroyDescriptorPool(dev, s->frames[i].desc_pool, NULL);
+                s->frames[i].desc_pool = VK_NULL_HANDLE;
+            }
+        }
+        if (s->sampler) {
+            vkDestroySampler(dev, s->sampler, NULL);
+            s->sampler = VK_NULL_HANDLE;
+        }
+        if (s->offscreen_framebuffer) {
+            vkDestroyFramebuffer(dev, s->offscreen_framebuffer, NULL);
+            s->offscreen_framebuffer = VK_NULL_HANDLE;
+        }
+        if (s->solid_rect_pipeline) {
+            vkDestroyPipeline(dev, s->solid_rect_pipeline, NULL);
+            s->solid_rect_pipeline = VK_NULL_HANDLE;
+        }
+        if (s->solid_rect_layout) {
+            vkDestroyPipelineLayout(dev, s->solid_rect_layout, NULL);
+            s->solid_rect_layout = VK_NULL_HANDLE;
+        }
+        if (s->image_pipeline) {
+            vkDestroyPipeline(dev, s->image_pipeline, NULL);
+            s->image_pipeline = VK_NULL_HANDLE;
+        }
+        if (s->image_layout) {
+            vkDestroyPipelineLayout(dev, s->image_layout, NULL);
+            s->image_layout = VK_NULL_HANDLE;
+        }
+        if (s->text_pipeline) {
+            vkDestroyPipeline(dev, s->text_pipeline, NULL);
+            s->text_pipeline = VK_NULL_HANDLE;
+        }
+        if (s->text_layout) {
+            vkDestroyPipelineLayout(dev, s->text_layout, NULL);
+            s->text_layout = VK_NULL_HANDLE;
+        }
+        if (s->image_dsl) {
+            vkDestroyDescriptorSetLayout(dev, s->image_dsl, NULL);
+            s->image_dsl = VK_NULL_HANDLE;
+        }
+        if (s->offscreen_render_pass) {
+            vkDestroyRenderPass(dev, s->offscreen_render_pass, NULL);
+            s->offscreen_render_pass = VK_NULL_HANDLE;
+        }
+        if (s->offscreen_view) {
+            vkDestroyImageView(dev, s->offscreen_view, NULL);
+            s->offscreen_view = VK_NULL_HANDLE;
+        }
+        if (s->offscreen_image) {
+            vkDestroyImage(dev, s->offscreen_image, NULL);
+            s->offscreen_image = VK_NULL_HANDLE;
+        }
+        if (s->offscreen_memory) {
+            vkFreeMemory(dev, s->offscreen_memory, NULL);
+            s->offscreen_memory = VK_NULL_HANDLE;
+        }
+    } else {
+        fx_swapchain_destroy(s);
+        if (s->vk_surface) {
+            vkDestroySurfaceKHR(s->ctx->instance, s->vk_surface, NULL);
+            s->vk_surface = VK_NULL_HANDLE;
+        }
     }
+    fx_canvas_dispose(&s->canvas);
     free(s);
 }
 
@@ -560,31 +920,38 @@ fx_canvas *fx_surface_acquire(fx_surface *s)
 {
     if (!s) return NULL;
 
-    if (s->needs_recreate) {
-        if (!recreate_swapchain(s)) return NULL;
-        if (s->needs_recreate) return NULL;  /* still zero extent */
+    if (!s->is_offscreen) {
+        if (s->needs_recreate) {
+            if (!recreate_swapchain(s)) return NULL;
+            if (s->needs_recreate) return NULL;  /* still zero extent */
+        }
     }
 
     fx_frame *fr = &s->frames[s->frame_index];
     vkWaitForFences(s->ctx->device, 1, &fr->in_flight, VK_TRUE, UINT64_MAX);
 
-    VkResult ar = vkAcquireNextImageKHR(s->ctx->device, s->swapchain,
-                                        UINT64_MAX,
-                                        fr->image_available,
-                                        VK_NULL_HANDLE,
-                                        &s->acquired_image);
-    if (ar == VK_ERROR_OUT_OF_DATE_KHR) {
-        s->needs_recreate = true;
-        if (!recreate_swapchain(s)) return NULL;
-        return fx_surface_acquire(s);
-    }
-    if (ar != VK_SUCCESS && ar != VK_SUBOPTIMAL_KHR) {
-        FX_LOGE(s->ctx, "vkAcquireNextImageKHR: %d", (int)ar);
-        return NULL;
+    if (!s->is_offscreen) {
+        VkResult ar = vkAcquireNextImageKHR(s->ctx->device, s->swapchain,
+                                            UINT64_MAX,
+                                            fr->image_available,
+                                            VK_NULL_HANDLE,
+                                            &s->acquired_image);
+        if (ar == VK_ERROR_OUT_OF_DATE_KHR) {
+            s->needs_recreate = true;
+            if (!recreate_swapchain(s)) return NULL;
+            return fx_surface_acquire(s);
+        }
+        if (ar != VK_SUCCESS && ar != VK_SUBOPTIMAL_KHR) {
+            FX_LOGE(s->ctx, "vkAcquireNextImageKHR: %d", (int)ar);
+            return NULL;
+        }
+    } else {
+        s->acquired_image = 0;
     }
 
     vkResetFences(s->ctx->device, 1, &fr->in_flight);
     fx_vbuf_pool_reset(&fr->vbuf);
+    fx_arena_reset(&fr->arena);
     vkResetDescriptorPool(s->ctx->device, fr->desc_pool, 0);
 
     /* Reset display list for the new frame. */
@@ -611,52 +978,65 @@ void fx_surface_present(fx_surface *s)
 
     VkRenderPassBeginInfo rpbi = {
         .sType       = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass  = s->render_pass,
-        .framebuffer = s->images[s->acquired_image].framebuffer,
+        .renderPass  = s->is_offscreen ? s->offscreen_render_pass : s->render_pass,
+        .framebuffer = s->is_offscreen ? s->offscreen_framebuffer
+                                       : s->images[s->acquired_image].framebuffer,
         .renderArea  = { .offset = {0,0}, .extent = s->extent },
         .clearValueCount = 1,
         .pClearValues    = &cv,
     };
     vkCmdBeginRenderPass(fr->cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
     size_t executed_ops = record_bootstrap_ops(s, fr, fr->cmd);
-    if (s->canvas.op_count > executed_ops && !s->reported_unimplemented_ops) {
+    if (s->canvas.op_count > executed_ops) {
         FX_LOGI(s->ctx,
                 "executed %zu/%zu recorded canvas ops; remaining ops still "
                 "wait for the Vulkan raster backend",
                 executed_ops, s->canvas.op_count);
-        s->reported_unimplemented_ops = true;
     }
     vkCmdEndRenderPass(fr->cmd);
     vkEndCommandBuffer(fr->cmd);
 
-    VkPipelineStageFlags wait_stage =
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkSubmitInfo si = {
-        .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .waitSemaphoreCount   = 1,
-        .pWaitSemaphores      = &fr->image_available,
-        .pWaitDstStageMask    = &wait_stage,
-        .commandBufferCount   = 1,
-        .pCommandBuffers      = &fr->cmd,
-        .signalSemaphoreCount = 1,
-        .pSignalSemaphores    = &fr->render_finished,
-    };
-    FX_CHECK_VK(s->ctx, vkQueueSubmit(s->ctx->graphics_queue, 1, &si,
-                                      fr->in_flight));
+    if (s->is_offscreen) {
+        VkSubmitInfo si = {
+            .sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1,
+            .pCommandBuffers    = &fr->cmd,
+        };
+        FX_CHECK_VK(s->ctx, vkQueueSubmit(s->ctx->graphics_queue, 1, &si,
+                                          fr->in_flight));
+        /* For offscreen, we block here so the image is immediately readable.
+         * Callers can also call fx_surface_read_pixels which does its own wait. */
+        vkWaitForFences(s->ctx->device, 1, &fr->in_flight, VK_TRUE, UINT64_MAX);
+    } else {
+        VkPipelineStageFlags wait_stage =
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        VkSubmitInfo si = {
+            .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .waitSemaphoreCount   = 1,
+            .pWaitSemaphores      = &fr->image_available,
+            .pWaitDstStageMask    = &wait_stage,
+            .commandBufferCount   = 1,
+            .pCommandBuffers      = &fr->cmd,
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores    = &fr->render_finished,
+        };
+        FX_CHECK_VK(s->ctx, vkQueueSubmit(s->ctx->graphics_queue, 1, &si,
+                                          fr->in_flight));
 
-    VkPresentInfoKHR pi = {
-        .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores    = &fr->render_finished,
-        .swapchainCount     = 1,
-        .pSwapchains        = &s->swapchain,
-        .pImageIndices      = &s->acquired_image,
-    };
-    VkResult pr = vkQueuePresentKHR(s->ctx->graphics_queue, &pi);
-    if (pr == VK_ERROR_OUT_OF_DATE_KHR || pr == VK_SUBOPTIMAL_KHR) {
-        s->needs_recreate = true;
-    } else if (pr != VK_SUCCESS) {
-        FX_LOGE(s->ctx, "vkQueuePresentKHR: %d", (int)pr);
+        VkPresentInfoKHR pi = {
+            .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores    = &fr->render_finished,
+            .swapchainCount     = 1,
+            .pSwapchains        = &s->swapchain,
+            .pImageIndices      = &s->acquired_image,
+        };
+        VkResult pr = vkQueuePresentKHR(s->ctx->graphics_queue, &pi);
+        if (pr == VK_ERROR_OUT_OF_DATE_KHR || pr == VK_SUBOPTIMAL_KHR) {
+            s->needs_recreate = true;
+        } else if (pr != VK_SUCCESS) {
+            FX_LOGE(s->ctx, "vkQueuePresentKHR: %d", (int)pr);
+        }
     }
 
     s->frame_index = (s->frame_index + 1) % FX_MAX_FRAMES_IN_FLIGHT;

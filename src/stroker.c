@@ -5,30 +5,12 @@
 #define M_PI 3.14159265358979323846f
 #endif
 
-static bool ensure_tri_capacity(fx_point **tris, size_t *count, size_t *cap,
-                                size_t extra)
-{
-    size_t need = *count + extra;
-    if (need <= *cap) return true;
-
-    size_t new_cap = *cap ? *cap : 96;
-    while (new_cap < need) new_cap *= 2;
-
-    fx_point *grown = realloc(*tris, new_cap * sizeof(*grown));
-    if (!grown) return false;
-
-    *tris = grown;
-    *cap = new_cap;
-    return true;
-}
-
-static bool append_triangle(fx_point **tris, size_t *count, size_t *cap,
+static bool append_triangle(fx_point *tris, size_t *count,
                             fx_point a, fx_point b, fx_point c)
 {
-    if (!ensure_tri_capacity(tris, count, cap, 3)) return false;
-    (*tris)[(*count)++] = a;
-    (*tris)[(*count)++] = b;
-    (*tris)[(*count)++] = c;
+    tris[(*count)++] = a;
+    tris[(*count)++] = b;
+    tris[(*count)++] = c;
     return true;
 }
 
@@ -49,7 +31,7 @@ static bool get_normal(fx_point a, fx_point b, fx_point *out_n)
     return true;
 }
 
-static bool append_join(fx_point **tris, size_t *count, size_t *cap,
+static bool append_join(fx_point *tris, size_t *count,
                         fx_point p, fx_point n1, fx_point n2,
                         const fx_paint *paint)
 {
@@ -60,10 +42,7 @@ static bool append_join(fx_point **tris, size_t *count, size_t *cap,
     float half_w = paint->stroke_width * 0.5f;
 
     if (paint->line_join == FX_JOIN_MITER) {
-        /* Intersection of (p+out1*half_w + t*dir1) and (p+out2*half_w + u*dir2) */
         float dot = n1.x * n2.x + n1.y * n2.y;
-        
-        /* Bisector direction is normalize(n1 + n2) */
         fx_point bisect = normalize((fx_point){ n1.x + n2.x, n1.y + n2.y });
         float cos_half_theta = sqrtf((1.0f + dot) * 0.5f);
         if (cos_half_theta > 1e-4f) {
@@ -71,26 +50,25 @@ static bool append_join(fx_point **tris, size_t *count, size_t *cap,
             if (miter_dist <= paint->miter_limit * half_w) {
                 fx_point miter_pt = { p.x + bisect.x * miter_dist, p.y + bisect.y * miter_dist };
                 if (left) {
-                    /* On the left turn, the outside is the negative side of normals */
                     miter_pt.x = p.x - bisect.x * miter_dist;
                     miter_pt.y = p.y - bisect.y * miter_dist;
-                    return append_triangle(tris, count, cap, p, 
-                                           (fx_point){ p.x - n1.x * half_w, p.y - n1.y * half_w },
-                                           miter_pt) &&
-                           append_triangle(tris, count, cap, p,
-                                           miter_pt,
-                                           (fx_point){ p.x - n2.x * half_w, p.y - n2.y * half_w });
+                    append_triangle(tris, count, p, 
+                                    (fx_point){ p.x - n1.x * half_w, p.y - n1.y * half_w },
+                                    miter_pt);
+                    append_triangle(tris, count, p,
+                                    miter_pt,
+                                    (fx_point){ p.x - n2.x * half_w, p.y - n2.y * half_w });
                 } else {
-                    return append_triangle(tris, count, cap, p, 
-                                           (fx_point){ p.x + n1.x * half_w, p.y + n1.y * half_w },
-                                           miter_pt) &&
-                           append_triangle(tris, count, cap, p,
-                                           miter_pt,
-                                           (fx_point){ p.x + n2.x * half_w, p.y + n2.y * half_w });
+                    append_triangle(tris, count, p, 
+                                    (fx_point){ p.x + n1.x * half_w, p.y + n1.y * half_w },
+                                    miter_pt);
+                    append_triangle(tris, count, p,
+                                    miter_pt,
+                                    (fx_point){ p.x + n2.x * half_w, p.y + n2.y * half_w });
                 }
+                return true;
             }
         }
-        /* Fallback to bevel */
     }
 
     if (paint->line_join == FX_JOIN_ROUND) {
@@ -113,7 +91,7 @@ static bool append_join(fx_point **tris, size_t *count, size_t *cap,
         for (int i = 1; i <= steps; ++i) {
             float a = a1 + diff * (float)i / (float)steps;
             fx_point next = { p.x + cosf(a) * half_w, p.y + sinf(a) * half_w };
-            if (!append_triangle(tris, count, cap, p, prev, next)) return false;
+            append_triangle(tris, count, p, prev, next);
             prev = next;
         }
         return true;
@@ -121,40 +99,45 @@ static bool append_join(fx_point **tris, size_t *count, size_t *cap,
 
     /* Bevel join */
     if (left) {
-        return append_triangle(tris, count, cap, p,
-                               (fx_point){ p.x - n1.x * half_w, p.y - n1.y * half_w },
-                               (fx_point){ p.x - n2.x * half_w, p.y - n2.y * half_w });
+        append_triangle(tris, count, p,
+                        (fx_point){ p.x - n1.x * half_w, p.y - n1.y * half_w },
+                        (fx_point){ p.x - n2.x * half_w, p.y - n2.y * half_w });
     } else {
-        return append_triangle(tris, count, cap, p,
-                               (fx_point){ p.x + n1.x * half_w, p.y + n1.y * half_w },
-                               (fx_point){ p.x + n2.x * half_w, p.y + n2.y * half_w });
+        append_triangle(tris, count, p,
+                        (fx_point){ p.x + n1.x * half_w, p.y + n1.y * half_w },
+                        (fx_point){ p.x + n2.x * half_w, p.y + n2.y * half_w });
     }
+    return true;
 }
 
 bool fx_stroke_polyline(const fx_point *points, size_t count, bool closed,
-                        const fx_paint *paint, fx_point **out_tris, size_t *out_count)
+                        const fx_paint *paint, fx_arena *arena, fx_point **out_tris, size_t *out_count)
 {
     if (!points || !out_tris || !out_count || count < 2 || !paint || paint->stroke_width <= 0.0f)
         return false;
 
-    fx_point *tris = NULL;
-    size_t tri_count = 0;
-    size_t tri_cap = 0;
     float half_w = paint->stroke_width * 0.5f;
+    int steps = 8;
+    
+    /* Estimate max triangle count */
+    size_t max_tris = (count + 1) * 2; /* segments */
+    max_tris += count * steps; /* joins */
+    max_tris += 2 * steps; /* caps */
+    
+    fx_point *tris = fx_arena_alloc(arena, max_tris * 3 * sizeof(fx_point));
+    if (!tris) return false;
+    size_t tri_count = 0;
 
-    fx_point *normals = malloc(count * sizeof(fx_point));
+    fx_point *normals = fx_arena_alloc(arena, count * sizeof(fx_point));
     if (!normals) return false;
 
-    /* 1. Calculate segment normals */
     size_t seg_count = closed ? count : count - 1;
     for (size_t i = 0; i < seg_count; ++i) {
         if (!get_normal(points[i], points[(i + 1) % count], &normals[i])) {
-            /* degenerate segment, reuse previous or use zero */
             normals[i] = (i > 0) ? normals[i-1] : (fx_point){0, 0};
         }
     }
 
-    /* 2. Generate quads for segments */
     for (size_t i = 0; i < seg_count; ++i) {
         size_t j = (i + 1) % count;
         fx_point n = normals[i];
@@ -166,23 +149,17 @@ bool fx_stroke_polyline(const fx_point *points, size_t count, bool closed,
         fx_point v2l = { p2.x + n.x * half_w, p2.y + n.y * half_w };
         fx_point v2r = { p2.x - n.x * half_w, p2.y - n.y * half_w };
 
-        if (!append_triangle(&tris, &tri_count, &tri_cap, v1l, v1r, v2r) ||
-            !append_triangle(&tris, &tri_count, &tri_cap, v1l, v2r, v2l)) {
-            goto fail;
-        }
+        append_triangle(tris, &tri_count, v1l, v1r, v2r);
+        append_triangle(tris, &tri_count, v1l, v2r, v2l);
     }
 
-    /* 3. Generate joins */
     for (size_t i = 0; i < count; ++i) {
         if (!closed && (i == 0 || i == count - 1)) continue;
-
         size_t prev_i = (i + count - 1) % count;
         size_t next_i = i;
-        if (!append_join(&tris, &tri_count, &tri_cap, points[i], normals[prev_i], normals[next_i], paint))
-            goto fail;
+        append_join(tris, &tri_count, points[i], normals[prev_i], normals[next_i], paint);
     }
 
-    /* 4. Generate caps for open paths */
     if (!closed) {
         /* Start cap */
         fx_point p0 = points[0];
@@ -195,19 +172,16 @@ bool fx_stroke_polyline(const fx_point *points, size_t count, bool closed,
             fx_point v0r = { p0.x - n0.x * half_w, p0.y - n0.y * half_w };
             fx_point e0l = { v0l.x + ext.x, v0l.y + ext.y };
             fx_point e0r = { v0r.x + ext.x, v0r.y + ext.y };
-            if (!append_triangle(&tris, &tri_count, &tri_cap, v0l, v0r, e0r) ||
-                !append_triangle(&tris, &tri_count, &tri_cap, v0l, e0r, e0l)) goto fail;
+            append_triangle(tris, &tri_count, v0l, v0r, e0r);
+            append_triangle(tris, &tri_count, v0l, e0r, e0l);
         } else if (paint->line_cap == FX_CAP_ROUND) {
-            /* Round cap at start: semi-circle from n to -n in direction -d0 */
-            /* Using a simplified round cap logic */
-            int steps = 8;
             fx_point v_start = { n0.x * half_w, n0.y * half_w };
             float angle_start = atan2f(v_start.y, v_start.x);
             fx_point prev = { p0.x + v_start.x, p0.y + v_start.y };
             for (int k = 1; k <= steps; ++k) {
                 float a = angle_start + (float)k / (float)steps * M_PI;
                 fx_point next = { p0.x + cosf(a) * half_w, p0.y + sinf(a) * half_w };
-                if (!append_triangle(&tris, &tri_count, &tri_cap, p0, prev, next)) goto fail;
+                append_triangle(tris, &tri_count, p0, prev, next);
                 prev = next;
             }
         }
@@ -224,29 +198,22 @@ bool fx_stroke_polyline(const fx_point *points, size_t count, bool closed,
             fx_point vlr = { pl.x - nl.x * half_w, pl.y - nl.y * half_w };
             fx_point ell = { vll.x + ext.x, vll.y + ext.y };
             fx_point elr = { vlr.x + ext.x, vlr.y + ext.y };
-            if (!append_triangle(&tris, &tri_count, &tri_cap, vll, vlr, elr) ||
-                !append_triangle(&tris, &tri_count, &tri_cap, vll, elr, ell)) goto fail;
+            append_triangle(tris, &tri_count, vll, vlr, elr);
+            append_triangle(tris, &tri_count, vll, elr, ell);
         } else if (paint->line_cap == FX_CAP_ROUND) {
-            int steps = 8;
             fx_point v_start = { -nl.x * half_w, -nl.y * half_w };
             float angle_start = atan2f(v_start.y, v_start.x);
             fx_point prev = { pl.x + v_start.x, pl.y + v_start.y };
             for (int k = 1; k <= steps; ++k) {
                 float a = angle_start + (float)k / (float)steps * M_PI;
                 fx_point next = { pl.x + cosf(a) * half_w, pl.y + sinf(a) * half_w };
-                if (!append_triangle(&tris, &tri_count, &tri_cap, pl, prev, next)) goto fail;
+                append_triangle(tris, &tri_count, pl, prev, next);
                 prev = next;
             }
         }
     }
 
-    free(normals);
     *out_tris = tris;
     *out_count = tri_count;
     return true;
-
-fail:
-    free(normals);
-    free(tris);
-    return false;
 }

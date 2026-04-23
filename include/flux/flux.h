@@ -27,7 +27,9 @@ extern "C" {
 #  define FX_API __attribute__((visibility("default")))
 #endif
 
+#include <vulkan/vulkan.h>
 typedef struct fx_context  fx_context;
+
 typedef struct fx_surface  fx_surface;
 typedef struct fx_canvas   fx_canvas;
 typedef struct fx_image    fx_image;
@@ -117,7 +119,7 @@ typedef struct {
     uint32_t  api_version;
     uint32_t  max_image_dimension_2d;
     uint32_t  max_color_attachments;
-    uint32_t  max_compute_workgroup_invocations;
+
 } fx_device_caps;
 
 typedef struct {
@@ -145,11 +147,26 @@ typedef struct {
 
 FX_API fx_context *fx_context_create(const fx_context_desc *desc);
 FX_API void        fx_context_destroy(fx_context *ctx);
+FX_API VkInstance  fx_context_get_instance(fx_context *ctx);
 FX_API bool        fx_context_get_device_caps(const fx_context *ctx,
                                                 fx_device_caps  *out_caps);
 
 FX_API void fx_surface_destroy(fx_surface *s);
 FX_API void fx_surface_resize(fx_surface *s, int32_t w, int32_t h);
+FX_API fx_surface *fx_surface_create_vulkan(fx_context *ctx, VkSurfaceKHR vk_surface, int32_t width, int32_t height, fx_color_space cs);
+
+/*
+ * Create a headless offscreen surface for rendering to CPU-readable memory.
+ * No Wayland or Vulkan surface (VkSurfaceKHR) is created.
+ * After fx_surface_present, use fx_surface_read_pixels to read the result.
+ */
+FX_API fx_surface *fx_surface_create_offscreen(fx_context *ctx, int32_t width, int32_t height, fx_pixel_format format, fx_color_space cs);
+
+/* Read pixels from the most recently presented offscreen frame.
+ * `data` must point to at least height * stride bytes.
+ * `stride` is bytes per row. Returns false if the surface is not offscreen
+ * or if the read fails. */
+FX_API bool fx_surface_read_pixels(fx_surface *s, void *data, size_t stride);
 
 /*
  * Begin a frame. Returns a canvas valid until the matching
@@ -188,6 +205,7 @@ FX_API void fx_paint_init(fx_paint *paint, fx_color color);
  */
 FX_API fx_image *fx_image_create(fx_context *ctx, const fx_image_desc *desc);
 FX_API void      fx_image_destroy(fx_image *image);
+FX_API bool      fx_image_update(fx_image *image, const void *data, size_t stride);
 FX_API bool      fx_image_get_desc(const fx_image *image,
                                      fx_image_desc  *out_desc);
 FX_API const void *fx_image_data(const fx_image *image,
@@ -212,6 +230,11 @@ FX_API bool     fx_path_cubic_to(fx_path *path,
                                    float x,   float y);
 FX_API bool     fx_path_close(fx_path *path);
 FX_API bool     fx_path_add_rect(fx_path *path, const fx_rect *rect);
+FX_API bool     fx_path_arc_to(fx_path *path,
+                                float rx, float ry,
+                                float x_axis_rotation,
+                                bool large_arc, bool sweep,
+                                float x, float y);
 FX_API bool     fx_path_get_bounds(const fx_path *path, fx_rect *out_bounds);
 FX_API size_t   fx_path_verb_count(const fx_path *path);
 FX_API size_t   fx_path_point_count(const fx_path *path);
@@ -224,6 +247,11 @@ FX_API size_t   fx_path_point_count(const fx_path *path);
 FX_API fx_font *fx_font_create(fx_context *ctx, const fx_font_desc *desc);
 FX_API void     fx_font_destroy(fx_font *font);
 FX_API bool     fx_font_get_desc(const fx_font *font, fx_font_desc *out_desc);
+
+/* Expose the underlying HarfBuzz font for caller-side text shaping.
+ * The returned pointer is borrowed and valid for the lifetime of `font`. */
+struct hb_font_t;
+FX_API struct hb_font_t *fx_font_get_hb_font(fx_font *font);
 
 FX_API fx_glyph_run *fx_glyph_run_create(size_t reserve_glyphs);
 FX_API void          fx_glyph_run_destroy(fx_glyph_run *run);
@@ -239,16 +267,27 @@ FX_API const fx_glyph *fx_glyph_run_data(const fx_glyph_run *run);
  * Low-level recording entry points. These append work to the frame's
  * canvas; the raster backend consumes the recorded ops at present time.
  */
+static inline bool fx_rect_contains(const fx_rect *r, float x, float y) {
+    return r && x >= r->x && x <= r->x + r->w && y >= r->y && y <= r->y + r->h;
+}
+FX_API bool fx_fill_rect(fx_canvas *c, const fx_rect *rect, fx_color color);
+/* Fill a path.  The current tessellator handles concave simple polygons;
+ * self-intersecting paths and the even-odd fill rule are not yet supported. */
 FX_API bool fx_fill_path(fx_canvas *c, const fx_path *path, const fx_paint *paint);
 FX_API bool fx_stroke_path(fx_canvas *c, const fx_path *path, const fx_paint *paint);
 FX_API bool fx_draw_image(fx_canvas *c, const fx_image *image,
                             const fx_rect *src, const fx_rect *dst);
+FX_API bool fx_draw_image_ex(fx_canvas *c, const fx_image *image, const fx_rect *src, const fx_rect *dst);
 FX_API bool fx_draw_glyph_run(fx_canvas           *c,
                                 const fx_font       *font,
                                 const fx_glyph_run  *run,
                                 float                x,
                                 float                y,
                                 const fx_paint      *paint);
+
+FX_API void fx_matrix_multiply(fx_matrix *out, const fx_matrix *a, const fx_matrix *b);
+FX_API void fx_matrix_transform_point(const fx_matrix *m, float *x, float *y);
+FX_API fx_path *fx_path_transform(const fx_path *src, const fx_matrix *m);
 
 /* Color helper: builds 0xAARRGGBB with premultiplied alpha from
  * non-premultiplied rgba in [0,255]. */
