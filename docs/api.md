@@ -2,6 +2,9 @@
 
 This document describes the public API of flux.
 
+For application-level integration examples, including linking, system fonts,
+and SVG ingestion, see [usage/](usage/).
+
 ## Ownership
 
 flux follows a simple own/borrow split:
@@ -9,7 +12,7 @@ flux follows a simple own/borrow split:
 - Objects returned by `*_create` are owned by the caller and destroyed with the matching `*_destroy`.
 - `fx_canvas` is borrowed. It is valid only from `fx_surface_acquire(s)` until the matching `fx_surface_present(s)`.
 - Recorded canvas ops borrow the resource objects they point at (`fx_image`, `fx_path`, `fx_font`, `fx_glyph_run`). You must keep them alive until the frame is presented.
-- Internal copies: When recording paths or glyph runs under a non-identity transformation matrix, flux creates an internal transformed copy. The canvas manages the lifecycle of these internal copies automatically.
+- Internal copies: When recording paths under a non-identity transformation matrix, flux creates an internal transformed copy. The canvas manages the lifecycle of these internal copies automatically.
 
 ## Context
 
@@ -40,9 +43,12 @@ fx_context_get_device_caps(ctx, &caps);
 
 Fields include `validation_enabled`, `max_image_dimension_2d`, `max_color_attachments`, and `api_version`.
 
-The underlying `VkInstance` can be retrieved for integration with external Vulkan code:
+The core header does not expose Vulkan types. Include the Vulkan interop header
+when integrating with external Vulkan code:
 
 ```c
+#include <flux/flux_vulkan.h>
+
 VkInstance inst = fx_context_get_instance(ctx);
 ```
 
@@ -65,6 +71,8 @@ fx_surface *surface = fx_surface_create_wayland(ctx,
 For integration with an externally-created `VkSurfaceKHR`:
 
 ```c
+#include <flux/flux_vulkan.h>
+
 fx_surface *surface = fx_surface_create_vulkan(ctx, vk_surface,
                                                width, height, FX_CS_SRGB);
 ```

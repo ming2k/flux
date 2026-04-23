@@ -197,6 +197,9 @@ bool fx_draw_image_ex(fx_canvas *c, const fx_image *image,
                       const fx_rect *src, const fx_rect *dst)
 {
     fx_rect full_src = { 0 };
+    if (!c || !image || !dst) return false;
+    if (!fx_image_get_desc(image, NULL)) return false;
+
     fx_rect scaled_dst = scale_rect_by_dpr(dst, c->dpr);
     fx_op op = {
         .kind = FX_OP_DRAW_IMAGE,
@@ -206,9 +209,6 @@ bool fx_draw_image_ex(fx_canvas *c, const fx_image *image,
             .dst = scaled_dst,
         },
     };
-
-    if (!image || !dst) return false;
-    if (!fx_image_get_desc(image, NULL)) return false;
 
     if (!src) {
         fx_image_desc desc;
@@ -299,12 +299,18 @@ void fx_clip_rect(fx_canvas *c, const fx_rect *rect)
         fx_matrix_transform_point(&m, &x2, &y2);
         fx_matrix_transform_point(&m, &x3, &y3);
         float minx = x0, maxx = x0, miny = y0, maxy = y0;
-        if (x1 < minx) minx = x1; if (x1 > maxx) maxx = x1;
-        if (y1 < miny) miny = y1; if (y1 > maxy) maxy = y1;
-        if (x2 < minx) minx = x2; if (x2 > maxx) maxx = x2;
-        if (y2 < miny) miny = y2; if (y2 > maxy) maxy = y2;
-        if (x3 < minx) minx = x3; if (x3 > maxx) maxx = x3;
-        if (y3 < miny) miny = y3; if (y3 > maxy) maxy = y3;
+        if (x1 < minx) minx = x1;
+        if (x1 > maxx) maxx = x1;
+        if (y1 < miny) miny = y1;
+        if (y1 > maxy) maxy = y1;
+        if (x2 < minx) minx = x2;
+        if (x2 > maxx) maxx = x2;
+        if (y2 < miny) miny = y2;
+        if (y2 > maxy) maxy = y2;
+        if (x3 < minx) minx = x3;
+        if (x3 > maxx) maxx = x3;
+        if (y3 < miny) miny = y3;
+        if (y3 > maxy) maxy = y3;
         r.x = minx; r.y = miny;
         r.w = maxx - minx;
         r.h = maxy - miny;

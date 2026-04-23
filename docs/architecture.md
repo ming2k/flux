@@ -42,7 +42,7 @@ flux uses a strict separation between **Recording** and **Execution**.
 
 ### 1. Recording (CPU-Immediate)
 When drawing functions like `fx_fill_path` or `fx_draw_glyph_run` are called:
-- **Transformations:** The current affine matrix is applied immediately to path coordinates or glyph positions on the CPU.
+- **Transformations:** The current affine matrix is applied during recording on the CPU. Paths and path clips may be copied into transformed internal paths; glyph runs remain borrowed while their draw origin is recorded in device space.
 - **Op Logging:** A `fx_op` is appended to the canvas's internal display list. If a transformation occurred, the canvas takes ownership of a new, transformed path object.
 - **No GPU Work:** No Vulkan commands are issued during this phase.
 
@@ -61,6 +61,7 @@ When `fx_surface_present` is called:
 include/flux/           public headers
   flux.h                core types, matrix stack, paint, recorder
   flux_wayland.h        wayland surface constructor
+  flux_vulkan.h         explicit Vulkan interop entry points
 
 src/
   internal.h            shared internal declarations

@@ -69,3 +69,6 @@ The project is intended to be an engine layer for one environment, not
 an all-purpose UI platform. Once the abstraction climbs too high, it
 starts deciding layout, fallback, caching policy, or widget behavior for
 the caller. flux deliberately stops below that line.
+
+For the concrete API and module boundary contract, see
+[responsibility-boundaries.md](responsibility-boundaries.md).

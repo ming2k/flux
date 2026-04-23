@@ -1,4 +1,5 @@
 #include "flux/flux.h"
+#include "flux/flux_vulkan.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -39,6 +40,11 @@ int main(void)
     CHECK(fx_context_get_device_caps(ctx, &caps));
     CHECK(caps.api_version != 0);
     CHECK(caps.max_image_dimension_2d > 0);
+
+    fx_surface_set_dpr(s, 2.0f);
+    CHECK(fx_surface_get_dpr(s) == 2.0f);
+    fx_surface_set_dpr(s, 0.0f);
+    CHECK(fx_surface_get_dpr(s) == 2.0f);
 
     fx_surface_destroy(s);
 

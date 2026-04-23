@@ -1,4 +1,5 @@
 #include "flux/flux_wayland.h"
+#include "flux/flux_vulkan.h"
 #include "internal.h"
 
 #include <math.h>

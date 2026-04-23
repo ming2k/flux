@@ -13,6 +13,9 @@ Status: **Phase 2 (Text Rendering)** — Full 2D vector primitives, dynamic memo
 - **Vulkan Backend:** Automatic draw call batching and per-frame dynamic ring buffers.
 - **Images:** Automated GPU upload and hardware-accelerated textured quad rendering.
 
+For a practical capability model and application-level examples, see
+`docs/usage/`.
+
 ## Dependencies
 
 - Vulkan 1.2+
@@ -46,4 +49,4 @@ paths are exercised. Close the window or Ctrl-C to exit. Set
     src/               — implementation
     src/vk/            — Vulkan backend
     examples/          — runnable demos
-    docs/              — design, roadmap, API, product position
+    docs/              — design, API, roadmap, responsibility boundaries

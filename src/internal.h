@@ -365,11 +365,6 @@ struct fx_surface {
         size_t      state_cap;
         fx_matrix   current_matrix;
         float       dpr;   /* device pixel ratio */
-        float       shadow_dx;
-        float       shadow_dy;
-        float       shadow_blur;
-        fx_color    shadow_color;
-        bool        has_shadow;
     } canvas;
 };
 

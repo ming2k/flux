@@ -36,13 +36,15 @@ jobs:
         run: ninja -C build
 
       - name: Test
-        run: meson test -C build --verbose --suite unit --suite integration
+        run: meson test -C build --verbose --suite unit --suite integration --num-processes 1
         env:
           # Force software Vulkan rendering so tests work without GPU
           VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
 
       - name: Release readiness
         run: python3 scripts/check-release-readiness.py
+        env:
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
 
       - name: Upload test log on failure
         if: failure()

@@ -9,7 +9,7 @@
 | 1 | Primitives | **Shipped** |
 | 2 | Text | **Shipped** |
 | 3 | Effects | Planned |
-| 4 | Polish | Planned |
+| 4 | Polish | In progress |
 
 ---
 
@@ -65,11 +65,12 @@
 
 **Goal:** Fill the remaining gaps before 1.0.
 
-- **Advanced Shaders:** Linear and radial gradients.
-- **Clipping:** Stencil-buffer or coverage-based clipping for arbitrary paths.
-- **HiDPI:** Explicit support for device scale factors in the atlas and flattening logic.
-- **SDF Text:** Signed Distance Field rendering for large glyphs.
-- **Offscreen Rendering:** `fx_surface_create_offscreen` for headless testing.
+- **Shipped:** Linear and radial gradients, rectangular and path clipping,
+  `fx_surface_set_dpr` / `fx_surface_get_dpr`, and
+  `fx_surface_create_offscreen` for headless testing.
+- **Remaining before 1.0:** Golden-image tests, performance baselines,
+  validation/memory-safety soak, SDF text for large glyphs, and broader CI
+  coverage.
 
 ---
 

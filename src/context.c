@@ -1,3 +1,4 @@
+#include "flux/flux_vulkan.h"
 #include "internal.h"
 
 static void default_log(fx_log_level lvl, const char *msg, void *user)

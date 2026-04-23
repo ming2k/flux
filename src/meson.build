@@ -118,4 +118,5 @@ flux_dep = declare_dependency(
 )
 
 install_headers('../include/flux/flux.h',         subdir : 'flux')
+install_headers('../include/flux/flux_vulkan.h',  subdir : 'flux')
 install_headers('../include/flux/flux_wayland.h', subdir : 'flux')

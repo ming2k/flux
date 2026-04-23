@@ -3,8 +3,8 @@
  *
  * The public API intentionally stays close to the rendering substrate:
  * surfaces, images, paths, explicit glyph runs, and a frame-local
- * canvas recorder. Layout and shaping stay above flux; Vulkan objects
- * and queue management stay below it.
+ * canvas recorder. Layout, shaping, widgets, scene policy, and backend
+ * object ownership stay outside this core header.
  */
 #ifndef FLUX_H
 #define FLUX_H
@@ -27,7 +27,6 @@ extern "C" {
 #  define FX_API __attribute__((visibility("default")))
 #endif
 
-#include <vulkan/vulkan.h>
 typedef struct fx_context  fx_context;
 
 typedef struct fx_surface  fx_surface;
@@ -165,7 +164,6 @@ typedef struct {
 
 FX_API fx_context *fx_context_create(const fx_context_desc *desc);
 FX_API void        fx_context_destroy(fx_context *ctx);
-FX_API VkInstance  fx_context_get_instance(fx_context *ctx);
 FX_API bool        fx_context_get_device_caps(const fx_context *ctx,
                                                 fx_device_caps  *out_caps);
 
@@ -173,11 +171,10 @@ FX_API void fx_surface_destroy(fx_surface *s);
 FX_API void fx_surface_resize(fx_surface *s, int32_t w, int32_t h);
 FX_API void fx_surface_set_dpr(fx_surface *s, float dpr);
 FX_API float fx_surface_get_dpr(const fx_surface *s);
-FX_API fx_surface *fx_surface_create_vulkan(fx_context *ctx, VkSurfaceKHR vk_surface, int32_t width, int32_t height, fx_color_space cs);
 
 /*
  * Create a headless offscreen surface for rendering to CPU-readable memory.
- * No Wayland or Vulkan surface (VkSurfaceKHR) is created.
+ * No platform or backend presentation surface is created.
  * After fx_surface_present, use fx_surface_read_pixels to read the result.
  */
 FX_API fx_surface *fx_surface_create_offscreen(fx_context *ctx, int32_t width, int32_t height, fx_pixel_format format, fx_color_space cs);

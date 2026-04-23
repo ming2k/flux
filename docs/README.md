@@ -10,7 +10,9 @@ live in the top-level `README.md`.
 | You are… | Start with |
 |---|---|
 | Trying to understand what layer flux is supposed to occupy | [positioning.md](positioning.md) |
+| Checking whether a proposed API belongs in flux | [responsibility-boundaries.md](responsibility-boundaries.md) |
 | A first-time consumer of the library | [api.md](api.md) |
+| Integrating flux into an application | [usage/](usage/) |
 | Trying to build or run the project locally | [development.md](development.md) |
 | Writing a pull request | [contributing.md](contributing.md) + [conventions.md](conventions.md) |
 | Tracing how a `fx_draw_*` call becomes a `vkQueueSubmit` | [architecture.md](architecture.md) → [rendering.md](rendering.md) → [vulkan-backend.md](vulkan-backend.md) |
@@ -20,6 +22,8 @@ live in the top-level `README.md`.
 
 - [architecture.md](architecture.md) — component map and per-frame data flow
 - [positioning.md](positioning.md) — mission, layer boundary, and non-goals
+- [responsibility-boundaries.md](responsibility-boundaries.md) — ownership and API boundary rules
+- [usage/](usage/) — capability model, linking, and application-level examples split by topic
 - [rendering.md](rendering.md) — tessellation, coverage AA, batching, clips, atlases
 - [vulkan-backend.md](vulkan-backend.md) — instance, device, swapchain, memory, descriptors, pipelines
 - [api.md](api.md) — public API reference, object model, worked examples

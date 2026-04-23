@@ -562,23 +562,6 @@ bool fx_make_bootstrap_pipeline(fx_surface *s)
         .dynamicStateCount = 3,
         .pDynamicStates = dyn_states,
     };
-    VkGraphicsPipelineCreateInfo pci = {
-        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .stageCount = 2,
-        .pStages = stages,
-        .pVertexInputState = &vi,
-        .pInputAssemblyState = &ia,
-        .pViewportState = &vp,
-        .pRasterizationState = &rs,
-        .pMultisampleState = &ms,
-        .pDepthStencilState = &ds,
-        .pColorBlendState = &cb,
-        .pDynamicState = &dyn,
-        .layout = s->solid_rect_layout,
-        .renderPass = s->render_pass,
-        .subpass = 0,
-    };
-
     if (vkCreatePipelineLayout(s->ctx->device, &lci, NULL,
                                &s->solid_rect_layout) != VK_SUCCESS) {
         FX_LOGE(s->ctx, "vkCreatePipelineLayout failed");
@@ -602,6 +585,23 @@ bool fx_make_bootstrap_pipeline(fx_surface *s)
         .stage  = VK_SHADER_STAGE_FRAGMENT_BIT,
         .module = frag,
         .pName  = "main",
+    };
+
+    VkGraphicsPipelineCreateInfo pci = {
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = 2,
+        .pStages = stages,
+        .pVertexInputState = &vi,
+        .pInputAssemblyState = &ia,
+        .pViewportState = &vp,
+        .pRasterizationState = &rs,
+        .pMultisampleState = &ms,
+        .pDepthStencilState = &ds,
+        .pColorBlendState = &cb,
+        .pDynamicState = &dyn,
+        .layout = s->solid_rect_layout,
+        .renderPass = s->render_pass,
+        .subpass = 0,
     };
 
     if (vkCreateGraphicsPipelines(s->ctx->device, VK_NULL_HANDLE,

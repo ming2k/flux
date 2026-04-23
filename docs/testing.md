@@ -5,13 +5,14 @@
 | Suite | Location | Status |
 |---|---|---|
 | Foundation unit tests | `tests/test_foundation.c` | **Shipped** |
-| Unit tests | `tests/test_*.c` | Phase 1 |
-| Golden-image tests | `tests/test_render_golden.c` | Phase 1 |
-| Integration (headless) | CI via sway headless | Phase 1 |
+| Unit tests | `tests/test_*.c` | **Shipped** |
+| Integration (headless/offscreen) | `tests/test_offscreen.c`, `test_gradient.c`, `test_clip.c`, `test_missing_apis.c` | **Shipped** |
+| Golden-image tests | `tests/test_render_golden.c` | Planned |
 | Performance benchmark | `bench/bench_ui.c` | Phase 3 |
 
-Phase 0.5 ships one automated unit suite for the low-level foundation
-objects. Rendering smoke coverage still comes from `examples/hello_rect`.
+The current automated gate is the unit suite plus headless/offscreen Vulkan
+integration tests. Golden-image tests and performance benchmarks are still
+planned release-hardening work.
 
 ## Running tests
 
@@ -25,10 +26,17 @@ Individual suites:
 
 ```sh
 meson test -C build --suite unit
-meson test -C build --suite golden
+meson test -C build --suite integration
 ```
 
-All tests run with `VK_ENABLE_VALIDATION=1`. A validation error at
+For release checks, prefer serial execution so software Vulkan drivers do not
+share device state across test processes:
+
+```sh
+meson test -C build --suite unit --suite integration --num-processes 1
+```
+
+Tests can run with `FX_ENABLE_VALIDATION=1`. A validation error at
 `VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT` level causes the test
 to fail regardless of the rendered output.
 
@@ -146,20 +154,14 @@ be reviewed by eye.
 | `blend_modes` | side-by-side all 7 blend modes |
 | `blur_shadow` | drop shadow and blur |
 
-## Integration test (phase 1+)
+## Integration tests
 
-Each example must run for one frame under a headless Wayland
-compositor and exit 0. CI uses `wlroots-headless`:
+The shipped integration tests create offscreen surfaces and read pixels back
+without a display server. CI forces Mesa lavapipe with `VK_ICD_FILENAMES` so the
+tests can run on hosted runners without a physical GPU.
 
-```sh
-WLR_BACKENDS=headless WLR_RENDERER=vulkan \
-    sway &
-WAYLAND_DISPLAY=wayland-1 ./build/examples/hello_rect --frames 1
-```
-
-The `--frames N` flag (planned) causes the example to render N frames
-and exit cleanly. This verifies the build links, Vulkan can be
-initialised, and the frame loop runs without GPU errors.
+Wayland example smoke tests are still useful manual checks, but they are not
+part of the current automated release gate.
 
 ## Performance benchmark (phase 3+)
 
@@ -194,9 +196,9 @@ The benchmark is excluded from `meson test`; run it explicitly:
 
 ## Validation in tests
 
-All suites set `FX_ENABLE_VALIDATION=1`. The test harness installs a
-custom `fx_log_fn` that records every log message. After the test body
-runs, the harness asserts:
+Validation-layer runs should set `FX_ENABLE_VALIDATION=1`. Tests that install a
+custom `fx_log_fn` record every log message. After the test body runs, the
+harness asserts:
 
 ```c
 assert(error_count == 0);

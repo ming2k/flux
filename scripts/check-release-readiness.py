@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PUBLIC_HEADER_DIR = PROJECT_ROOT / "include" / "flux"
 
 
 def read_file(path: Path) -> str:
@@ -151,7 +152,12 @@ def run_meson_tests(build_dir: Path) -> Tuple[int, int, List[str]]:
 
     try:
         result = subprocess.run(
-            ["meson", "test", "-C", str(build_dir), "--print-errorlogs"],
+            [
+                "meson", "test",
+                "-C", str(build_dir),
+                "--print-errorlogs",
+                "--num-processes", "1",
+            ],
             capture_output=True,
             text=True,
             timeout=120,
@@ -215,9 +221,9 @@ def main() -> int:
     parser.add_argument("--build-dir", default="build", help="Meson build directory")
     args = parser.parse_args()
 
-    header = read_file(PROJECT_ROOT / "include" / "flux" / "flux.h")
-    header_wayland = read_file(PROJECT_ROOT / "include" / "flux" / "flux_wayland.h")
-    api = extract_public_api(header) + extract_public_api(header_wayland)
+    api: List[Tuple[str, str]] = []
+    for header_path in sorted(PUBLIC_HEADER_DIR.glob("*.h")):
+        api.extend(extract_public_api(read_file(header_path)))
 
     impls = find_implementations(PROJECT_ROOT / "src")
     tested = find_tests(PROJECT_ROOT / "tests")
