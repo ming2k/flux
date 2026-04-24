@@ -36,4 +36,10 @@ live in the top-level `README.md`.
 
 ## Status at a glance
 
-Phase 2 is shipping: A fully functional 2D vector graphics engine with dynamic memory management, batched Vulkan execution, high-fidelity affine transformations, professional line stroking, and dynamic GPU-atlased text rendering. See [roadmap.md](roadmap.md) for the phase-by-phase breakdown.
+v0.0.2 is the current cut: a 2D vector graphics engine with dynamic
+memory management, batched Vulkan execution, affine transforms,
+SVG-grade stroking, dynamic GPU-atlased text, gradients, clipping,
+and a unified upload path. See [roadmap.md](roadmap.md) for the
+phase-by-phase breakdown, [../CHANGELOG.md](../CHANGELOG.md) for the
+release history, and [release-readiness.md](release-readiness.md)
+for the gaps that remain before 1.0.

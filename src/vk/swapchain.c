@@ -1,4 +1,5 @@
 #include "internal.h"
+#include "vk/vk_mem_alloc.h"
 
 #include "solid_color_vert_spv.inc"
 #include "solid_color_frag_spv.inc"
@@ -124,6 +125,133 @@ bool fx_make_render_pass(fx_surface *s, VkImageLayout final_layout)
     return true;
 }
 
+static bool fx_make_template_render_pass(fx_context *ctx, fx_pipeline_set *ps)
+{
+    VkAttachmentDescription attachments[2] = { 0 };
+    attachments[0] = (VkAttachmentDescription){
+        .format         = ps->format,
+        .samples        = ps->samples,
+        .loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp        = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout    = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    };
+    attachments[1] = (VkAttachmentDescription){
+        .format         = VK_FORMAT_S8_UINT,
+        .samples        = ps->samples,
+        .loadOp         = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+    };
+    VkAttachmentReference color_ref = {
+        .attachment = 0,
+        .layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    };
+    VkAttachmentReference stencil_ref = {
+        .attachment = 1,
+        .layout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+    };
+    VkSubpassDescription subpass = {
+        .pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount    = 1,
+        .pColorAttachments       = &color_ref,
+        .pDepthStencilAttachment = &stencil_ref,
+    };
+    VkSubpassDependency deps[2] = {
+        {
+            .srcSubpass    = VK_SUBPASS_EXTERNAL,
+            .dstSubpass    = 0,
+            .srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                             VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+            .dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                             VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+            .srcAccessMask = 0,
+            .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        },
+    };
+    VkRenderPassCreateInfo ci = {
+        .sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 2,
+        .pAttachments    = attachments,
+        .subpassCount    = 1,
+        .pSubpasses      = &subpass,
+        .dependencyCount = 1,
+        .pDependencies   = deps,
+    };
+    VkResult r = vkCreateRenderPass(ctx->device, &ci, NULL, &ps->template_render_pass);
+    if (r != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreateRenderPass (template): %d", (int)r);
+        return false;
+    }
+    return true;
+}
+
+static void fx_pipeline_set_destroy_one(fx_context *ctx, fx_pipeline_set *ps)
+{
+    VkDevice dev = ctx->device;
+    if (ps->blur_pipeline)       { vkDestroyPipeline(dev, ps->blur_pipeline, NULL); ps->blur_pipeline = VK_NULL_HANDLE; }
+    if (ps->blur_layout)         { vkDestroyPipelineLayout(dev, ps->blur_layout, NULL); ps->blur_layout = VK_NULL_HANDLE; }
+    if (ps->stencil_pipeline)    { vkDestroyPipeline(dev, ps->stencil_pipeline, NULL); ps->stencil_pipeline = VK_NULL_HANDLE; }
+    if (ps->stencil_layout)      { vkDestroyPipelineLayout(dev, ps->stencil_layout, NULL); ps->stencil_layout = VK_NULL_HANDLE; }
+    if (ps->gradient_pipeline)   { vkDestroyPipeline(dev, ps->gradient_pipeline, NULL); ps->gradient_pipeline = VK_NULL_HANDLE; }
+    if (ps->gradient_layout)     { vkDestroyPipelineLayout(dev, ps->gradient_layout, NULL); ps->gradient_layout = VK_NULL_HANDLE; }
+    if (ps->text_pipeline)       { vkDestroyPipeline(dev, ps->text_pipeline, NULL); ps->text_pipeline = VK_NULL_HANDLE; }
+    if (ps->text_layout)         { vkDestroyPipelineLayout(dev, ps->text_layout, NULL); ps->text_layout = VK_NULL_HANDLE; }
+    if (ps->image_pipeline)      { vkDestroyPipeline(dev, ps->image_pipeline, NULL); ps->image_pipeline = VK_NULL_HANDLE; }
+    if (ps->image_layout)        { vkDestroyPipelineLayout(dev, ps->image_layout, NULL); ps->image_layout = VK_NULL_HANDLE; }
+    if (ps->solid_rect_pipeline) { vkDestroyPipeline(dev, ps->solid_rect_pipeline, NULL); ps->solid_rect_pipeline = VK_NULL_HANDLE; }
+    if (ps->solid_rect_layout)   { vkDestroyPipelineLayout(dev, ps->solid_rect_layout, NULL); ps->solid_rect_layout = VK_NULL_HANDLE; }
+    if (ps->image_dsl)           { vkDestroyDescriptorSetLayout(dev, ps->image_dsl, NULL); ps->image_dsl = VK_NULL_HANDLE; }
+    if (ps->template_render_pass){ vkDestroyRenderPass(dev, ps->template_render_pass, NULL); ps->template_render_pass = VK_NULL_HANDLE; }
+}
+
+fx_pipeline_set *fx_pipeline_set_get(fx_context *ctx,
+                                     VkFormat color_format,
+                                     VkSampleCountFlagBits samples)
+{
+    for (uint32_t i = 0; i < ctx->pipeline_set_count; ++i) {
+        fx_pipeline_set *ps = &ctx->pipeline_sets[i];
+        if (ps->format == color_format && ps->samples == samples)
+            return ps;
+    }
+    if (ctx->pipeline_set_count >= FX_MAX_PIPELINE_SETS) {
+        FX_LOGE(ctx, "pipeline set limit reached");
+        return NULL;
+    }
+    fx_pipeline_set *ps = &ctx->pipeline_sets[ctx->pipeline_set_count++];
+    memset(ps, 0, sizeof(*ps));
+    ps->format = color_format;
+    ps->samples = samples;
+
+    if (!fx_make_template_render_pass(ctx, ps)) goto fail;
+    if (!fx_make_image_dsl(ps, ctx)) goto fail;
+    if (!fx_make_solid_pipeline(ps, ctx)) goto fail;
+    if (!fx_make_image_pipeline(ps, ctx)) goto fail;
+    if (!fx_make_text_pipeline(ps, ctx)) goto fail;
+    if (!fx_make_gradient_pipeline(ps, ctx)) goto fail;
+    if (!fx_make_stencil_pipeline(ps, ctx)) goto fail;
+    if (!fx_make_blur_pipeline(ps, ctx)) goto fail;
+
+    return ps;
+fail:
+    fx_pipeline_set_destroy_one(ctx, ps);
+    ctx->pipeline_set_count--;
+    return NULL;
+}
+
+void fx_pipeline_set_destroy_all(fx_context *ctx)
+{
+    for (uint32_t i = 0; i < ctx->pipeline_set_count; ++i)
+        fx_pipeline_set_destroy_one(ctx, &ctx->pipeline_sets[i]);
+    ctx->pipeline_set_count = 0;
+}
+
 static VkShaderModule make_shader_module(fx_context *ctx,
                                          const uint32_t *code,
                                          size_t code_size)
@@ -141,7 +269,7 @@ static VkShaderModule make_shader_module(fx_context *ctx,
     return module;
 }
 
-bool fx_make_image_dsl(fx_surface *s)
+bool fx_make_image_dsl(fx_pipeline_set *ps, fx_context *ctx)
 {
     VkDescriptorSetLayoutBinding binding = {
         .binding = 0,
@@ -154,14 +282,14 @@ bool fx_make_image_dsl(fx_surface *s)
         .bindingCount = 1,
         .pBindings = &binding,
     };
-    if (vkCreateDescriptorSetLayout(s->ctx->device, &ci, NULL, &s->image_dsl) != VK_SUCCESS) {
-        FX_LOGE(s->ctx, "vkCreateDescriptorSetLayout failed");
+    if (vkCreateDescriptorSetLayout(ctx->device, &ci, NULL, &ps->image_dsl) != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreateDescriptorSetLayout failed");
         return false;
     }
     return true;
 }
 
-bool fx_make_image_pipeline(fx_surface *s)
+bool fx_make_image_pipeline(fx_pipeline_set *ps, fx_context *ctx)
 {
     VkShaderModule vert = VK_NULL_HANDLE;
     VkShaderModule frag = VK_NULL_HANDLE;
@@ -173,18 +301,18 @@ bool fx_make_image_pipeline(fx_surface *s)
     VkPipelineLayoutCreateInfo lci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = 1,
-        .pSetLayouts = &s->image_dsl,
+        .pSetLayouts = &ps->image_dsl,
         .pushConstantRangeCount = 1,
         .pPushConstantRanges = &push_range,
     };
-    if (vkCreatePipelineLayout(s->ctx->device, &lci, NULL, &s->image_layout) != VK_SUCCESS) {
-        FX_LOGE(s->ctx, "vkCreatePipelineLayout failed");
+    if (vkCreatePipelineLayout(ctx->device, &lci, NULL, &ps->image_layout) != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreatePipelineLayout failed");
         return false;
     }
 
     VkPipelineShaderStageCreateInfo stages[2] = { 0 };
-    vert = make_shader_module(s->ctx, fx_image_vert_spv, sizeof(fx_image_vert_spv));
-    frag = make_shader_module(s->ctx, fx_image_frag_spv, sizeof(fx_image_frag_spv));
+    vert = make_shader_module(ctx, fx_image_vert_spv, sizeof(fx_image_vert_spv));
+    frag = make_shader_module(ctx, fx_image_frag_spv, sizeof(fx_image_frag_spv));
     if (!vert || !frag) goto fail;
 
     stages[0] = (VkPipelineShaderStageCreateInfo){
@@ -246,26 +374,26 @@ bool fx_make_image_pipeline(fx_surface *s)
         .pDepthStencilState = &ds,
         .pColorBlendState = &cb,
         .pDynamicState = &dyn,
-        .layout = s->image_layout,
-        .renderPass = s->render_pass,
+        .layout = ps->image_layout,
+        .renderPass = ps->template_render_pass,
         .subpass = 0,
     };
 
-    if (vkCreateGraphicsPipelines(s->ctx->device, VK_NULL_HANDLE, 1, &pci, NULL, &s->image_pipeline) != VK_SUCCESS) {
-        FX_LOGE(s->ctx, "vkCreateGraphicsPipelines (image) failed");
+    if (vkCreateGraphicsPipelines(ctx->device, ctx->pipeline_cache, 1, &pci, NULL, &ps->image_pipeline) != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreateGraphicsPipelines (image) failed");
         goto fail;
     }
 
-    vkDestroyShaderModule(s->ctx->device, frag, NULL);
-    vkDestroyShaderModule(s->ctx->device, vert, NULL);
+    vkDestroyShaderModule(ctx->device, frag, NULL);
+    vkDestroyShaderModule(ctx->device, vert, NULL);
     return true;
 fail:
-    if (frag) vkDestroyShaderModule(s->ctx->device, frag, NULL);
-    if (vert) vkDestroyShaderModule(s->ctx->device, vert, NULL);
+    if (frag) vkDestroyShaderModule(ctx->device, frag, NULL);
+    if (vert) vkDestroyShaderModule(ctx->device, vert, NULL);
     return false;
 }
 
-bool fx_make_gradient_pipeline(fx_surface *s)
+bool fx_make_gradient_pipeline(fx_pipeline_set *ps, fx_context *ctx)
 {
     VkShaderModule vert = VK_NULL_HANDLE;
     VkShaderModule frag = VK_NULL_HANDLE;
@@ -279,14 +407,14 @@ bool fx_make_gradient_pipeline(fx_surface *s)
         .pushConstantRangeCount = 1,
         .pPushConstantRanges = &push_range,
     };
-    if (vkCreatePipelineLayout(s->ctx->device, &lci, NULL, &s->gradient_layout) != VK_SUCCESS) {
-        FX_LOGE(s->ctx, "vkCreatePipelineLayout (gradient) failed");
+    if (vkCreatePipelineLayout(ctx->device, &lci, NULL, &ps->gradient_layout) != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreatePipelineLayout (gradient) failed");
         return false;
     }
 
     VkPipelineShaderStageCreateInfo stages[2] = { 0 };
-    vert = make_shader_module(s->ctx, fx_gradient_vert_spv, sizeof(fx_gradient_vert_spv));
-    frag = make_shader_module(s->ctx, fx_gradient_frag_spv, sizeof(fx_gradient_frag_spv));
+    vert = make_shader_module(ctx, fx_gradient_vert_spv, sizeof(fx_gradient_vert_spv));
+    frag = make_shader_module(ctx, fx_gradient_frag_spv, sizeof(fx_gradient_frag_spv));
     if (!vert || !frag) goto fail;
 
     stages[0] = (VkPipelineShaderStageCreateInfo){
@@ -350,26 +478,26 @@ bool fx_make_gradient_pipeline(fx_surface *s)
         .pDepthStencilState = &ds,
         .pColorBlendState = &cb,
         .pDynamicState = &dyn,
-        .layout = s->gradient_layout,
-        .renderPass = s->render_pass,
+        .layout = ps->gradient_layout,
+        .renderPass = ps->template_render_pass,
         .subpass = 0,
     };
 
-    if (vkCreateGraphicsPipelines(s->ctx->device, VK_NULL_HANDLE, 1, &pci, NULL, &s->gradient_pipeline) != VK_SUCCESS) {
-        FX_LOGE(s->ctx, "vkCreateGraphicsPipelines (gradient) failed");
+    if (vkCreateGraphicsPipelines(ctx->device, ctx->pipeline_cache, 1, &pci, NULL, &ps->gradient_pipeline) != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreateGraphicsPipelines (gradient) failed");
         goto fail;
     }
 
-    vkDestroyShaderModule(s->ctx->device, frag, NULL);
-    vkDestroyShaderModule(s->ctx->device, vert, NULL);
+    vkDestroyShaderModule(ctx->device, frag, NULL);
+    vkDestroyShaderModule(ctx->device, vert, NULL);
     return true;
 fail:
-    if (frag) vkDestroyShaderModule(s->ctx->device, frag, NULL);
-    if (vert) vkDestroyShaderModule(s->ctx->device, vert, NULL);
+    if (frag) vkDestroyShaderModule(ctx->device, frag, NULL);
+    if (vert) vkDestroyShaderModule(ctx->device, vert, NULL);
     return false;
 }
 
-bool fx_make_text_pipeline(fx_surface *s)
+bool fx_make_text_pipeline(fx_pipeline_set *ps, fx_context *ctx)
 {
     VkShaderModule vert = VK_NULL_HANDLE;
     VkShaderModule frag = VK_NULL_HANDLE;
@@ -381,18 +509,18 @@ bool fx_make_text_pipeline(fx_surface *s)
     VkPipelineLayoutCreateInfo lci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = 1,
-        .pSetLayouts = &s->image_dsl,
+        .pSetLayouts = &ps->image_dsl,
         .pushConstantRangeCount = 1,
         .pPushConstantRanges = &push_range,
     };
-    if (vkCreatePipelineLayout(s->ctx->device, &lci, NULL, &s->text_layout) != VK_SUCCESS) {
-        FX_LOGE(s->ctx, "vkCreatePipelineLayout failed");
+    if (vkCreatePipelineLayout(ctx->device, &lci, NULL, &ps->text_layout) != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreatePipelineLayout failed");
         return false;
     }
 
     VkPipelineShaderStageCreateInfo stages[2] = { 0 };
-    vert = make_shader_module(s->ctx, fx_image_vert_spv, sizeof(fx_image_vert_spv)); /* Reuse image vert */
-    frag = make_shader_module(s->ctx, fx_text_frag_spv, sizeof(fx_text_frag_spv));
+    vert = make_shader_module(ctx, fx_image_vert_spv, sizeof(fx_image_vert_spv)); /* Reuse image vert */
+    frag = make_shader_module(ctx, fx_text_frag_spv, sizeof(fx_text_frag_spv));
     if (!vert || !frag) goto fail;
 
     stages[0] = (VkPipelineShaderStageCreateInfo){
@@ -454,26 +582,26 @@ bool fx_make_text_pipeline(fx_surface *s)
         .pDepthStencilState = &ds,
         .pColorBlendState = &cb,
         .pDynamicState = &dyn,
-        .layout = s->text_layout,
-        .renderPass = s->render_pass,
+        .layout = ps->text_layout,
+        .renderPass = ps->template_render_pass,
         .subpass = 0,
     };
 
-    if (vkCreateGraphicsPipelines(s->ctx->device, VK_NULL_HANDLE, 1, &pci, NULL, &s->text_pipeline) != VK_SUCCESS) {
-        FX_LOGE(s->ctx, "vkCreateGraphicsPipelines (text) failed");
+    if (vkCreateGraphicsPipelines(ctx->device, ctx->pipeline_cache, 1, &pci, NULL, &ps->text_pipeline) != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreateGraphicsPipelines (text) failed");
         goto fail;
     }
 
-    vkDestroyShaderModule(s->ctx->device, frag, NULL);
-    vkDestroyShaderModule(s->ctx->device, vert, NULL);
+    vkDestroyShaderModule(ctx->device, frag, NULL);
+    vkDestroyShaderModule(ctx->device, vert, NULL);
     return true;
 fail:
-    if (frag) vkDestroyShaderModule(s->ctx->device, frag, NULL);
-    if (vert) vkDestroyShaderModule(s->ctx->device, vert, NULL);
+    if (frag) vkDestroyShaderModule(ctx->device, frag, NULL);
+    if (vert) vkDestroyShaderModule(ctx->device, vert, NULL);
     return false;
 }
 
-bool fx_make_bootstrap_pipeline(fx_surface *s)
+bool fx_make_solid_pipeline(fx_pipeline_set *ps, fx_context *ctx)
 {
     VkShaderModule vert = VK_NULL_HANDLE;
     VkShaderModule frag = VK_NULL_HANDLE;
@@ -562,15 +690,15 @@ bool fx_make_bootstrap_pipeline(fx_surface *s)
         .dynamicStateCount = 3,
         .pDynamicStates = dyn_states,
     };
-    if (vkCreatePipelineLayout(s->ctx->device, &lci, NULL,
-                               &s->solid_rect_layout) != VK_SUCCESS) {
-        FX_LOGE(s->ctx, "vkCreatePipelineLayout failed");
+    if (vkCreatePipelineLayout(ctx->device, &lci, NULL,
+                               &ps->solid_rect_layout) != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreatePipelineLayout failed");
         return false;
     }
 
-    vert = make_shader_module(s->ctx, fx_solid_color_vert_spv,
+    vert = make_shader_module(ctx, fx_solid_color_vert_spv,
                               sizeof(fx_solid_color_vert_spv));
-    frag = make_shader_module(s->ctx, fx_solid_color_frag_spv,
+    frag = make_shader_module(ctx, fx_solid_color_frag_spv,
                               sizeof(fx_solid_color_frag_spv));
     if (!vert || !frag) goto fail;
 
@@ -599,33 +727,33 @@ bool fx_make_bootstrap_pipeline(fx_surface *s)
         .pDepthStencilState = &ds,
         .pColorBlendState = &cb,
         .pDynamicState = &dyn,
-        .layout = s->solid_rect_layout,
-        .renderPass = s->render_pass,
+        .layout = ps->solid_rect_layout,
+        .renderPass = ps->template_render_pass,
         .subpass = 0,
     };
 
-    if (vkCreateGraphicsPipelines(s->ctx->device, VK_NULL_HANDLE,
+    if (vkCreateGraphicsPipelines(ctx->device, ctx->pipeline_cache,
                                   1, &pci, NULL,
-                                  &s->solid_rect_pipeline) != VK_SUCCESS) {
-        FX_LOGE(s->ctx, "vkCreateGraphicsPipelines failed");
+                                  &ps->solid_rect_pipeline) != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreateGraphicsPipelines failed");
         goto fail;
     }
 
-    vkDestroyShaderModule(s->ctx->device, frag, NULL);
-    vkDestroyShaderModule(s->ctx->device, vert, NULL);
+    vkDestroyShaderModule(ctx->device, frag, NULL);
+    vkDestroyShaderModule(ctx->device, vert, NULL);
     return true;
 
 fail:
-    if (frag) vkDestroyShaderModule(s->ctx->device, frag, NULL);
-    if (vert) vkDestroyShaderModule(s->ctx->device, vert, NULL);
-    if (s->solid_rect_layout) {
-        vkDestroyPipelineLayout(s->ctx->device, s->solid_rect_layout, NULL);
-        s->solid_rect_layout = VK_NULL_HANDLE;
+    if (frag) vkDestroyShaderModule(ctx->device, frag, NULL);
+    if (vert) vkDestroyShaderModule(ctx->device, vert, NULL);
+    if (ps->solid_rect_layout) {
+        vkDestroyPipelineLayout(ctx->device, ps->solid_rect_layout, NULL);
+        ps->solid_rect_layout = VK_NULL_HANDLE;
     }
     return false;
 }
 
-bool fx_make_blur_pipeline(fx_surface *s)
+bool fx_make_blur_pipeline(fx_pipeline_set *ps, fx_context *ctx)
 {
     VkShaderModule vert = VK_NULL_HANDLE;
     VkShaderModule frag = VK_NULL_HANDLE;
@@ -637,18 +765,18 @@ bool fx_make_blur_pipeline(fx_surface *s)
     VkPipelineLayoutCreateInfo lci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = 1,
-        .pSetLayouts = &s->image_dsl,
+        .pSetLayouts = &ps->image_dsl,
         .pushConstantRangeCount = 1,
         .pPushConstantRanges = &push_range,
     };
-    if (vkCreatePipelineLayout(s->ctx->device, &lci, NULL, &s->blur_layout) != VK_SUCCESS) {
-        FX_LOGE(s->ctx, "vkCreatePipelineLayout (blur) failed");
+    if (vkCreatePipelineLayout(ctx->device, &lci, NULL, &ps->blur_layout) != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreatePipelineLayout (blur) failed");
         return false;
     }
 
     VkPipelineShaderStageCreateInfo stages[2] = { 0 };
-    vert = make_shader_module(s->ctx, fx_image_vert_spv, sizeof(fx_image_vert_spv));
-    frag = make_shader_module(s->ctx, fx_blur_frag_spv, sizeof(fx_blur_frag_spv));
+    vert = make_shader_module(ctx, fx_image_vert_spv, sizeof(fx_image_vert_spv));
+    frag = make_shader_module(ctx, fx_blur_frag_spv, sizeof(fx_blur_frag_spv));
     if (!vert || !frag) goto fail;
 
     stages[0] = (VkPipelineShaderStageCreateInfo){
@@ -710,26 +838,26 @@ bool fx_make_blur_pipeline(fx_surface *s)
         .pDepthStencilState = &ds,
         .pColorBlendState = &cb,
         .pDynamicState = &dyn,
-        .layout = s->blur_layout,
-        .renderPass = s->render_pass,
+        .layout = ps->blur_layout,
+        .renderPass = ps->template_render_pass,
         .subpass = 0,
     };
 
-    if (vkCreateGraphicsPipelines(s->ctx->device, VK_NULL_HANDLE, 1, &pci, NULL, &s->blur_pipeline) != VK_SUCCESS) {
-        FX_LOGE(s->ctx, "vkCreateGraphicsPipelines (blur) failed");
+    if (vkCreateGraphicsPipelines(ctx->device, ctx->pipeline_cache, 1, &pci, NULL, &ps->blur_pipeline) != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreateGraphicsPipelines (blur) failed");
         goto fail;
     }
 
-    vkDestroyShaderModule(s->ctx->device, frag, NULL);
-    vkDestroyShaderModule(s->ctx->device, vert, NULL);
+    vkDestroyShaderModule(ctx->device, frag, NULL);
+    vkDestroyShaderModule(ctx->device, vert, NULL);
     return true;
 fail:
-    if (frag) vkDestroyShaderModule(s->ctx->device, frag, NULL);
-    if (vert) vkDestroyShaderModule(s->ctx->device, vert, NULL);
+    if (frag) vkDestroyShaderModule(ctx->device, frag, NULL);
+    if (vert) vkDestroyShaderModule(ctx->device, vert, NULL);
     return false;
 }
 
-bool fx_make_stencil_pipeline(fx_surface *s)
+bool fx_make_stencil_pipeline(fx_pipeline_set *ps, fx_context *ctx)
 {
     VkShaderModule vert = VK_NULL_HANDLE;
     VkShaderModule frag = VK_NULL_HANDLE;
@@ -743,14 +871,14 @@ bool fx_make_stencil_pipeline(fx_surface *s)
         .pushConstantRangeCount = 1,
         .pPushConstantRanges = &push_range,
     };
-    if (vkCreatePipelineLayout(s->ctx->device, &lci, NULL, &s->stencil_layout) != VK_SUCCESS) {
-        FX_LOGE(s->ctx, "vkCreatePipelineLayout (stencil) failed");
+    if (vkCreatePipelineLayout(ctx->device, &lci, NULL, &ps->stencil_layout) != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreatePipelineLayout (stencil) failed");
         return false;
     }
 
     VkPipelineShaderStageCreateInfo stages[2] = { 0 };
-    vert = make_shader_module(s->ctx, fx_solid_color_vert_spv, sizeof(fx_solid_color_vert_spv));
-    frag = make_shader_module(s->ctx, fx_stencil_frag_spv, sizeof(fx_stencil_frag_spv));
+    vert = make_shader_module(ctx, fx_solid_color_vert_spv, sizeof(fx_solid_color_vert_spv));
+    frag = make_shader_module(ctx, fx_stencil_frag_spv, sizeof(fx_stencil_frag_spv));
     if (!vert || !frag) goto fail;
 
     stages[0] = (VkPipelineShaderStageCreateInfo){
@@ -865,26 +993,26 @@ bool fx_make_stencil_pipeline(fx_surface *s)
         .pDepthStencilState = &ds,
         .pColorBlendState = &cb,
         .pDynamicState = &dyn,
-        .layout = s->stencil_layout,
-        .renderPass = s->render_pass,
+        .layout = ps->stencil_layout,
+        .renderPass = ps->template_render_pass,
         .subpass = 0,
     };
 
-    if (vkCreateGraphicsPipelines(s->ctx->device, VK_NULL_HANDLE, 1, &pci, NULL, &s->stencil_pipeline) != VK_SUCCESS) {
-        FX_LOGE(s->ctx, "vkCreateGraphicsPipelines (stencil) failed");
+    if (vkCreateGraphicsPipelines(ctx->device, ctx->pipeline_cache, 1, &pci, NULL, &ps->stencil_pipeline) != VK_SUCCESS) {
+        FX_LOGE(ctx, "vkCreateGraphicsPipelines (stencil) failed");
         goto fail;
     }
 
-    vkDestroyShaderModule(s->ctx->device, frag, NULL);
-    vkDestroyShaderModule(s->ctx->device, vert, NULL);
+    vkDestroyShaderModule(ctx->device, frag, NULL);
+    vkDestroyShaderModule(ctx->device, vert, NULL);
     return true;
 
 fail:
-    if (frag) vkDestroyShaderModule(s->ctx->device, frag, NULL);
-    if (vert) vkDestroyShaderModule(s->ctx->device, vert, NULL);
-    if (s->stencil_layout) {
-        vkDestroyPipelineLayout(s->ctx->device, s->stencil_layout, NULL);
-        s->stencil_layout = VK_NULL_HANDLE;
+    if (frag) vkDestroyShaderModule(ctx->device, frag, NULL);
+    if (vert) vkDestroyShaderModule(ctx->device, vert, NULL);
+    if (ps->stencil_layout) {
+        vkDestroyPipelineLayout(ctx->device, ps->stencil_layout, NULL);
+        ps->stencil_layout = VK_NULL_HANDLE;
     }
     return false;
 }
@@ -963,17 +1091,6 @@ bool fx_make_frames(fx_surface *s)
         .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
     };
     if (vkCreateSampler(s->ctx->device, &sci_sampler, NULL, &s->sampler) != VK_SUCCESS) return false;
-
-    VkSamplerCreateInfo sci_text_sampler = {
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .magFilter = VK_FILTER_NEAREST,
-        .minFilter = VK_FILTER_NEAREST,
-        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-    };
-    if (vkCreateSampler(s->ctx->device, &sci_text_sampler, NULL, &s->text_sampler) != VK_SUCCESS) return false;
 
     for (uint32_t i = 0; i < FX_MAX_FRAMES_IN_FLIGHT; ++i) {
         if (vkAllocateCommandBuffers(s->ctx->device, &ai,
@@ -1085,27 +1202,15 @@ bool fx_swapchain_build(fx_surface *s)
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
-    r = vkCreateImage(dev, &sici, NULL, &s->stencil_image);
-    if (r != VK_SUCCESS) {
-        FX_LOGE(s->ctx, "vkCreateImage (stencil): %d", (int)r);
-        return false;
-    }
-    VkMemoryRequirements smreq;
-    vkGetImageMemoryRequirements(dev, s->stencil_image, &smreq);
-    VkMemoryAllocateInfo smai = {
-        .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize  = smreq.size,
-        .memoryTypeIndex = find_memory_type(s->ctx, smreq.memoryTypeBits,
-                                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+    VmaAllocationCreateInfo stencil_aci = {
+        .usage = VMA_MEMORY_USAGE_GPU_ONLY,
     };
-    r = vkAllocateMemory(dev, &smai, NULL, &s->stencil_memory);
+    r = vmaCreateImage(s->ctx->vma_allocator, &sici, &stencil_aci,
+                       &s->stencil_image, &s->stencil_alloc, NULL);
     if (r != VK_SUCCESS) {
-        FX_LOGE(s->ctx, "vkAllocateMemory (stencil): %d", (int)r);
-        vkDestroyImage(dev, s->stencil_image, NULL);
-        s->stencil_image = VK_NULL_HANDLE;
+        FX_LOGE(s->ctx, "vmaCreateImage (stencil): %d", (int)r);
         return false;
     }
-    vkBindImageMemory(dev, s->stencil_image, s->stencil_memory, 0);
 
     VkImageViewCreateInfo svci = {
         .sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -1124,14 +1229,12 @@ bool fx_swapchain_build(fx_surface *s)
         return false;
     }
 
-    if (!fx_make_render_pass(s, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)) return false;
-    if (!fx_make_image_dsl(s)) return false;
-    if (!fx_make_image_pipeline(s)) return false;
-    if (!fx_make_text_pipeline(s)) return false;
-    if (!fx_make_gradient_pipeline(s)) return false;
-    if (!fx_make_bootstrap_pipeline(s)) return false;
-    if (!fx_make_stencil_pipeline(s))   return false;
-    if (!fx_make_blur_pipeline(s))      return false;
+    /* Render pass is surface-lifetime; pipelines are context-shared. */
+    if (!s->render_pass) {
+        if (!fx_make_render_pass(s, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)) return false;
+        s->pc = fx_pipeline_set_get(s->ctx, s->surface_format.format, VK_SAMPLE_COUNT_1_BIT);
+        if (!s->pc) return false;
+    }
     if (!fx_make_images(s))      return false;
     if (!fx_make_frames(s))      return false;
 
@@ -1142,6 +1245,10 @@ bool fx_swapchain_build(fx_surface *s)
     return true;
 }
 
+/* Destroys only the swapchain-lifetime resources: swapchain, swapchain images
+ * and their framebuffers, the stencil attachment, and the per-frame sync +
+ * command/descriptor pools. Render pass, pipelines, samplers, and DSL are
+ * surface-lifetime and are torn down by fx_surface_destroy_pipelines. */
 void fx_swapchain_destroy(fx_surface *s)
 {
     VkDevice dev = s->ctx->device;
@@ -1171,14 +1278,6 @@ void fx_swapchain_destroy(fx_surface *s)
             s->frames[i].desc_pool = VK_NULL_HANDLE;
         }
     }
-    if (s->sampler) {
-        vkDestroySampler(dev, s->sampler, NULL);
-        s->sampler = VK_NULL_HANDLE;
-    }
-    if (s->text_sampler) {
-        vkDestroySampler(dev, s->text_sampler, NULL);
-        s->text_sampler = VK_NULL_HANDLE;
-    }
     for (uint32_t i = 0; i < s->image_count; ++i) {
         if (s->images[i].framebuffer) {
             vkDestroyFramebuffer(dev, s->images[i].framebuffer, NULL);
@@ -1192,61 +1291,34 @@ void fx_swapchain_destroy(fx_surface *s)
     }
     s->image_count = 0;
 
-    if (s->render_pass) {
-        vkDestroyRenderPass(dev, s->render_pass, NULL);
-        s->render_pass = VK_NULL_HANDLE;
-    }
     if (s->stencil_view) {
         vkDestroyImageView(dev, s->stencil_view, NULL);
         s->stencil_view = VK_NULL_HANDLE;
     }
     if (s->stencil_image) {
-        vkDestroyImage(dev, s->stencil_image, NULL);
+        vmaDestroyImage(s->ctx->vma_allocator, s->stencil_image, s->stencil_alloc);
         s->stencil_image = VK_NULL_HANDLE;
-    }
-    if (s->stencil_memory) {
-        vkFreeMemory(dev, s->stencil_memory, NULL);
-        s->stencil_memory = VK_NULL_HANDLE;
-    }
-    if (s->solid_rect_pipeline) {
-        vkDestroyPipeline(dev, s->solid_rect_pipeline, NULL);
-        s->solid_rect_pipeline = VK_NULL_HANDLE;
-    }
-    if (s->solid_rect_layout) {
-        vkDestroyPipelineLayout(dev, s->solid_rect_layout, NULL);
-        s->solid_rect_layout = VK_NULL_HANDLE;
-    }
-    if (s->image_pipeline) {
-        vkDestroyPipeline(dev, s->image_pipeline, NULL);
-        s->image_pipeline = VK_NULL_HANDLE;
-    }
-    if (s->image_layout) {
-        vkDestroyPipelineLayout(dev, s->image_layout, NULL);
-        s->image_layout = VK_NULL_HANDLE;
-    }
-    if (s->text_pipeline) {
-        vkDestroyPipeline(dev, s->text_pipeline, NULL);
-        s->text_pipeline = VK_NULL_HANDLE;
-    }
-    if (s->text_layout) {
-        vkDestroyPipelineLayout(dev, s->text_layout, NULL);
-        s->text_layout = VK_NULL_HANDLE;
-    }
-    if (s->gradient_pipeline) {
-        vkDestroyPipeline(dev, s->gradient_pipeline, NULL);
-        s->gradient_pipeline = VK_NULL_HANDLE;
-    }
-    if (s->gradient_layout) {
-        vkDestroyPipelineLayout(dev, s->gradient_layout, NULL);
-        s->gradient_layout = VK_NULL_HANDLE;
-    }
-    if (s->image_dsl) {
-        vkDestroyDescriptorSetLayout(dev, s->image_dsl, NULL);
-        s->image_dsl = VK_NULL_HANDLE;
+        s->stencil_alloc = VK_NULL_HANDLE;
     }
     if (s->swapchain) {
         vkDestroySwapchainKHR(dev, s->swapchain, NULL);
         s->swapchain = VK_NULL_HANDLE;
+    }
+}
+
+/* Tears down the surface-lifetime state (render pass, samplers).
+ * Pipelines are context-shared and destroyed with the context. */
+void fx_surface_destroy_pipelines(fx_surface *s)
+{
+    VkDevice dev = s->ctx->device;
+
+    if (s->sampler) {
+        vkDestroySampler(dev, s->sampler, NULL);
+        s->sampler = VK_NULL_HANDLE;
+    }
+    if (s->render_pass) {
+        vkDestroyRenderPass(dev, s->render_pass, NULL);
+        s->render_pass = VK_NULL_HANDLE;
     }
 }
 

@@ -194,21 +194,39 @@ Use this table to decide the release tag.
 | **RC** (`v0.X.0-rcN`) | All planned phases | All gates green | api.md 100 % | Validation clean | No regression | CI + install tested |
 | **Stable** (`v0.X.0`) | All planned phases | Golden suite green | 100 % + migration guide | One week soak | No regression | Multi-distro CI |
 
-**Current flux assessment (as of main):**
+**Current flux assessment (as of main, targeting v0.0.2):**
 
-- Phase 2 (Text) is shipped; parts of Phase 4 such as gradients, clipping,
-  HiDPI DPR state, and offscreen surfaces are already implemented.
-- Unit suite: 10 tests, all green in a clean build.
-- Integration suite: 4 tests, all green in a clean build with Vulkan/lavapipe.
+- Phase 2 (Text) is shipped. Phase 4 is partially shipped: gradients,
+  clipping (exact stencil + scissor-bound), HiDPI DPR state, offscreen
+  surfaces, descriptor set cache, `VkPipelineCache`, per-image fence
+  tracking, VMA integration, and the v0.0.2 backend refactor (unified
+  upload path, pipeline lifetime split, persistent readback staging,
+  atlas eviction-on-overflow, tightened error paths).
+- Unit suite: 10 tests, all green on a clean build.
+- Integration suite: 4 tests (`offscreen`, `gradient`, `clip`,
+  `missing_apis`), all green on a clean build with Vulkan. All four
+  run clean under `VK_LAYER_KHRONOS_validation` on a real device
+  (verified on Intel Iris Xe).
 - Golden suite: not yet implemented.
 - Documentation: `api.md` covers all public API symbols reported by the
-  release-readiness script.
-- CI exists and runs build, unit/integration tests, and release readiness.
+  release-readiness script. `vulkan-backend.md` and `architecture.md`
+  are aligned with the current source tree.
+- CI exists and runs build, unit/integration tests, and the release
+  readiness script.
 
-**Verdict:** flux is suitable for a **v0.0.1 development preview** after the
-readiness script, CI, and release notes are green on a clean tree. It is not
-ready for a `v1.0.0` stable tag because golden tests, performance baselines,
-memory/validation soak, and multi-distro CI are still missing.
+**Known production gaps (tracked, not shipping in v0.0.2):**
+
+| Area | Gap | Impact |
+|---|---|---|
+| Testing | No golden-image suite, no perf baselines | Regressions can land unnoticed |
+
+**Verdict:** flux at v0.0.2 is a **production-preview development
+release**. It is suitable for embedding into experimental or internal
+UI work where the maintainer is in the loop. It is not suitable for a
+`v1.0.0` stable tag: the known gaps above — in particular the
+golden-test suite and performance baselines — must close first, and
+the library needs a soak period under validation on more than one GPU
+driver.
 
 ---
 

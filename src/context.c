@@ -58,6 +58,12 @@ fx_context *fx_context_create(const fx_context_desc *desc)
         return NULL;
     }
 
+    VkPipelineCacheCreateInfo pcci = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+    };
+    /* Device may not exist yet; pipeline_cache is created on first surface. */
+    (void)pcci;
+
     /* Defer device creation until the first surface: surface support is
      * a queue-family selection input. */
     if (FT_Init_FreeType(&ctx->ft_lib) != 0) {

@@ -2,16 +2,23 @@
 
 Low-level 2D graphics foundation on Vulkan. C11, meson, Wayland.
 
-Status: **Phase 2 (Text Rendering)** — Full 2D vector primitives, dynamic memory management, batched Vulkan execution, and alpha-blended text rendering via dynamic GPU atlases.
+Status: **v0.0.2 production-preview** — Full 2D vector primitives,
+gradients, clipping, batched Vulkan execution, alpha-blended text via
+dynamic GPU atlases, and a unified upload path. Not yet a stable 1.0:
+see [docs/release-readiness.md](docs/release-readiness.md) for the
+tracked production gaps and [CHANGELOG.md](CHANGELOG.md) for what
+changed in this release.
 
 ## Features
 
 - **Vector Primitives:** Concave path filling and stroking with SVG-grade caps and joins. (flux renders paths; it does not parse SVG documents.)
-- **Transformation:** Full 3x3 affine matrix stack with CPU-side resolution-independent flattening.
+- **Transformation:** Full 3×3 affine matrix stack with CPU-side resolution-independent flattening.
 - **Text Rendering:** FreeType glyph rasterization and HarfBuzz-ready glyph runs.
-- **Dynamic Atlas:** 2048x2048 dynamic GPU glyph cache with shelf-packing.
-- **Vulkan Backend:** Automatic draw call batching and per-frame dynamic ring buffers.
-- **Images:** Automated GPU upload and hardware-accelerated textured quad rendering.
+- **Dynamic Atlas:** 2048×2048 single-channel alpha glyph cache with shelf-packing and eviction-on-overflow.
+- **Vulkan Backend:** Automatic draw call batching, per-frame dynamic ring buffers, and a unified GPU upload path (persistent staging, reusable command buffer and fence).
+- **Images and Gradients:** GPU-resident image uploads; linear and radial gradients with up to 4 stops.
+- **Clipping:** Rectangular clips via scissor; path clips via a scissor bound to the path's bounding box.
+- **Offscreen Rendering:** Headless render targets with persistent readback staging for tests and thumbnails.
 
 For a practical capability model and application-level examples, see
 `docs/usage/`.

@@ -65,12 +65,25 @@
 
 **Goal:** Fill the remaining gaps before 1.0.
 
-- **Shipped:** Linear and radial gradients, rectangular and path clipping,
-  `fx_surface_set_dpr` / `fx_surface_get_dpr`, and
-  `fx_surface_create_offscreen` for headless testing.
-- **Remaining before 1.0:** Golden-image tests, performance baselines,
-  validation/memory-safety soak, SDF text for large glyphs, and broader CI
-  coverage.
+- **Shipped in v0.0.1:** Linear and radial gradients, rectangular and
+  path clipping (scissor-bound), `fx_surface_set_dpr` /
+  `fx_surface_get_dpr`, and `fx_surface_create_offscreen` for headless
+  testing.
+- **Shipped in v0.0.2:** Unified GPU upload subsystem (persistent
+  staging + reusable cmd/fence), pipeline lifetime split so resizes do
+  not recompile every pipeline, persistent readback staging on
+  offscreen surfaces, glyph-atlas eviction-on-overflow, tightened
+  error paths in `fx_image_create`, and removal of the redundant
+  offscreen-present host wait. No public-API change.
+- **Shipped post-v0.0.2:** Descriptor set cache keyed by
+  `(image_view, sampler)`, `VkPipelineCache` shared across surfaces,
+  exact path clipping via stencil fill, per-image last-use fence
+  tracking, and VMA integration for all GPU memory allocations.
+- **Remaining before 1.0:**
+    - Golden-image tests.
+    - Performance baselines under load and under validation.
+    - SDF text for large glyphs.
+    - Broader CI coverage (multiple GPU drivers, multiple distros).
 
 ---
 

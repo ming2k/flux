@@ -199,16 +199,12 @@ static bool push_verb_and_points(fx_path *path, uint8_t verb,
         path->points[path->point_count++] = points[i];
         update_bounds(path, points[i].x, points[i].y);
     }
-    path->generation++;
     return true;
 }
 
 fx_path *fx_path_create(void)
 {
     fx_path *path = calloc(1, sizeof(fx_path));
-    if (path) {
-        path->generation = 1;
-    }
     return path;
 }
 
@@ -217,8 +213,6 @@ void fx_path_destroy(fx_path *path)
     if (!path) return;
     free(path->verbs);
     free(path->points);
-    free(path->fill_tris);
-    free(path->stroke_tris);
     free(path);
 }
 
@@ -229,7 +223,6 @@ void fx_path_reset(fx_path *path)
     path->point_count = 0;
     path->bounds = (fx_rect){ 0 };
     path->has_bounds = false;
-    path->generation++;
 }
 
 bool fx_path_move_to(fx_path *path, float x, float y)

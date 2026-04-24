@@ -5,36 +5,51 @@ This document describes the runtime shape of flux.
 ## Object model
 
 ```
-┌──────────────────────┐
-│ fx_context           │   one per process
-│  • VkInstance        │   owns device selection and logging
-│  • VkDevice          │   owns context-wide caches (pipelines, atlas)
-│  • FT_Library        │   FreeType handle
-│  • fx_atlas          │   dynamic GPU glyph atlas
-└──────────┬───────────┘
+┌───────────────────────┐
+│ fx_context            │  one per process
+│  • VkInstance         │  owns device selection and logging
+│  • VkDevice           │  owns context-wide caches and upload path
+│  • FT_Library         │  FreeType handle
+│  • fx_atlas           │  dynamic GPU glyph atlas
+│  • upload subsystem   │  staging buffer + cmd buffer + fence
+└──────────┬────────────┘
            │ borrows
   ┌────────┴──────────────────────────────────┐
   │                                           │
-┌─▼───────────────────┐          ┌────────────▼────────┐
-│ fx_surface          │          │ fx_image, fx_font…  │
-│  • VkSurfaceKHR     │          │ (resources, shared) │
-│  • VkSwapchainKHR   │          └─────────────────────┘
-│  • render pass      │
-│  • frames[2]        │
-│    – cmd buffer     │
-│    – vbuf_pool      │
-│    – desc_pool      │
-│    – sync objects   │
-│  • fx_canvas        │
-│    – matrix stack   │
-│    – recorded ops   │
-└─────────────────────┘
+┌─▼────────────────────┐         ┌────────────▼────────┐
+│ fx_surface           │         │ fx_image, fx_font…  │
+│  • VkSurfaceKHR      │         │ (resources, shared) │
+│  • VkSwapchainKHR    │         └─────────────────────┘
+│  • render pass       │   surface-lifetime
+│  • pipelines, DSL,   │   (survive resize)
+│    samplers          │
+│  • readback staging  │   offscreen only
+│  • frames[2]         │
+│    – cmd buffer      │
+│    – vbuf_pool       │
+│    – desc_pool       │
+│    – sync objects    │
+│  • fx_canvas         │
+│    – matrix stack    │
+│    – recorded ops    │
+└──────────────────────┘
 ```
 
-- **`fx_context`** owns the core Vulkan instance, logical device, and the **Dynamic Glyph Atlas**. It serves as the primary resource manager for font loading (via FreeType).
-- **`fx_surface`** manages a presentation window (Wayland), its swapchain, and two in-flight frame slots. Each frame slot is a self-contained unit of execution with its own command buffer, dynamic vertex buffer pool, and descriptor set pool.
-- **`fx_canvas`** is the primary recording interface. It maintains a 3x3 transformation matrix stack and an operation list.
-- **Resources** (`fx_image`, `fx_path`, `fx_font`, `fx_glyph_run`) are shared across surfaces. `fx_image` handles the transition of CPU pixel data to high-performance GPU memory.
+- **`fx_context`** owns the core Vulkan instance, logical device, the
+  **Dynamic Glyph Atlas**, and the **upload subsystem** (persistent
+  staging buffer + reusable command buffer + fence) that every GPU
+  upload flows through. It also holds the FreeType library handle.
+- **`fx_surface`** manages a presentation window (Wayland swapchain)
+  or an offscreen render target. Render pass, pipelines, descriptor
+  set layout, and samplers are surface-lifetime: they are built once
+  and reused across swapchain resizes. The swapchain, its images and
+  framebuffers, the stencil attachment, and the two in-flight frame
+  slots are torn down and rebuilt on every resize.
+- **`fx_canvas`** is the primary recording interface. It maintains a
+  3×3 transformation matrix stack and an operation list.
+- **Resources** (`fx_image`, `fx_path`, `fx_font`, `fx_glyph_run`) are
+  shared across surfaces. Image pixel uploads go through the
+  context's upload subsystem (`src/vk/upload.c`).
 
 ## Per-frame Data Flow
 
@@ -76,11 +91,15 @@ src/
   vk/
     device.c            instance + device + queue selection
     memory.c            dynamic ring buffer allocator (vbuf_pool)
+    upload.c            unified GPU upload (staging + cmd + fence)
     swapchain.c         swapchain, render pass, and pipeline creation
   shaders/
     solid.vert/frag     solid geometry shader
     image.vert/frag     textured quad shader
     text.frag           alpha-coverage text shader
+    gradient.*          linear and radial gradients
+    stencil.frag        stencil-only passes for path clips
+    blur.frag           separable Gaussian blur
 
 examples/               runnable demos (hello_rect)
 tests/                  unit tests (transforms, stroker, foundation)
@@ -90,5 +109,18 @@ tests/                  unit tests (transforms, stroker, foundation)
 
 flux uses a "creation-time return, runtime-internal" error model:
 - **Creation Failures:** (`fx_context_create`, etc.) return `NULL` and log the reason.
-- **Resource Limits:** Dynamic growth (vbuf, atlas) is handled internally. If a hard limit is reached (e.g., GPU out of memory), the operation is dropped and a warning is logged.
+- **Resource Limits:** Dynamic growth (vbuf, atlas, upload staging) is handled internally. The glyph atlas in particular evicts all cached entries and reuses its texture when a new glyph does not fit; the event is logged as a warning.
 - **Validation:** Integrated Vulkan validation layers route messages to the application's log handler.
+
+## Surface Lifecycle
+
+Surface-scoped state has two tiers with different lifetimes:
+
+| Tier | Built by | Torn down by | Survives resize? |
+|---|---|---|---|
+| Swapchain, swapchain images, framebuffers, stencil attachment, per-frame sync objects | `fx_swapchain_build` | `fx_swapchain_destroy` | No |
+| Render pass, descriptor set layout, pipeline layouts, pipelines, samplers, offscreen image and framebuffer | first `fx_swapchain_build` / `fx_surface_create_offscreen` | `fx_surface_destroy_pipelines` | Yes |
+
+Resizing a swapchain surface calls `fx_swapchain_destroy` followed
+by `fx_swapchain_build`; the second tier is preserved so a resize
+does not pay the pipeline creation cost.

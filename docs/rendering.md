@@ -24,7 +24,7 @@ Strokes are expanded CPU-side into fill polygons by the stroker (`src/stroker.c`
 flux uses a multi-stage pipeline for high-performance text:
 1. **Shaping:** HarfBuzz is used to convert UTF-8 strings into glyph IDs and positions (upstream logic).
 2. **Rasterization:** FreeType rasterizes glyphs into 8-bit alpha masks.
-3. **Dynamic Atlas:** A 2048x2048 `A8_UNORM` GPU texture stores frequently used glyphs. The atlas uses a shelf-packing algorithm.
+3. **Dynamic Atlas:** A 2048×2048 `A8_UNORM` GPU texture stores frequently used glyphs. The atlas uses a shelf-packing algorithm. When a new glyph does not fit, flux logs a warning, evicts every cached entry, drains in-flight frames, and reuses the texture. Glyphs larger than the atlas are rejected at insert time.
 4. **Execution:** Each glyph in a run is drawn as a textured quad. The fragment shader multiplies the paint color by the atlas alpha channel.
 
 ## Memory and Batching
@@ -55,4 +55,11 @@ Currently, flux relies on the coverage-based transparency provided by the FreeTy
 
 ## Status
 
-As of **Phase 2**, the solid-color, image, and text pipelines are fully operational. Path flattening, stroking, and simple polygon triangulation are performed on the CPU, with the resulting meshes batched and submitted to the GPU.
+As of **v0.0.2**, the solid-color, image, text, gradient, stencil,
+and blur pipelines are compiled. Solid, image, text, and gradient are
+wired into the recorder. Path flattening, stroking, and simple
+polygon triangulation are performed on the CPU, with the resulting
+meshes batched and submitted to the GPU. Clipping is currently
+scissor-bound; the stencil-based exact path clip is compiled but not
+yet dispatched (see the production gaps in
+[release-readiness.md](release-readiness.md)).
