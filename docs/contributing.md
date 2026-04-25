@@ -118,8 +118,8 @@ The reviewer checks:
 
 **Scope**
 - [ ] PR is limited to its stated purpose.
-- [ ] No phase-N+1 work sneaked into a phase-N PR.
-- [ ] No partial implementations without a `/* TODO phase N */` marker.
+- [ ] No unrelated work sneaked into a focused PR.
+- [ ] No partial implementations without a `/* TODO */` marker explaining why.
 
 ## Adding a new `fx_draw_*` call (checklist)
 

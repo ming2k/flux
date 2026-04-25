@@ -9,6 +9,48 @@ minor bumps; the commit that breaks ABI is called out explicitly below.
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-04-25
+
+### Added
+
+- **Stencil-based path fill.** `fx_fill_path` now uses a two-pass stencil
+  algorithm (increment + cover) for all multi-subpath and non-line-loop
+  paths. This correctly implements the even-odd fill rule, so donut
+  shapes with holes are rendered accurately.
+- **`FX_OP_FILL_RECT` native backend.** `fx_fill_rect` no longer allocates
+  a temporary `fx_path` on every call. It records a dedicated
+  `FX_OP_FILL_RECT` command and the backend routes it straight to the
+  existing solid-rect batch path. Transformed rects still fall back to
+  path fill, but the common axis-aligned case is now allocation-free.
+- **`make_pipeline_core` helper.** All 9 graphics-pipeline creation
+  functions in `src/vk/swapchain.c` delegate to a single helper that
+  builds the shared `VkGraphicsPipelineCreateInfo` boilerplate. Cuts
+  ~797 lines of mechanical duplication while preserving every
+  pipeline's exact Vulkan state.
+
+### Removed
+
+- **`fx_draw_image_ex`** — was a trivial wrapper with no additional
+  parameters. `fx_draw_image` now contains the full implementation.
+- **`FX_CHECK_VK`** — the old macro logged but never propagated failure.
+  Replaced by:
+  - `FX_TRY_VK(ctx, expr)` — logs and `return false` on error (for `bool`
+    functions).
+  - `FX_LOG_VK(ctx, expr)` — logs only (for `void` functions).
+
+### Changed
+
+- `pixel_format_to_vk` and `to_vk_format` deduplicated into a single
+  `fx_pixel_format_to_vk()` exported from `src/image.c`.
+- Phase-marker comments (`Phase 0`, `phase 1+`, etc.) removed from
+  source and documentation.
+
+### Fixed
+
+- `fx_device_init` now returns `false` on `vkCreateCommandPool`,
+  `vkCreatePipelineCache`, and `vmaCreateAllocator` failure instead of
+  continuing in a broken state.
+
 ## [0.0.2] — 2026-04-24
 
 ### Added
@@ -83,6 +125,7 @@ dynamic GPU glyph atlas with FreeType + HarfBuzz, HiDPI DPR state,
 offscreen surfaces with readback, Wayland swapchain integration, and
 a green unit + integration test suite.
 
-[Unreleased]: https://github.com/anthropics/flux/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/anthropics/flux/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/anthropics/flux/compare/v0.0.2...v0.1.0
 [0.0.2]: https://github.com/anthropics/flux/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/anthropics/flux/releases/tag/v0.0.1

@@ -227,7 +227,9 @@ Transform a path on the CPU:
 - `fx_path_transform(src, &matrix)` — returns a new `fx_path*`; the original is untouched.
 
 > **Fill limitations:** `fx_fill_path` tessellates simple polygons (concave is OK).
-> Self-intersecting paths and the even-odd fill rule are not yet supported.
+> Multi-subpath paths are filled using a stencil buffer with even-odd fill rule,
+> so holes (donut shapes) are correctly handled. Self-intersecting paths and
+> nonzero fill rule are not yet supported.
 >
 > **Path lifetime:** `fx_fill_path` and `fx_stroke_path` record a *reference* to the
 > path; they do **not** copy it. The path must remain valid until the frame is
@@ -281,7 +283,7 @@ fx_image *img = fx_image_create(ctx, &img_desc);
 fx_draw_image(c, img, NULL, &(fx_rect){ 0, 0, 64, 64 });
 ```
 
-`fx_draw_image_ex(c, img, src, dst)` provides the same functionality and is the underlying implementation for `fx_draw_image`.
+`fx_draw_image(c, img, src, dst)` draws a textured quad.
 
 Image management:
 - `fx_image_destroy(img)` — free GPU resources.

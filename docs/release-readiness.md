@@ -30,7 +30,7 @@ implemented and reachable.
 ### Check Items
 
 - [ ] All 50+ public functions have a non-stub implementation in `src/`.
-- [ ] No `/* TODO phase N */` markers in shipped code.
+- [ ] No `/* TODO */` or phase-marker comments in shipped code.
 - [ ] Roadmap phases intended for this release are complete.
 - [ ] No known crashes or hangs on valid API usage.
 
@@ -69,16 +69,16 @@ Tests that require a Vulkan device but no display server.
 | Test File | What It Covers | Gate |
 |-----------|----------------|------|
 | `test_offscreen.c` | Context → offscreen surface → clear → readback | Must pass |
-| `test_offscreen_draw.c` *(planned)* | Fill rect, image, glyph run rendered & read back | Target |
+| `test_offscreen_draw.c` | Fill rect, image, glyph run rendered & read back | Target |
 
 ### 2.3 Golden Suite (`suite: golden`)
 Pixel-perfect reference-image comparisons.
 
 | Test File | What It Covers | Gate |
 |-----------|----------------|------|
-| `test_golden_clear.c` *(planned)* | Solid clear colors | Target |
-| `test_golden_primitives.c` *(planned)* | Filled & stroked paths, images, text | Target |
-| `test_golden_effects.c` *(planned)* | Blur, shadow, gradients (Phase 3/4) | Future |
+| `test_golden_clear.c` | Solid clear colors | Target |
+| `test_golden_primitives.c` | Filled & stroked paths, images, text | Target |
+| `test_golden_effects.c` | Blur, shadow, gradients | Future |
 
 ### Check Items
 

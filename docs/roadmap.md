@@ -8,7 +8,7 @@
 | 0.5 | Foundation | **Shipped** |
 | 1 | Primitives | **Shipped** |
 | 2 | Text | **Shipped** |
-| 3 | Effects | Planned |
+| 3 | Effects | In progress |
 | 4 | Polish | In progress |
 
 ---
@@ -75,10 +75,12 @@
   offscreen surfaces, glyph-atlas eviction-on-overflow, tightened
   error paths in `fx_image_create`, and removal of the redundant
   offscreen-present host wait. No public-API change.
-- **Shipped post-v0.0.2:** Descriptor set cache keyed by
-  `(image_view, sampler)`, `VkPipelineCache` shared across surfaces,
-  exact path clipping via stencil fill, per-image last-use fence
-  tracking, and VMA integration for all GPU memory allocations.
+- **Shipped in v0.1.0:** Stencil-based multi-subpath fill with even-odd
+  rule (holes / donut shapes supported), native `FX_OP_FILL_RECT` backend
+  eliminating per-call path allocation, table-driven pipeline creation
+  (-797 lines in swapchain.c), deduplicated `fx_pixel_format_to_vk`,
+  `FX_TRY_VK` / `FX_LOG_VK` error-handling macros, removal of the
+  `fx_draw_image_ex` shim, and documentation phase-marker cleanup.
 - **Remaining before 1.0:**
     - Golden-image tests.
     - Performance baselines under load and under validation.

@@ -268,7 +268,7 @@ bool fx_device_init(fx_context *ctx, VkSurfaceKHR probe_surface)
         .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         .queueFamilyIndex = ctx->graphics_family,
     };
-    FX_CHECK_VK(ctx, vkCreateCommandPool(ctx->device, &pci, NULL,
+    FX_TRY_VK(ctx, vkCreateCommandPool(ctx->device, &pci, NULL,
                                          &ctx->frame_cmd_pool));
 
     VkPipelineCacheCreateInfo pcci = {
@@ -277,6 +277,7 @@ bool fx_device_init(fx_context *ctx, VkSurfaceKHR probe_surface)
     if (vkCreatePipelineCache(ctx->device, &pcci, NULL, &ctx->pipeline_cache)
         != VK_SUCCESS) {
         FX_LOGE(ctx, "vkCreatePipelineCache failed");
+        return false;
     }
 
     VmaAllocatorCreateInfo vaci = {
@@ -287,6 +288,7 @@ bool fx_device_init(fx_context *ctx, VkSurfaceKHR probe_surface)
     };
     if (vmaCreateAllocator(&vaci, &ctx->vma_allocator) != VK_SUCCESS) {
         FX_LOGE(ctx, "vmaCreateAllocator failed");
+        return false;
     }
 
     if (!fx_upload_init(ctx)) {

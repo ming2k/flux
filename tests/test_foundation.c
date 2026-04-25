@@ -198,6 +198,21 @@ static bool test_canvas_recording(void)
     paint.color = fx_color_rgba(100, 110, 120, 255);
     CHECK(fx_stroke_path(&surface.canvas, path, &paint));
 
+    /* Multi-subpath paths are accepted by fill and stroke */
+    fx_path *multi = fx_path_create();
+    CHECK(multi != NULL);
+    CHECK(fx_path_move_to(multi, 0.0f, 0.0f));
+    CHECK(fx_path_line_to(multi, 10.0f, 0.0f));
+    CHECK(fx_path_line_to(multi, 10.0f, 10.0f));
+    CHECK(fx_path_close(multi));
+    CHECK(fx_path_move_to(multi, 20.0f, 20.0f));
+    CHECK(fx_path_line_to(multi, 30.0f, 20.0f));
+    CHECK(fx_path_line_to(multi, 30.0f, 30.0f));
+    CHECK(fx_path_close(multi));
+    CHECK(fx_fill_path(&surface.canvas, multi, &paint));
+    CHECK(fx_stroke_path(&surface.canvas, multi, &paint));
+    fx_path_destroy(multi);
+
     CHECK(fx_draw_image(&surface.canvas, image, NULL,
                         &(fx_rect){ 20.0f, 30.0f, 40.0f, 50.0f }));
 
@@ -208,19 +223,23 @@ static bool test_canvas_recording(void)
         CHECK(fx_draw_glyph_run(&surface.canvas, font, run, 100.0f, 200.0f, &paint));
     }
 
-    CHECK(fx_canvas_op_count(&surface.canvas) == (font ? 4 : 3));
+    CHECK(fx_canvas_op_count(&surface.canvas) == (font ? 6 : 5));
     CHECK(surface.canvas.ops[0].kind == FX_OP_FILL_PATH);
     CHECK(surface.canvas.ops[0].u.fill_path.path == path);
     CHECK(surface.canvas.ops[1].kind == FX_OP_STROKE_PATH);
     CHECK(surface.canvas.ops[1].u.stroke_path.paint.stroke_width == 2.0f);
-    CHECK(surface.canvas.ops[2].kind == FX_OP_DRAW_IMAGE);
-    CHECK(surface.canvas.ops[2].u.draw_image.src.w == 2.0f);
-    CHECK(surface.canvas.ops[2].u.draw_image.src.h == 2.0f);
-    CHECK(surface.canvas.ops[2].u.draw_image.dst.x == 20.0f);
+    CHECK(surface.canvas.ops[2].kind == FX_OP_FILL_PATH);
+    CHECK(surface.canvas.ops[2].u.fill_path.path == multi);
+    CHECK(surface.canvas.ops[3].kind == FX_OP_STROKE_PATH);
+    CHECK(surface.canvas.ops[3].u.stroke_path.paint.stroke_width == 2.0f);
+    CHECK(surface.canvas.ops[4].kind == FX_OP_DRAW_IMAGE);
+    CHECK(surface.canvas.ops[4].u.draw_image.src.w == 2.0f);
+    CHECK(surface.canvas.ops[4].u.draw_image.src.h == 2.0f);
+    CHECK(surface.canvas.ops[4].u.draw_image.dst.x == 20.0f);
     if (font) {
-        CHECK(surface.canvas.ops[3].kind == FX_OP_DRAW_GLYPHS);
-        CHECK(surface.canvas.ops[3].u.draw_glyphs.run == run);
-        CHECK(surface.canvas.ops[3].u.draw_glyphs.x == 100.0f);
+        CHECK(surface.canvas.ops[5].kind == FX_OP_DRAW_GLYPHS);
+        CHECK(surface.canvas.ops[5].u.draw_glyphs.run == run);
+        CHECK(surface.canvas.ops[5].u.draw_glyphs.x == 100.0f);
     }
 
     surface.canvas.op_count = 0;

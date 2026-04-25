@@ -6,13 +6,13 @@
 |---|---|---|
 | Foundation unit tests | `tests/test_foundation.c` | **Shipped** |
 | Unit tests | `tests/test_*.c` | **Shipped** |
-| Integration (headless/offscreen) | `tests/test_offscreen.c`, `test_gradient.c`, `test_clip.c`, `test_missing_apis.c` | **Shipped** |
-| Golden-image tests | `tests/test_render_golden.c` | Planned |
-| Performance benchmark | `bench/bench_ui.c` | Phase 3 |
+| Integration (headless/offscreen) | `tests/test_offscreen.c`, `test_gradient.c`, `test_clip.c`, `test_multi_subpath.c`, `test_missing_apis.c` | **Shipped** |
+| Golden-image tests | `tests/test_render_golden.c` | Future |
+| Performance benchmark | `bench/bench_ui.c` | Future |
 
 The current automated gate is the unit suite plus headless/offscreen Vulkan
-integration tests. Golden-image tests and performance benchmarks are still
-planned release-hardening work.
+integration tests. Golden-image tests and performance benchmarks are
+future release-hardening work.
 
 ## Running tests
 
@@ -58,7 +58,7 @@ Assertions:
 This suite does not create a Wayland surface and does not require a
 working presentation path.
 
-## Unit tests (phase 1+)
+## Unit tests
 
 ### `test_stroker.c`
 
@@ -103,7 +103,7 @@ Tests that identical paths hashed into the glyph/shape cache return
 the same tessellation buffer without re-tessellating. Asserts cache hit
 rate ≥ 99% for a repeated-draw workload.
 
-## Golden-image tests (phase 1+)
+## Golden-image tests
 
 `tests/test_render_golden.c` renders a fixed set of scenes to an
 offscreen `fx_surface` created with `fx_surface_create_offscreen`,
@@ -136,7 +136,7 @@ Review the diffs with an image diff tool before committing. Never
 update a golden to hide a regression — golden diffs should always
 be reviewed by eye.
 
-### Current golden scenes (planned)
+### Current golden scenes
 
 | Scene | Covers |
 |---|---|
@@ -163,7 +163,7 @@ tests can run on hosted runners without a physical GPU.
 Wayland example smoke tests are still useful manual checks, but they are not
 part of the current automated release gate.
 
-## Performance benchmark (phase 3+)
+## Performance benchmark
 
 `bench/bench_ui.c` replays a synthetic UI scene:
 

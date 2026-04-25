@@ -42,16 +42,6 @@ static bool rect_has_area(const fx_rect *rect)
     return rect && rect->w > 0.0f && rect->h > 0.0f;
 }
 
-static VkFormat pixel_format_to_vk(fx_pixel_format fmt)
-{
-    switch (fmt) {
-    case FX_FMT_BGRA8_UNORM: return VK_FORMAT_B8G8R8A8_UNORM;
-    case FX_FMT_RGBA8_UNORM: return VK_FORMAT_R8G8B8A8_UNORM;
-    case FX_FMT_A8_UNORM:    return VK_FORMAT_R8_UNORM;
-    default:                 return VK_FORMAT_B8G8R8A8_UNORM;
-    }
-}
-
 static void bind_solid_pipeline(fx_surface *s, VkCommandBuffer cmd)
 {
     VkViewport viewport = {
@@ -481,6 +471,50 @@ static bool draw_glyph_run(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
     return true;
 }
 
+static void draw_clip_path_stencil(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd,
+                                   const fx_path *cpath)
+{
+    const fx_point *cp = NULL;
+    fx_point *cp_flat = NULL;
+    size_t cc = 0;
+    bool got_points = false;
+    if (fx_path_get_line_loop(cpath, &cp, &cc)) {
+        got_points = true;
+    } else if (fx_path_flatten_line_loop(cpath, 0.25f, &fr->arena, &cp_flat, &cc)) {
+        cp = cp_flat;
+        got_points = true;
+    }
+    if (got_points && cc >= 3) {
+        fx_point *tris = NULL;
+        size_t tri_count = 0;
+        if (fx_tessellate_simple_polygon(cp, cc, &fr->arena, &tris, &tri_count)) {
+            fx_solid_vertex *sv = fx_arena_alloc(&fr->arena, tri_count * sizeof(*sv));
+            if (sv) {
+                for (size_t i = 0; i < tri_count; ++i)
+                    sv[i] = (fx_solid_vertex){ .pos = { tris[i].x, tris[i].y } };
+
+                VkBuffer vbuf;
+                VkDeviceSize offset;
+                void *map = fx_vbuf_pool_alloc(&fr->vbuf, tri_count * sizeof(*sv), &vbuf, &offset);
+                if (map) {
+                    memcpy(map, sv, tri_count * sizeof(*sv));
+                    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->pc->stencil_pipeline);
+                    set_viewport(s, cmd);
+                    vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, 1);
+                    fx_solid_color_pc pc = {
+                        .surface_size = { (float)s->extent.width, (float)s->extent.height },
+                    };
+                    vkCmdPushConstants(cmd, s->pc->stencil_layout,
+                                       VK_SHADER_STAGE_VERTEX_BIT,
+                                       0, sizeof(pc), &pc);
+                    vkCmdBindVertexBuffers(cmd, 0, 1, &vbuf, &offset);
+                    vkCmdDraw(cmd, (uint32_t)tri_count, 1, 0, 0);
+                }
+            }
+        }
+    }
+}
+
 static size_t record_ops(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd)
 {
     size_t executed = 0;
@@ -488,6 +522,7 @@ static size_t record_ops(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd)
     VkRect2D full_scissor = { .offset = {0, 0}, .extent = s->extent };
     VkRect2D current_scissor = full_scissor;
     uint32_t current_stencil_ref = 0;
+    const fx_path *active_clip_path = NULL;
 
     bind_solid_pipeline(s, cmd);
     vkCmdSetScissor(cmd, 0, 1, &current_scissor);
@@ -529,6 +564,7 @@ static size_t record_ops(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd)
                 .layerCount = 1,
             };
             vkCmdClearAttachments(cmd, 1, &clear, 1, &rect);
+            active_clip_path = NULL;
             current_stencil_ref = 0;
             vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, current_stencil_ref);
             continue;
@@ -565,50 +601,9 @@ static size_t record_ops(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd)
                 vkCmdClearAttachments(cmd, 1, &clear, 1, &crect);
             }
 
-            /* Rasterize the path into the stencil buffer (ref=1, replace on pass) */
-            const fx_path *cpath = op->u.clip_path.path;
-            const fx_point *cp = NULL;
-            fx_point *cp_flat = NULL;
-            size_t cc = 0;
-            bool got_points = false;
-            if (fx_path_get_line_loop(cpath, &cp, &cc)) {
-                got_points = true;
-            } else if (fx_path_flatten_line_loop(cpath, 0.25f, &fr->arena, &cp_flat, &cc)) {
-                cp = cp_flat;
-                got_points = true;
-            }
-            if (got_points && cc >= 3) {
-                fx_point *tris = NULL;
-                size_t tri_count = 0;
-                if (fx_tessellate_simple_polygon(cp, cc, &fr->arena, &tris, &tri_count)) {
-                    fx_solid_vertex *sv = fx_arena_alloc(&fr->arena, tri_count * sizeof(*sv));
-                    if (sv) {
-                        for (size_t i = 0; i < tri_count; ++i)
-                            sv[i] = (fx_solid_vertex){ .pos = { tris[i].x, tris[i].y } };
-
-                        VkBuffer vbuf;
-                        VkDeviceSize offset;
-                        void *map = fx_vbuf_pool_alloc(&fr->vbuf, tri_count * sizeof(*sv), &vbuf, &offset);
-                        if (map) {
-                            memcpy(map, sv, tri_count * sizeof(*sv));
-                            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->pc->stencil_pipeline);
-                            set_viewport(s, cmd);
-                            /* Stencil ref=1 for REPLACE passOp */
-                            vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, 1);
-                            fx_solid_color_pc pc = {
-                                .surface_size = { (float)s->extent.width, (float)s->extent.height },
-                            };
-                            vkCmdPushConstants(cmd, s->pc->stencil_layout,
-                                               VK_SHADER_STAGE_VERTEX_BIT,
-                                               0, sizeof(pc), &pc);
-                            vkCmdBindVertexBuffers(cmd, 0, 1, &vbuf, &offset);
-                            vkCmdDraw(cmd, (uint32_t)tri_count, 1, 0, 0);
-                            bind_solid_pipeline(s, cmd);
-                        }
-                    }
-                }
-            }
-
+            draw_clip_path_stencil(s, fr, cmd, op->u.clip_path.path);
+            active_clip_path = op->u.clip_path.path;
+            bind_solid_pipeline(s, cmd);
             current_stencil_ref = 1;
             vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, current_stencil_ref);
             continue;
@@ -622,9 +617,14 @@ static size_t record_ops(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd)
         fx_point *stroke_tris = NULL;
         size_t stroke_count = 0;
 
-        if (op->kind == FX_OP_FILL_PATH) {
+        if (op->kind == FX_OP_FILL_RECT) {
+            if (draw_solid_rect(s, fr, cmd, &batch, &op->u.fill_rect.rect, op->u.fill_rect.color))
+                executed++;
+            continue;
+        } else if (op->kind == FX_OP_FILL_PATH) {
             const fx_gradient *gradient = op->u.fill_path.paint.gradient;
-            if (fx_path_is_axis_aligned_rect(op->u.fill_path.path, &rect)) {
+            const fx_path *fpath = op->u.fill_path.path;
+            if (fx_path_is_axis_aligned_rect(fpath, &rect)) {
                 if (gradient) {
                     if (draw_gradient_rect(s, fr, cmd, &batch, &rect, gradient))
                         executed++;
@@ -634,8 +634,9 @@ static size_t record_ops(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd)
                 }
                 continue;
             }
-            if (fx_path_get_line_loop(op->u.fill_path.path,
-                                      &points, &point_count)) {
+            size_t sub_count = fx_path_subpath_count(fpath);
+            if (sub_count == 1 &&
+                fx_path_get_line_loop(fpath, &points, &point_count)) {
                 if (gradient) {
                     if (draw_gradient_polygon_fill(s, fr, cmd, &batch, points, point_count, gradient))
                         executed++;
@@ -646,7 +647,8 @@ static size_t record_ops(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd)
                 }
                 continue;
             }
-            if (fx_path_flatten_line_loop(op->u.fill_path.path, 0.25f, &fr->arena,
+            if (sub_count == 1 &&
+                fx_path_flatten_line_loop(fpath, 0.25f, &fr->arena,
                                           &flattened, &point_count)) {
                 if (gradient) {
                     if (draw_gradient_polygon_fill(s, fr, cmd, &batch, flattened, point_count, gradient))
@@ -656,28 +658,181 @@ static size_t record_ops(fx_surface *s, fx_frame *fr, VkCommandBuffer cmd)
                                           op->u.fill_path.paint.color))
                         executed++;
                 }
+                continue;
+            }
+            /* General path: stencil-based fill for multi-subpath, holes, or open polylines */
+            fx_rect path_bounds;
+            if (fx_path_get_bounds(fpath, &path_bounds)) {
+                flush_batch(s, cmd, &batch);
+
+                /* Scissor to path bounds for stencil operations */
+                VkRect2D path_scissor;
+                {
+                    int32_t x = (int32_t)roundf(path_bounds.x);
+                    int32_t y = (int32_t)roundf(path_bounds.y);
+                    int32_t w = (int32_t)roundf(path_bounds.w);
+                    int32_t h = (int32_t)roundf(path_bounds.h);
+                    if (x < 0) { w += x; x = 0; }
+                    if (y < 0) { h += y; y = 0; }
+                    if (x + w > (int32_t)s->extent.width)  w = (int32_t)s->extent.width - x;
+                    if (y + h > (int32_t)s->extent.height) h = (int32_t)s->extent.height - y;
+                    if (w < 0) w = 0;
+                    if (h < 0) h = 0;
+                    path_scissor.offset.x = x;
+                    path_scissor.offset.y = y;
+                    path_scissor.extent.width  = (uint32_t)w;
+                    path_scissor.extent.height = (uint32_t)h;
+                    vkCmdSetScissor(cmd, 0, 1, &path_scissor);
+                }
+
+                /* Clear stencil to 0 inside path bounds */
+                {
+                    VkClearAttachment clear = {
+                        .aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT,
+                        .clearValue = { .depthStencil = { .stencil = 0 } },
+                    };
+                    VkClearRect crect = {
+                        .rect = path_scissor,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                    };
+                    vkCmdClearAttachments(cmd, 1, &clear, 1, &crect);
+                }
+
+                /* Fill stencil pass: increment for each sub-path triangle */
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->pc->fill_stencil_pipeline);
+                set_viewport(s, cmd);
+                vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, 0);
+
+                fx_solid_color_pc pc = {
+                    .surface_size = { (float)s->extent.width, (float)s->extent.height },
+                };
+
+                for (size_t si = 0; si < sub_count; ++si) {
+                    if (!fx_path_flatten_subpath(fpath, si, 0.25f, &fr->arena,
+                                                 &flattened, &point_count, &closed))
+                        continue;
+                    if (point_count < 3) continue;
+                    fx_point *tris = NULL;
+                    size_t tri_count = 0;
+                    if (!fx_tessellate_simple_polygon(flattened, point_count, &fr->arena, &tris, &tri_count))
+                        continue;
+                    fx_solid_vertex *sv = fx_arena_alloc(&fr->arena, tri_count * sizeof(*sv));
+                    if (!sv) continue;
+                    for (size_t i = 0; i < tri_count; ++i)
+                        sv[i] = (fx_solid_vertex){ .pos = { tris[i].x, tris[i].y } };
+                    VkBuffer vbuf;
+                    VkDeviceSize offset;
+                    void *map = fx_vbuf_pool_alloc(&fr->vbuf, tri_count * sizeof(*sv), &vbuf, &offset);
+                    if (!map) continue;
+                    memcpy(map, sv, tri_count * sizeof(*sv));
+                    vkCmdPushConstants(cmd, s->pc->stencil_layout,
+                                       VK_SHADER_STAGE_VERTEX_BIT,
+                                       0, sizeof(pc), &pc);
+                    vkCmdBindVertexBuffers(cmd, 0, 1, &vbuf, &offset);
+                    vkCmdDraw(cmd, (uint32_t)tri_count, 1, 0, 0);
+                }
+
+                /* Cover pass: draw a quad over path bounds where stencil == 1 */
+                fx_solid_vertex cover_verts[6];
+                cover_verts[0] = (fx_solid_vertex){ .pos = { path_bounds.x, path_bounds.y } };
+                cover_verts[1] = (fx_solid_vertex){ .pos = { path_bounds.x + path_bounds.w, path_bounds.y } };
+                cover_verts[2] = (fx_solid_vertex){ .pos = { path_bounds.x + path_bounds.w, path_bounds.y + path_bounds.h } };
+                cover_verts[3] = (fx_solid_vertex){ .pos = { path_bounds.x, path_bounds.y } };
+                cover_verts[4] = (fx_solid_vertex){ .pos = { path_bounds.x + path_bounds.w, path_bounds.y + path_bounds.h } };
+                cover_verts[5] = (fx_solid_vertex){ .pos = { path_bounds.x, path_bounds.y + path_bounds.h } };
+
+                VkBuffer cover_vbuf;
+                VkDeviceSize cover_offset;
+                void *cover_map = fx_vbuf_pool_alloc(&fr->vbuf, sizeof(cover_verts), &cover_vbuf, &cover_offset);
+                if (cover_map) {
+                    memcpy(cover_map, cover_verts, sizeof(cover_verts));
+
+                    if (gradient) {
+                        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->pc->gradient_cover_pipeline);
+                        set_viewport(s, cmd);
+                        vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, 1);
+                        fx_gradient_pc gpc = {
+                            .surface_size = { (float)s->extent.width, (float)s->extent.height },
+                            .mode = gradient->mode,
+                            .stop_count = gradient->stop_count,
+                            .start = { gradient->start[0], gradient->start[1] },
+                            .end = { gradient->end[0], gradient->end[1] },
+                        };
+                        memcpy(gpc.colors, gradient->colors, sizeof(gpc.colors));
+                        memcpy(gpc.stops, gradient->stops, sizeof(gpc.stops));
+                        vkCmdPushConstants(cmd, s->pc->gradient_layout,
+                                           VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                                           0, sizeof(gpc), &gpc);
+                        vkCmdBindVertexBuffers(cmd, 0, 1, &cover_vbuf, &cover_offset);
+                        vkCmdDraw(cmd, 6, 1, 0, 0);
+                    } else {
+                        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->pc->solid_cover_pipeline);
+                        set_viewport(s, cmd);
+                        vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, 1);
+                        VkClearColorValue linear = to_clear_color(op->u.fill_path.paint.color, s->surface_format.format);
+                        fx_solid_color_pc cpc = {
+                            .surface_size = { (float)s->extent.width, (float)s->extent.height },
+                            .pad = 0.0f,
+                            .color = { linear.float32[0], linear.float32[1], linear.float32[2], linear.float32[3] },
+                        };
+                        vkCmdPushConstants(cmd, s->pc->solid_rect_layout,
+                                           VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                                           0, sizeof(cpc), &cpc);
+                        vkCmdBindVertexBuffers(cmd, 0, 1, &cover_vbuf, &cover_offset);
+                        vkCmdDraw(cmd, 6, 1, 0, 0);
+                    }
+                    executed++;
+                }
+
+                /* Restore clip stencil if needed */
+                if (active_clip_path) {
+                    VkClearAttachment clear = {
+                        .aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT,
+                        .clearValue = { .depthStencil = { .stencil = 0 } },
+                    };
+                    VkClearRect crect = {
+                        .rect = path_scissor,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                    };
+                    vkCmdClearAttachments(cmd, 1, &clear, 1, &crect);
+                    draw_clip_path_stencil(s, fr, cmd, active_clip_path);
+                }
+
+                /* Restore state for subsequent batching */
+                bind_solid_pipeline(s, cmd);
+                vkCmdSetScissor(cmd, 0, 1, &current_scissor);
+                vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, current_stencil_ref);
             }
         } else if (op->kind == FX_OP_STROKE_PATH) {
-            if (op->u.stroke_path.paint.line_join == FX_JOIN_MITER &&
-                fx_path_is_axis_aligned_rect(op->u.stroke_path.path, &rect)) {
+            const fx_path *spath = op->u.stroke_path.path;
+            size_t sub_count = fx_path_subpath_count(spath);
+            if (sub_count == 1 &&
+                op->u.stroke_path.paint.line_join == FX_JOIN_MITER &&
+                fx_path_is_axis_aligned_rect(spath, &rect)) {
                 if (draw_rect_stroke(s, fr, cmd, &batch, &rect,
                                      op->u.stroke_path.paint.stroke_width,
                                      op->u.stroke_path.paint.color))
                     executed++;
                 continue;
             }
-            if (!fx_path_flatten_polyline(op->u.stroke_path.path, 0.25f, &fr->arena,
-                                          &flattened, &point_count, &closed))
-                continue;
-            if (fx_stroke_polyline(flattened, point_count, closed,
-                                   &op->u.stroke_path.paint, &fr->arena,
-                                   &stroke_tris, &stroke_count)) {
-                fx_solid_vertex *verts = (fx_solid_vertex *)stroke_tris;
-                if (add_to_batch(s, fr, cmd, &batch, op->u.stroke_path.paint.color,
-                                 verts, stroke_count)) {
-                    executed++;
+            bool any_stroked = false;
+            for (size_t si = 0; si < sub_count; ++si) {
+                if (!fx_path_flatten_subpath(spath, si, 0.25f, &fr->arena,
+                                             &flattened, &point_count, &closed))
+                    continue;
+                if (fx_stroke_polyline(flattened, point_count, closed,
+                                       &op->u.stroke_path.paint, &fr->arena,
+                                       &stroke_tris, &stroke_count)) {
+                    fx_solid_vertex *verts = (fx_solid_vertex *)stroke_tris;
+                    if (add_to_batch(s, fr, cmd, &batch, op->u.stroke_path.paint.color,
+                                     verts, stroke_count)) {
+                        any_stroked = true;
+                    }
                 }
             }
+            if (any_stroked) executed++;
         } else if (op->kind == FX_OP_DRAW_IMAGE) {
             if (draw_image_quad(s, fr, cmd, &batch, op->u.draw_image.image,
                                 &op->u.draw_image.src, &op->u.draw_image.dst))
@@ -809,7 +964,7 @@ fx_surface *fx_surface_create_offscreen(fx_context *ctx, int32_t width,
     s->canvas.owner = s;
     s->is_offscreen = true;
 
-    VkFormat vkfmt = pixel_format_to_vk(format);
+    VkFormat vkfmt = fx_pixel_format_to_vk(format);
     s->surface_format.format     = vkfmt;
     s->surface_format.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
 
@@ -1236,7 +1391,7 @@ void fx_surface_present(fx_surface *s)
             .commandBufferCount = 1,
             .pCommandBuffers    = &fr->cmd,
         };
-        FX_CHECK_VK(s->ctx, vkQueueSubmit(s->ctx->graphics_queue, 1, &si,
+        FX_LOG_VK(s->ctx, vkQueueSubmit(s->ctx->graphics_queue, 1, &si,
                                           fr->in_flight));
         /* No host wait: fx_surface_read_pixels, fx_surface_acquire (via the
          * per-frame fence wait), and fx_surface_destroy all synchronize
@@ -1254,7 +1409,7 @@ void fx_surface_present(fx_surface *s)
             .signalSemaphoreCount = 1,
             .pSignalSemaphores    = &fr->render_finished,
         };
-        FX_CHECK_VK(s->ctx, vkQueueSubmit(s->ctx->graphics_queue, 1, &si,
+        FX_LOG_VK(s->ctx, vkQueueSubmit(s->ctx->graphics_queue, 1, &si,
                                           fr->in_flight));
 
         VkPresentInfoKHR pi = {

@@ -48,7 +48,7 @@ int main(void)
 
     fx_surface_destroy(s);
 
-    /* fx_draw_image_ex (currently aliases fx_draw_image) */
+    /* fx_draw_image */
     fx_image *img = fx_image_create(ctx, &(fx_image_desc){
         .width = 2, .height = 2,
         .format = FX_FMT_RGBA8_UNORM,
@@ -59,7 +59,7 @@ int main(void)
     s = fx_surface_create_offscreen(ctx, 16, 16,
                                     FX_FMT_RGBA8_UNORM, FX_CS_SRGB);
     fx_canvas *c = fx_surface_acquire(s);
-    CHECK(fx_draw_image_ex(c, img, NULL, &(fx_rect){ 0, 0, 2, 2 }));
+    CHECK(fx_draw_image(c, img, NULL, &(fx_rect){ 0, 0, 2, 2 }));
     fx_surface_present(s);
     fx_surface_destroy(s);
     fx_image_destroy(img);

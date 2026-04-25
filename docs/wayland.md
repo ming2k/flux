@@ -79,8 +79,8 @@ Wayland announces output scale factors via `wl_output.scale` (integer
 scale, protocol version 2+) or, for fractional scaling,
 `wp-fractional-scale-v1` (a newer Wayland extension).
 
-flux accepts a `scale` parameter at surface creation time (planned for
-phase 1). The projection matrix at the GPU level is:
+flux accepts a `scale` parameter at surface creation time. The
+projection matrix at the GPU level is:
 
 ```
 ortho(0, logical_w, 0, logical_h)  ×  scale
@@ -94,7 +94,7 @@ When you receive an `output.scale` change:
 
 ```c
 // re-create or resize the fx_surface with the new scale
-fx_surface_set_scale(s, new_scale);  // phase 1+
+fx_surface_set_scale(s, new_scale);
 ```
 
 Until `fx_surface_set_scale` ships, call
@@ -117,11 +117,11 @@ Wayland's recommended pattern is:
 2. Render and commit.
 3. Queue the next frame callback before committing.
 
-flux phase 0 does not integrate with `wl_surface.frame` callbacks.
+flux does not currently integrate with `wl_surface.frame` callbacks.
 The frame loop in `hello_rect.c` is a busy loop gated by the Vulkan
 `FIFO_RELAXED` present mode, which naturally throttles to the
-compositor's refresh rate. Phase 4 will add an explicit frame-callback
-integration path for strict frame pacing.
+compositor's refresh rate. An explicit frame-callback integration path
+for strict frame pacing is planned.
 
 ## Tested compositors
 

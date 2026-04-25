@@ -11,10 +11,10 @@
 | wayland-client | 1.20 | Wayland IPC |
 | wayland-protocols | 1.25 | xdg-shell XML |
 | wayland-scanner | (with wayland-client) | code generation |
-| FreeType | 2.13 | font rasterization (phase 2) |
-| HarfBuzz | 8 | text shaping (phase 2) |
-| glslangValidator | any recent | shader compilation (phase 1) |
-| python3 | 3.8 | bin2c script (phase 1) |
+| FreeType | 2.13 | font rasterization |
+| HarfBuzz | 8 | text shaping |
+| glslangValidator | any recent | shader compilation |
+| python3 | 3.8 | bin2c script |
 
 On Arch Linux:
 
@@ -63,7 +63,7 @@ ninja -C build
 
 ## Running examples
 
-Phase 0 has one example: `hello_rect`. It requires an active Wayland
+There is one example: `hello_rect`. It requires an active Wayland
 compositor session (WAYLAND_DISPLAY must be set).
 
 ```sh
@@ -102,9 +102,9 @@ without it.
 
 ### Verbose logging
 
-There is no runtime log-level toggle in phase 0. To get debug-level
-messages, add `FX_LOG_DEBUG` calls in the area of interest and
-rebuild. A runtime flag (`FX_LOG_LEVEL=debug`) is planned for phase 1.
+To get debug-level messages, add `FX_LOG_DEBUG` calls in the area of
+interest and rebuild. A runtime flag (`FX_LOG_LEVEL=debug`) may be
+added in the future.
 
 ### GDB / LLDB
 
@@ -127,7 +127,7 @@ renderdoccmd capture -c capture.rdc build/examples/hello_rect
 ```
 
 RenderDoc is particularly useful for inspecting the render pass clear
-colour and, in phase 1+, the tessellated geometry and atlas textures.
+colour, the tessellated geometry, and atlas textures.
 
 ### Vulkan layers beyond validation
 
@@ -152,7 +152,7 @@ ninja -C build src/libflux.so && build/examples/hello_rect
 
 Ninja's dependency graph means only the modified TU recompiles.
 
-## Shader development (phase 1+)
+## Shader development
 
 Shaders live in `src/shaders/`. After editing a `.glsl` file:
 

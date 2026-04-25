@@ -11,7 +11,7 @@
         } \
     } while (0)
 
-static bool test_fill_rect_records_path_op(void)
+static bool test_fill_rect_records_native_op(void)
 {
     fx_surface surface = { 0 };
     surface.canvas.owner = &surface;
@@ -22,21 +22,12 @@ static bool test_fill_rect_records_path_op(void)
     CHECK(fx_canvas_op_count(&surface.canvas) == 1);
 
     fx_op *op = &surface.canvas.ops[0];
-    CHECK(op->kind == FX_OP_FILL_PATH);
-    CHECK(op->u.fill_path.owns_path);
-    CHECK(op->u.fill_path.paint.color == red);
-
-    fx_path *path = (fx_path *)op->u.fill_path.path;
-    CHECK(path != NULL);
-    CHECK(fx_path_verb_count(path) == 5);   /* move, line, line, line, close */
-    CHECK(fx_path_point_count(path) == 4);
-
-    fx_rect bounds = { 0 };
-    CHECK(fx_path_get_bounds(path, &bounds));
-    CHECK(bounds.x == 10.0f);
-    CHECK(bounds.y == 20.0f);
-    CHECK(bounds.w == 30.0f);
-    CHECK(bounds.h == 40.0f);
+    CHECK(op->kind == FX_OP_FILL_RECT);
+    CHECK(op->u.fill_rect.color == red);
+    CHECK(op->u.fill_rect.rect.x == 10.0f);
+    CHECK(op->u.fill_rect.rect.y == 20.0f);
+    CHECK(op->u.fill_rect.rect.w == 30.0f);
+    CHECK(op->u.fill_rect.rect.h == 40.0f);
 
     surface.canvas.op_count = 0;
     surface.canvas.has_clear = false;
@@ -90,7 +81,7 @@ static bool test_fill_rect_null_safety(void)
 
 int main(void)
 {
-    if (!test_fill_rect_records_path_op()) return 1;
+    if (!test_fill_rect_records_native_op()) return 1;
     if (!test_fill_rect_with_transform()) return 1;
     if (!test_fill_rect_null_safety()) return 1;
     printf("fill_rect OK\n");

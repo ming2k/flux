@@ -313,13 +313,13 @@ static inline bool fx_rect_contains(const fx_rect *r, float x, float y) {
     return r && x >= r->x && x <= r->x + r->w && y >= r->y && y <= r->y + r->h;
 }
 FX_API bool fx_fill_rect(fx_canvas *c, const fx_rect *rect, fx_color color);
-/* Fill a path.  The current tessellator handles concave simple polygons;
- * self-intersecting paths and the even-odd fill rule are not yet supported. */
+/* Fill a path.  The current tessellator handles concave simple polygons and
+ * multi-subpath paths using stencil-based even-odd fill (holes are supported).
+ * Self-intersecting paths and nonzero fill rule are not yet supported. */
 FX_API bool fx_fill_path(fx_canvas *c, const fx_path *path, const fx_paint *paint);
 FX_API bool fx_stroke_path(fx_canvas *c, const fx_path *path, const fx_paint *paint);
 FX_API bool fx_draw_image(fx_canvas *c, const fx_image *image,
                             const fx_rect *src, const fx_rect *dst);
-FX_API bool fx_draw_image_ex(fx_canvas *c, const fx_image *image, const fx_rect *src, const fx_rect *dst);
 FX_API bool fx_draw_glyph_run(fx_canvas           *c,
                                 const fx_font       *font,
                                 const fx_glyph_run  *run,

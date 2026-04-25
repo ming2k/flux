@@ -88,8 +88,8 @@ fx_surface *fx_surface_create_wayland(...) {
     }
 }
 
-// Vulkan calls: FX_CHECK_VK logs and continues
-FX_CHECK_VK(ctx, vkQueueSubmit(queue, 1, &si, fence));
+// Vulkan calls: FX_TRY_VK logs the error and returns false on failure
+FX_TRY_VK(ctx, vkQueueSubmit(queue, 1, &si, fence));
 
 // Draw calls: silent no-op on null inputs
 void fx_clear(fx_canvas *c, fx_color color) {

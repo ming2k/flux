@@ -13,14 +13,14 @@ static size_t bytes_per_pixel(fx_pixel_format format)
     return 0;
 }
 
-static VkFormat to_vk_format(fx_pixel_format fmt)
+VkFormat fx_pixel_format_to_vk(fx_pixel_format fmt)
 {
     switch (fmt) {
         case FX_FMT_BGRA8_UNORM: return VK_FORMAT_B8G8R8A8_UNORM;
         case FX_FMT_RGBA8_UNORM: return VK_FORMAT_R8G8B8A8_UNORM;
         case FX_FMT_A8_UNORM:    return VK_FORMAT_R8_UNORM;
     }
-    return VK_FORMAT_UNDEFINED;
+    return VK_FORMAT_B8G8R8A8_UNORM;
 }
 
 /* Transition a freshly created image from UNDEFINED to SHADER_READ_ONLY_OPTIMAL
@@ -108,7 +108,7 @@ fx_image *fx_image_create(fx_context *ctx, const fx_image_desc *desc)
     VkImageCreateInfo ici = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
-        .format = to_vk_format(desc->format),
+        .format = fx_pixel_format_to_vk(desc->format),
         .extent = { desc->width, desc->height, 1 },
         .mipLevels = 1,
         .arrayLayers = 1,

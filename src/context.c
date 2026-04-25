@@ -43,8 +43,8 @@ fx_context *fx_context_create(const fx_context_desc *desc)
     bool want_validation = desc && desc->enable_validation;
     if (!want_validation) want_validation = env_flag("FX_ENABLE_VALIDATION");
 
-    /* Phase-0 always wants Wayland surface support. When we add
-     * offscreen-only contexts we'll make this conditional. */
+    /* Always include Wayland surface support; offscreen-only
+     * contexts simply do not create a surface. */
     const char *inst_exts[] = {
         "VK_KHR_surface",
         "VK_KHR_wayland_surface",

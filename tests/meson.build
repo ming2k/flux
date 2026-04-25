@@ -68,6 +68,11 @@ test_clip = executable('test_clip',
   dependencies : [flux_dep],
 )
 
+test_multi_subpath = executable('test_multi_subpath',
+  'test_multi_subpath.c',
+  dependencies : [flux_dep],
+)
+
 test('foundation', test_foundation, suite : 'unit')
 test('path_flatten', test_path_flatten, suite : 'unit')
 test('arc', test_arc, suite : 'unit')
@@ -82,3 +87,4 @@ test('gradient', test_gradient, suite : 'integration')
 test('missing_apis', test_missing_apis, suite : 'integration')
 test('offscreen', test_offscreen, suite : 'integration')
 test('clip', test_clip, suite : 'integration')
+test('multi_subpath', test_multi_subpath, suite : 'integration')

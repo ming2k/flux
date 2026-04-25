@@ -54,12 +54,22 @@ void fx_log(const fx_context *ctx, fx_log_level lvl,
 #define FX_LOGI(ctx, ...) fx_log((ctx), FX_LOG_INFO,  __VA_ARGS__)
 #define FX_LOGD(ctx, ...) fx_log((ctx), FX_LOG_DEBUG, __VA_ARGS__)
 
-#define FX_CHECK_VK(ctx, expr) \
+#define FX_LOG_VK(ctx, expr) \
     do { \
         VkResult _r = (expr); \
         if (_r != VK_SUCCESS) { \
             FX_LOGE((ctx), "%s:%d: %s => VkResult %d", \
                     __FILE__, __LINE__, #expr, (int)_r); \
+        } \
+    } while (0)
+
+#define FX_TRY_VK(ctx, expr) \
+    do { \
+        VkResult _r = (expr); \
+        if (_r != VK_SUCCESS) { \
+            FX_LOGE((ctx), "%s:%d: %s => VkResult %d", \
+                    __FILE__, __LINE__, #expr, (int)_r); \
+            return false; \
         } \
     } while (0)
 
@@ -105,6 +115,9 @@ typedef struct {
     VkPipeline        gradient_pipeline;
     VkPipelineLayout  stencil_layout;
     VkPipeline        stencil_pipeline;
+    VkPipeline        fill_stencil_pipeline;
+    VkPipeline        solid_cover_pipeline;
+    VkPipeline        gradient_cover_pipeline;
     VkPipelineLayout  blur_layout;
     VkPipeline        blur_pipeline;
 } fx_pipeline_set;
@@ -301,13 +314,14 @@ typedef struct {
 } fx_frame;
 
 typedef enum {
-    FX_OP_FILL_PATH = 0,
-    FX_OP_STROKE_PATH = 1,
-    FX_OP_DRAW_IMAGE = 2,
-    FX_OP_DRAW_GLYPHS = 3,
-    FX_OP_CLIP_RECT = 4,
-    FX_OP_RESET_CLIP = 5,
-    FX_OP_CLIP_PATH = 6,
+    FX_OP_FILL_RECT = 0,
+    FX_OP_FILL_PATH = 1,
+    FX_OP_STROKE_PATH = 2,
+    FX_OP_DRAW_IMAGE = 3,
+    FX_OP_DRAW_GLYPHS = 4,
+    FX_OP_CLIP_RECT = 5,
+    FX_OP_RESET_CLIP = 6,
+    FX_OP_CLIP_PATH = 7,
 } fx_op_kind;
 
 typedef struct {
@@ -338,12 +352,18 @@ typedef struct {
 } fx_draw_glyphs_op;
 
 typedef struct {
+    fx_rect  rect;
+    fx_color color;
+} fx_fill_rect_op;
+
+typedef struct {
     fx_rect rect;
 } fx_clip_rect_op;
 
 typedef struct {
     fx_op_kind kind;
     union {
+        fx_fill_rect_op    fill_rect;
         fx_fill_path_op    fill_path;
         fx_stroke_path_op  stroke_path;
         fx_draw_image_op   draw_image;
@@ -417,6 +437,8 @@ struct fx_surface {
     } canvas;
 };
 
+VkFormat fx_pixel_format_to_vk(fx_pixel_format fmt);
+
 bool fx_swapchain_build(fx_surface *s);
 void fx_swapchain_destroy(fx_surface *s);
 void fx_surface_destroy_pipelines(fx_surface *s);
@@ -435,6 +457,12 @@ bool fx_make_solid_pipeline(fx_pipeline_set *ps, fx_context *ctx);
 bool fx_make_frames(fx_surface *s);
 void fx_canvas_reset(fx_canvas *c);
 void fx_canvas_dispose(fx_canvas *c);
+bool fx_path_has_multiple_subpaths(const fx_path *path);
+size_t fx_path_subpath_count(const fx_path *path);
+bool fx_path_flatten_subpath(const fx_path *path, size_t subpath_index, float tolerance,
+                             fx_arena *arena,
+                             fx_point **out_points, size_t *out_count,
+                             bool *out_closed);
 bool fx_path_is_axis_aligned_rect(const fx_path *path, fx_rect *out_rect);
 bool fx_path_get_line_loop(const fx_path *path,
                            const fx_point **out_points,
