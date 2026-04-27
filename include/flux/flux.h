@@ -335,9 +335,9 @@ FX_API fx_path *fx_path_transform(const fx_path *src, const fx_matrix *m);
  * non-premultiplied rgba in [0,255]. */
 static inline fx_color fx_color_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
-    unsigned int ar = (r * a + 127) / 255;
-    unsigned int ag = (g * a + 127) / 255;
-    unsigned int ab = (b * a + 127) / 255;
+    unsigned int ar = ((unsigned int)r * a + 127) / 255;
+    unsigned int ag = ((unsigned int)g * a + 127) / 255;
+    unsigned int ab = ((unsigned int)b * a + 127) / 255;
     return ((fx_color)a  << 24) |
            ((fx_color)ar << 16) |
            ((fx_color)ag << 8 ) |

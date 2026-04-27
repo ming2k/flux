@@ -1,5 +1,7 @@
 #include "internal.h"
 #include <math.h>
+#include <freetype/ftmm.h>
+#include <freetype/fttypes.h>
 
 #define ATLAS_SIZE 2048
 
@@ -153,6 +155,23 @@ fx_font *fx_font_create(fx_context *ctx, const fx_font_desc *desc)
         return NULL;
     }
     FT_Set_Pixel_Sizes(font->ft_face, 0, (FT_UInt)desc->size);
+
+    /* Apply weight for variable fonts */
+    if (desc->weight != 400 && FT_HAS_MULTIPLE_MASTERS(font->ft_face)) {
+        FT_MM_Var *mm_var = NULL;
+        if (FT_Get_MM_Var(font->ft_face, &mm_var) == 0 && mm_var) {
+            for (FT_UInt i = 0; i < mm_var->num_axis; ++i) {
+                if (mm_var->axis[i].tag == FT_MAKE_TAG('w', 'g', 'h', 't')) {
+                    FT_Fixed coords[1];
+                    coords[0] = (FT_Fixed)(desc->weight * 65536);
+                    FT_Set_Var_Design_Coordinates(font->ft_face, 1, coords);
+                    break;
+                }
+            }
+            FT_Done_MM_Var(font->ctx->ft_lib, mm_var);
+        }
+    }
+
     font->hb_font = hb_ft_font_create(font->ft_face, NULL);
     font->size = desc->size;
     font->ascender  = (float)(font->ft_face->size->metrics.ascender  >> 6);
