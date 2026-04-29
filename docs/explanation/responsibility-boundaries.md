@@ -4,7 +4,11 @@ This document defines what flux owns as a graphics library and what must stay
 above or below it. It is the boundary contract for public API additions and
 internal refactors.
 
-For concrete application-level examples, see [usage/](usage/).
+For concrete application-level examples, see [How-to guides](../how-to/).
+
+## Related decisions
+
+- [ADR-0002: Keep flux as a low-level rendering substrate](../adr/0002-keep-flux-as-low-level-rendering-substrate.md)
 
 ## Layer Model
 

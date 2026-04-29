@@ -97,4 +97,4 @@
 | Full-screen 4K, ~200 draw ops | < 4 ms GPU | Intel Iris Xe |
 | Text run of 1000 glyphs | < 2 ms record + submit | Intel Iris Xe |
 
-These are measured before phase 3 closes. See [testing.md](testing.md) for the benchmark methodology.
+These are measured before phase 3 closes. See [Testing](../dev/testing.md) for the benchmark methodology.

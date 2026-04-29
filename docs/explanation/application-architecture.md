@@ -32,3 +32,7 @@ event loop
 
 The boundary is intentional: once data is reduced to pixels, paths, paints,
 transforms, images, or glyph runs, flux is responsible for rendering it.
+
+## Related decisions
+
+- [ADR-0002: Keep flux as a low-level rendering substrate](../adr/0002-keep-flux-as-low-level-rendering-substrate.md)

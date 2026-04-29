@@ -1,4 +1,10 @@
-# SVG and Vector Assets
+# How to Render SVG Assets
+
+This guide assumes you already have an `fx_context`, an `fx_surface`, and an SVG library or parser above flux.
+
+## When to use this
+
+Use this page when application or toolkit code needs to display SVG assets through flux.
 
 flux does not parse SVG. SVG support belongs above flux because SVG includes
 XML parsing, CSS, units, transforms, paint servers, text, clipping, masks, and
@@ -92,3 +98,7 @@ Do not add librsvg, NanoSVG, usvg, XML, or CSS parsing as required flux
 dependencies unless flux intentionally grows an optional asset-ingestion layer.
 Keep those libraries in the application/toolkit layer and hand flux the
 resolved result: pixels, paths, paints, images, or glyph runs.
+
+## Verification
+
+Render the asset into an offscreen surface and compare the output against a known-good image, or display the asset in a Wayland surface and inspect it manually.

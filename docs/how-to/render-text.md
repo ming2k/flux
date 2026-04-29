@@ -1,4 +1,10 @@
-# Text
+# How to Render Text
+
+This guide assumes you already have an `fx_context`, an `fx_surface`, and an active frame. See [Getting Started](../tutorials/01-getting-started.md) and [How to record and present a frame](record-and-present-a-frame.md) if needed.
+
+## When to use this
+
+Use this page when your application has text content and needs to convert it into positioned glyph runs that flux can render.
 
 flux consumes positioned glyph runs. It does not discover system fonts or shape
 UTF-8 text into glyph IDs. Keep font discovery, fallback, paragraph layout,
@@ -98,3 +104,7 @@ For production UI text, keep these policies outside flux:
 - Text caching and invalidation.
 
 After those steps, submit final positioned glyph runs to flux.
+
+## Verification
+
+Render a known string into an offscreen or Wayland surface. If no glyphs appear, confirm that the font path exists, the HarfBuzz glyph IDs are non-zero for the selected face, and the glyph run stays alive until `fx_surface_present`.

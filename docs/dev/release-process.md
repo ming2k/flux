@@ -15,7 +15,7 @@ and a set of **Check Items** that can be verified automatically or manually.
 |---|----------|--------|------|----------------|
 | 1 | [Functional Completeness](#1-functional-completeness) | Critical | 100 % API implemented | See matrix below |
 | 2 | [Test Coverage](#2-test-coverage) | Critical | All gate tests green | See matrix below |
-| 3 | [Documentation Completeness](#3-documentation-completeness) | High | 100 % public API in api.md | See matrix below |
+| 3 | [Documentation Completeness](#3-documentation-completeness) | High | 100 % public API in reference docs | See matrix below |
 | 4 | [Quality & Stability](#4-quality--stability) | Critical | Zero memory leaks, zero validation errors | Valgrind + VK validation |
 | 5 | [Performance Baselines](#5-performance-baselines) | Medium | All baselines met on reference HW | Iris Xe targets |
 | 6 | [Platform & Build](#6-platform--build) | High | CI green, pkg-config installable | Manual / CI |
@@ -97,14 +97,14 @@ without reading source code.
 
 ### Check Items
 
-- [ ] `docs/api.md` documents every public function with signature + behavior.
-- [ ] `docs/architecture.md` is up to date with the source tree layout.
-- [ ] `docs/roadmap.md` correctly reflects what is shipped vs planned.
+- [ ] `docs/reference/api.md` documents every public function with signature + behavior.
+- [ ] `docs/explanation/architecture-overview.md` is up to date with the source tree layout.
+- [ ] `docs/explanation/roadmap.md` correctly reflects what is shipped vs planned.
 - [ ] `README.md` contains build instructions and a minimal usage example.
-- [ ] `docs/positioning.md` accurately describes what flux is *not*.
+- [ ] `docs/explanation/positioning.md` accurately describes what flux is *not*.
 - [ ] All public headers have Doxygen-style or concise block comments for every function.
 
-**Coverage target:** 100 % of public API functions have a doc block in `api.md`
+**Coverage target:** 100 % of public API functions have a doc block in `docs/reference/api.md`
 or inline in the header.
 
 ---
@@ -152,7 +152,7 @@ or inline in the header.
 
 ### Check Items
 
-- [ ] Baseline numbers are recorded in `docs/testing.md` or `bench/` output.
+- [ ] Baseline numbers are recorded in `docs/dev/testing.md` or `bench/` output.
 - [ ] No regression > 10 % vs previous release on reference hardware.
 - [ ] `test_offscreen` completes in < 1 s (smoke-test sanity).
 
@@ -190,8 +190,8 @@ Use this table to decide the release tag.
 | Release Type | Functional | Test | Doc | Quality | Performance | Build |
 |--------------|------------|------|-----|---------|-------------|-------|
 | **Alpha** (`v0.X.0-alphaN`) | Current phase complete | Unit suite ≥ 80 % | README OK | ASan clean | N/A | Builds on dev machine |
-| **Beta** (`v0.X.0-betaN`) | Current phase complete | Unit + Integration green | api.md ≥ 80 % | Valgrind clean | Baselines recorded | CI green |
-| **RC** (`v0.X.0-rcN`) | All planned phases | All gates green | api.md 100 % | Validation clean | No regression | CI + install tested |
+| **Beta** (`v0.X.0-betaN`) | Current phase complete | Unit + Integration green | API docs ≥ 80 % | Valgrind clean | Baselines recorded | CI green |
+| **RC** (`v0.X.0-rcN`) | All planned phases | All gates green | API docs 100 % | Validation clean | No regression | CI + install tested |
 | **Stable** (`v0.X.0`) | All planned phases | Golden suite green | 100 % + migration guide | One week soak | No regression | Multi-distro CI |
 
 **Current flux assessment (as of main, targeting v0.0.2):**
@@ -208,8 +208,8 @@ Use this table to decide the release tag.
   run clean under `VK_LAYER_KHRONOS_validation` on a real device
   (verified on Intel Iris Xe).
 - Golden suite: not yet implemented.
-- Documentation: `api.md` covers all public API symbols reported by the
-  release-readiness script. `vulkan-backend.md` and `architecture.md`
+- Documentation: `docs/reference/api.md` covers all public API symbols reported by the
+  release-readiness script. `docs/explanation/vulkan-backend.md` and `docs/explanation/architecture-overview.md`
   are aligned with the current source tree.
 - CI exists and runs build, unit/integration tests, and the release
   readiness script.
@@ -240,7 +240,7 @@ python3 scripts/check-release-readiness.py
 
 This script will:
 1. Scan `include/flux/*.h` for public API symbols.
-2. Cross-reference `src/`, `tests/`, and `docs/api.md` for coverage.
+2. Cross-reference `src/`, `tests/`, and `docs/reference/api.md` for coverage.
 3. Run `meson test` and collect pass/fail counts.
 4. Print a Markdown scorecard you can paste into release notes.
 

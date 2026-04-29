@@ -37,3 +37,7 @@ produces vector outlines, convert those outlines into `fx_path` and draw them
 with `fx_fill_path` / `fx_stroke_path`. If it produces shaped glyph IDs and
 positions, append them to `fx_glyph_run` and draw them with
 `fx_draw_glyph_run`.
+
+## Related decisions
+
+- [ADR-0002: Keep flux as a low-level rendering substrate](../adr/0002-keep-flux-as-low-level-rendering-substrate.md)

@@ -71,4 +71,8 @@ starts deciding layout, fallback, caching policy, or widget behavior for
 the caller. flux deliberately stops below that line.
 
 For the concrete API and module boundary contract, see
-[responsibility-boundaries.md](responsibility-boundaries.md).
+[Responsibility boundaries](responsibility-boundaries.md).
+
+## Related decisions
+
+- [ADR-0002: Keep flux as a low-level rendering substrate](../adr/0002-keep-flux-as-low-level-rendering-substrate.md)

@@ -62,4 +62,8 @@ polygon triangulation are performed on the CPU, with the resulting
 meshes batched and submitted to the GPU. Clipping is currently
 scissor-bound; the stencil-based exact path clip is compiled but not
 yet dispatched (see the production gaps in
-[release-readiness.md](release-readiness.md)).
+[release process](../dev/release-process.md)).
+
+## Related decisions
+
+- [ADR-0002: Keep flux as a low-level rendering substrate](../adr/0002-keep-flux-as-low-level-rendering-substrate.md)

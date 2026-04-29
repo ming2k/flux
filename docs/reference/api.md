@@ -3,7 +3,7 @@
 This document describes the public API of flux.
 
 For application-level integration examples, including linking, system fonts,
-and SVG ingestion, see [usage/](usage/).
+and SVG ingestion, see [How-to guides](../how-to/).
 
 ## Ownership
 

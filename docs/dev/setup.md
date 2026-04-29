@@ -1,4 +1,6 @@
-# Development
+# Developer Setup
+
+This document is for contributors who will modify flux source code. If you only want to use flux, see the [Getting Started tutorial](../tutorials/01-getting-started.md) instead.
 
 ## Prerequisites
 
@@ -183,3 +185,15 @@ and `flux.pc` for pkg-config. After installation:
 ```sh
 pkg-config --cflags --libs flux
 ```
+
+## Project layout
+
+See [project-layout.md](project-layout.md) for a tour of the source tree.
+
+## Before submitting a PR
+
+- [ ] Relevant tests pass.
+- [ ] Code style follows [code-style.md](code-style.md).
+- [ ] Documentation is updated for user-visible behavior changes.
+- [ ] `CHANGELOG.md` is updated when release notes are warranted.
+- [ ] An ADR is added for significant architecture changes.

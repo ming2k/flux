@@ -55,7 +55,7 @@ atlas inserts — goes through one path on `fx_context`:
   "image is usable as soon as the call returns" contract. Deferred
   submission (batching uploads into the next render submission) is a
   later optimization — see the known gaps in
-  [release-readiness.md](release-readiness.md).
+  [release process](../dev/release-process.md).
 
 The upload subsystem is private to `fx_context`; callers never touch
 it directly. The public surface is `fx_image_create`,
@@ -201,3 +201,7 @@ When `fx_surface_destroy` runs:
    (`fx_surface_destroy_pipelines`: sampler, render pass).
 5. `VkSurfaceKHR` (swapchain surfaces only) is destroyed.
 6. The canvas display list is disposed and the surface is freed.
+
+## Related decisions
+
+- [ADR-0002: Keep flux as a low-level rendering substrate](../adr/0002-keep-flux-as-low-level-rendering-substrate.md)

@@ -1,7 +1,10 @@
-# Linking
+# How to Link flux
 
-flux can be consumed as a shared library, a static library, or a Meson
-subproject. The public C headers are installed under `include/flux/`.
+This guide assumes you have already built flux once. See [Getting Started](../tutorials/01-getting-started.md) if you need a first local build.
+
+## When to use this
+
+Use this page when an application needs to consume flux as a shared library, static library, or Meson subproject.
 
 ## Dynamic Link
 
@@ -56,3 +59,7 @@ executable('app', 'app.c', dependencies : [flux_dep])
 
 Use this when the application wants to control whether flux is built as static
 or shared from the top-level `default_library` option.
+
+## Verification
+
+Compile a small application that includes `flux/flux.h` and creates an `fx_context`. The compile and link step should complete without unresolved `fx_*` symbols.

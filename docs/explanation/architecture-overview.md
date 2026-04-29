@@ -124,3 +124,7 @@ Surface-scoped state has two tiers with different lifetimes:
 Resizing a swapchain surface calls `fx_swapchain_destroy` followed
 by `fx_swapchain_build`; the second tier is preserved so a resize
 does not pay the pipeline creation cost.
+
+## Related decisions
+
+- [ADR-0002: Keep flux as a low-level rendering substrate](../adr/0002-keep-flux-as-low-level-rendering-substrate.md)

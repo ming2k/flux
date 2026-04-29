@@ -140,3 +140,7 @@ for strict frame pacing is planned.
 keeps the library loadable on systems without a Wayland session (the
 function pointer will be NULL in that case and surface creation will
 fail cleanly rather than crashing at link time).
+
+## Related decisions
+
+- [ADR-0002: Keep flux as a low-level rendering substrate](../adr/0002-keep-flux-as-low-level-rendering-substrate.md)

@@ -2,9 +2,9 @@
 
 ## Before you start
 
-- Read [conventions.md](conventions.md) end-to-end. It is the
+- Read [code-style.md](code-style.md) end-to-end. It is the
   contract that every PR is reviewed against.
-- Check the [roadmap](roadmap.md) to understand which phase a feature
+- Check the [roadmap](../explanation/roadmap.md) to understand which phase a feature
   belongs to. Do not implement phase-2 work in a phase-1 PR.
 - For significant changes (new subsystem, API extension, alternative
   algorithm), open an issue first to discuss the design before writing
@@ -107,7 +107,7 @@ The reviewer checks:
 - [ ] No allocation on the hot path (steady-state frame loop).
 
 **Conventions**
-- [ ] Naming follows [conventions.md](conventions.md).
+- [ ] Naming follows [code-style.md](code-style.md).
 - [ ] Comments explain *why*, not *what*.
 - [ ] No new `-Wall -Wextra` warnings.
 
@@ -134,14 +134,14 @@ For contributors implementing a new drawing primitive:
 5. Add a GLSL shader pair in `src/shaders/` and register it in
    `src/vk/pipeline.c`.
 6. Add a golden-image test scene in `tests/test_render_golden.c`.
-7. Update `docs/api.md` with an example code snippet.
+7. Update `docs/reference/api.md` with an example code snippet.
 
 ## Adding a Vulkan extension
 
 1. Check for the extension in `fx_device_init` (or instance creation).
 2. Fall back gracefully if not present — never make it required.
 3. Guard the use site with a runtime boolean (`ctx->has_<ext>`).
-4. Document the extension in [vulkan-backend.md](vulkan-backend.md)
+4. Document the extension in [Vulkan backend](../explanation/vulkan-backend.md)
    under the relevant section.
 
 ## Compatibility

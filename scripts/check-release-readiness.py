@@ -7,7 +7,7 @@ Usage:
     python3 scripts/check-release-readiness.py --api-matrix
 
 This script scans the codebase and produces a Markdown scorecard that maps
-onto docs/release-readiness.md.
+onto docs/dev/release-process.md.
 """
 
 import argparse
@@ -135,7 +135,7 @@ def find_tests(test_dir: Path) -> Set[str]:
 
 
 def find_documentation(doc_path: Path) -> Set[str]:
-    """Find API functions mentioned in api.md."""
+    """Find API functions mentioned in the API reference."""
     if not doc_path.exists():
         return set()
     text = read_file(doc_path)
@@ -227,7 +227,7 @@ def main() -> int:
 
     impls = find_implementations(PROJECT_ROOT / "src")
     tested = find_tests(PROJECT_ROOT / "tests")
-    documented = find_documentation(PROJECT_ROOT / "docs" / "api.md")
+    documented = find_documentation(PROJECT_ROOT / "docs" / "reference" / "api.md")
 
     # Deduplicate
     seen: Set[str] = set()
@@ -256,9 +256,9 @@ def main() -> int:
 
     # Check for docs
     readme_ok = (PROJECT_ROOT / "README.md").exists()
-    arch_ok = (PROJECT_ROOT / "docs" / "architecture.md").exists()
-    roadmap_ok = (PROJECT_ROOT / "docs" / "roadmap.md").exists()
-    positioning_ok = (PROJECT_ROOT / "docs" / "positioning.md").exists()
+    arch_ok = (PROJECT_ROOT / "docs" / "explanation" / "architecture-overview.md").exists()
+    roadmap_ok = (PROJECT_ROOT / "docs" / "explanation" / "roadmap.md").exists()
+    positioning_ok = (PROJECT_ROOT / "docs" / "explanation" / "positioning.md").exists()
 
     # CI check
     ci_ok = any((PROJECT_ROOT / d).exists() for d in [".github", ".gitlab-ci.yml"])
@@ -273,22 +273,22 @@ def main() -> int:
     lines.append(f"- **Public API symbols:** {total_api}")
     lines.append(f"- **Implemented:** {implemented} ({impl_pct:.0f}%)")
     lines.append(f"- **Tested:** {tested_count} ({test_pct:.0f}%)")
-    lines.append(f"- **Documented in api.md:** {documented_count} ({doc_pct:.0f}%)")
+    lines.append(f"- **Documented in docs/reference/api.md:** {documented_count} ({doc_pct:.0f}%)")
     lines.append(f"- **Tests passing:** {passed}/{total_tests} ({test_suite_pct:.0f}%)")
     lines.append("")
     lines.append("## Category Scores")
     lines.append("")
     lines.append(score_category("Functional Completeness", impl_pct, 100.0))
     lines.append(score_category("Test Coverage (API)", test_pct, 90.0))
-    lines.append(score_category("Documentation (api.md)", doc_pct, 100.0))
+    lines.append(score_category("Documentation (API reference)", doc_pct, 100.0))
     lines.append(score_category("Test Suite Green", test_suite_pct, 100.0))
     lines.append("")
     lines.append("## Checklist")
     lines.append("")
     lines.append(f"- [ {'x' if readme_ok else ' '} ] README.md exists")
-    lines.append(f"- [ {'x' if arch_ok else ' '} ] docs/architecture.md exists")
-    lines.append(f"- [ {'x' if roadmap_ok else ' '} ] docs/roadmap.md exists")
-    lines.append(f"- [ {'x' if positioning_ok else ' '} ] docs/positioning.md exists")
+    lines.append(f"- [ {'x' if arch_ok else ' '} ] docs/explanation/architecture-overview.md exists")
+    lines.append(f"- [ {'x' if roadmap_ok else ' '} ] docs/explanation/roadmap.md exists")
+    lines.append(f"- [ {'x' if positioning_ok else ' '} ] docs/explanation/positioning.md exists")
     lines.append(f"- [ {'x' if ci_ok else ' '} ] CI configuration exists")
     lines.append("")
 

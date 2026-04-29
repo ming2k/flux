@@ -1,6 +1,10 @@
-# Basic Drawing
+# How to Draw Basic Shapes
 
-This page shows how to express common primitive drawing tasks with flux.
+This guide assumes you already have an `fx_canvas` for the current frame. See [How to record and present a frame](record-and-present-a-frame.md) for the frame lifecycle.
+
+## When to use this
+
+Use these patterns when application or toolkit code has already reduced scene data to explicit drawing commands.
 
 ## Draw a Line
 
@@ -121,3 +125,7 @@ fx_surface_present(surface);
 fx_gradient_destroy(gradient);
 fx_path_destroy(rect);
 ```
+
+## Verification
+
+Present the frame and inspect the output surface. For automated checks, render into an offscreen surface and compare the pixels that `fx_surface_read_pixels` returns.

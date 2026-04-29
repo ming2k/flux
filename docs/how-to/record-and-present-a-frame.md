@@ -1,4 +1,10 @@
-# Frame Lifecycle
+# How to Record and Present a Frame
+
+This guide assumes you already have an `fx_surface`. For surface construction, see the [API reference](../reference/api.md).
+
+## When to use this
+
+Use this pattern for every visible or offscreen frame rendered by flux.
 
 Every visible frame follows the same shape: acquire a canvas, record commands,
 then present. The returned `fx_canvas` is frame-local and must not be kept after
@@ -28,3 +34,7 @@ Recorded operations borrow resources such as `fx_path`, `fx_image`, `fx_font`,
 and `fx_glyph_run` until present. Destroy or mutate those objects only after the
 frame has been presented unless the object is not referenced by the current
 frame.
+
+## Verification
+
+For offscreen surfaces, call `fx_surface_read_pixels` after presenting and check that the output buffer contains the expected pixels. For Wayland surfaces, verify that the compositor displays the updated frame.
