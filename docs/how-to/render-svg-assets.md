@@ -11,6 +11,34 @@ XML parsing, CSS, units, transforms, paint servers, text, clipping, masks, and
 filter semantics. The final output can still land in flux in two practical
 ways.
 
+## Workflow overview
+
+```text
+SVG file (XML + CSS + transforms + filters + text)
+      |
+      v
+[Parse and resolve]  <-- Application layer (librsvg, usvg, or custom parser)
+      |
+      +-- Option 1: Full rasterization
+      |       |
+      |       v
+      |   [RGBA pixel buffer]
+      |       |
+      |       v
+      |   fx_image_create → fx_draw_image  <-- flux layer
+      |
+      +-- Option 2: Path extraction
+              |
+              v
+          [Path commands: M, L, Q, C, A, Z]
+              |
+              v
+          fx_path_move_to / fx_path_line_to / etc.  <-- flux layer
+              |
+              v
+          fx_fill_path / fx_stroke_path
+```
+
 ## Rasterize SVG, Then Draw an Image
 
 Use a complete SVG renderer such as librsvg when fidelity matters. The SVG
@@ -31,7 +59,7 @@ fx_image *icon = fx_image_create(ctx, &(fx_image_desc){
 });
 
 fx_canvas *c = fx_surface_acquire(surface);
-fx_draw_image(c, icon, NULL, &(fx_rect){ 24.0f, 24.0f, 128.0f, 128.0f });
+fx_draw_image(c, icon, nullptr, &(fx_rect){ 24.0f, 24.0f, 128.0f, 128.0f });
 fx_surface_present(surface);
 ```
 
@@ -101,4 +129,4 @@ resolved result: pixels, paths, paints, images, or glyph runs.
 
 ## Verification
 
-Render the asset into an offscreen surface and compare the output against a known-good image, or display the asset in a Wayland surface and inspect it manually.
+Render the asset into an offscreen surface and compare the output against a known-good image, or display the asset in a Vulkan surface and inspect it manually.

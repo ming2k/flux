@@ -9,9 +9,15 @@ subprojects/
 *.so
 *.a
 
-# Editor/OS artifacts
-.codex
+# AI agent configuration
+.opencode/
+.codex/
 .claude/
+.kimi/
+.cursor/
+.aider/
+
+# Editor/OS artifacts
 .vscode/
 .idea/
 .DS_Store

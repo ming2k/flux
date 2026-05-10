@@ -1,130 +1,133 @@
-# Architecture
+# Architecture Overview
 
-This document describes the runtime shape of flux.
-
-## Object model
+flux is organised into five layers, each with a clear responsibility:
 
 ```
-┌───────────────────────┐
-│ fx_context            │  one per process
-│  • VkInstance         │  owns device selection and logging
-│  • VkDevice           │  owns context-wide caches and upload path
-│  • FT_Library         │  FreeType handle
-│  • fx_atlas           │  dynamic GPU glyph atlas
-│  • upload subsystem   │  staging buffer + cmd buffer + fence
-└──────────┬────────────┘
-           │ borrows
-  ┌────────┴──────────────────────────────────┐
-  │                                           │
-┌─▼────────────────────┐         ┌────────────▼────────┐
-│ fx_surface           │         │ fx_image, fx_font…  │
-│  • VkSurfaceKHR      │         │ (resources, shared) │
-│  • VkSwapchainKHR    │         └─────────────────────┘
-│  • render pass       │   surface-lifetime
-│  • pipelines, DSL,   │   (survive resize)
-│    samplers          │
-│  • readback staging  │   offscreen only
-│  • frames[2]         │
-│    – cmd buffer      │
-│    – vbuf_pool       │
-│    – desc_pool       │
-│    – sync objects    │
-│  • fx_canvas         │
-│    – matrix stack    │
-│    – recorded ops    │
-└──────────────────────┘
+┌─────────────────────────────────────┐
+│  API Layer       (flux.h, surface.c)│  User-facing entry points
+├─────────────────────────────────────┤
+│  State Layer     (state/)           │  Recording: display lists, transforms, clip
+├─────────────────────────────────────┤
+│  Geometry Layer  (geometry/)        │  Paths, Bézier flattening, tessellation, strokes
+├─────────────────────────────────────┤
+│  Renderer Layer  (renderer/)        │  Backend vtable + Software + Vulkan backends
+├─────────────────────────────────────┤
+│  Math Layer      (math/)            │  Matrices, rectangles, arena allocator
+└─────────────────────────────────────┘
 ```
 
-- **`fx_context`** owns the core Vulkan instance, logical device, the
-  **Dynamic Glyph Atlas**, and the **upload subsystem** (persistent
-  staging buffer + reusable command buffer + fence) that every GPU
-  upload flows through. It also holds the FreeType library handle.
-- **`fx_surface`** manages a presentation window (Wayland swapchain)
-  or an offscreen render target. Render pass, pipelines, descriptor
-  set layout, and samplers are surface-lifetime: they are built once
-  and reused across swapchain resizes. The swapchain, its images and
-  framebuffers, the stencil attachment, and the two in-flight frame
-  slots are torn down and rebuilt on every resize.
-- **`fx_canvas`** is the primary recording interface. It maintains a
-  3×3 transformation matrix stack and an operation list.
-- **Resources** (`fx_image`, `fx_path`, `fx_font`, `fx_glyph_run`) are
-  shared across surfaces. Image pixel uploads go through the
-  context's upload subsystem (`src/vk/upload.c`).
+## Layer responsibilities
 
-## Per-frame Data Flow
+### Math layer (`src/math/`)
 
-flux uses a strict separation between **Recording** and **Execution**.
+Pure computational primitives with no knowledge of rendering or geometry:
 
-### 1. Recording (CPU-Immediate)
-When drawing functions like `fx_fill_path` or `fx_draw_glyph_run` are called:
-- **Transformations:** The current affine matrix is applied during recording on the CPU. Paths and path clips may be copied into transformed internal paths; glyph runs remain borrowed while their draw origin is recorded in device space.
-- **Op Logging:** A `fx_op` is appended to the canvas's internal display list. If a transformation occurred, the canvas takes ownership of a new, transformed path object.
-- **No GPU Work:** No Vulkan commands are issued during this phase.
+| Module | Contents |
+|---|---|
+| `matrix.h/c` | 2D affine transform: multiply, transform point, identity check |
+| `rect.h` | Rectangle helpers: area check, point containment |
+| `arena.h/c` | Bump allocator for per-frame temporary geometry |
 
-### 2. Execution (GPU-Batched)
-When `fx_surface_present` is called:
-- **Tessellation:** Paths are flattened and tessellated into triangles.
-- **Stroking:** Lines are expanded into geometry based on `fx_paint` (caps/joins).
-- **Dynamic Atlas:** Missing glyphs are rasterized and uploaded to the GPU atlas.
-- **Batching:** Sequential ops with identical paint properties are grouped into a single Vulkan draw call.
-- **Vertex Upload:** Geometry is copied into the frame's dynamic linear buffer.
-- **Submission:** A single primary command buffer is submitted to the graphics queue.
+### Geometry layer (`src/geometry/`)
 
-## Source layout
+Path construction and decomposition. Depends on the math layer, but not on any rendering state or backend:
+
+| Module | Contents |
+|---|---|
+| `path.c` | Verb/point stream, Bézier flattening, arc-to-cubic, subpath iteration |
+| `tess.c` | Ear-clipping polygon triangulation |
+| `stroker.c` | Polyline → triangle mesh with caps and joins |
+
+Exports through `geometry/geometry.h`.
+
+### State layer (`src/state/`)
+
+The recording half of the two-phase architecture. Builds a display list of ops and manages the transform stack during `fx_surface_acquire`:
+
+| Module | Contents |
+|---|---|
+| `canvas.c` | Op recording: fill rect, fill path, stroke path, draw image, draw glyphs, clip ops |
+| `state.h` | `fx_op`, `fx_op_kind`, and canvas helpers |
+
+### Renderer layer (`src/renderer/`)
+
+**This is the architectural keystone.** The `fx_renderer` vtable abstracts all backend-specific rendering behind a single interface:
 
 ```
-include/flux/           public headers
-  flux.h                core types, matrix stack, paint, recorder
-  flux_wayland.h        wayland surface constructor
-  flux_vulkan.h         explicit Vulkan interop entry points
-
-src/
-  internal.h            shared internal declarations
-  context.c             fx_context lifecycle, logging, FT initialization
-  canvas.c              op recording, matrix stack, paint init
-  image.c               GPU image creation and pixel upload
-  path.c                path storage, matrix math, path transforms
-  surface.c             fx_surface lifecycle, batching, VK execution
-  stroker.c             SVG-grade line cap and join expansion
-  tess.c                simple polygon triangulation
-  text.c                FreeType/HarfBuzz glue, Dynamic Atlas manager
-  vk/
-    device.c            instance + device + queue selection
-    memory.c            dynamic ring buffer allocator (vbuf_pool)
-    upload.c            unified GPU upload (staging + cmd + fence)
-    swapchain.c         swapchain, render pass, and pipeline creation
-  shaders/
-    solid.vert/frag     solid geometry shader
-    image.vert/frag     textured quad shader
-    text.frag           alpha-coverage text shader
-    gradient.*          linear and radial gradients
-    stencil.frag        stencil-only passes for path clips
-    blur.frag           separable Gaussian blur
-
-examples/               runnable demos (hello_rect)
-tests/                  unit tests (transforms, stroker, foundation)
+fx_renderer_vtbl {
+    begin_frame, begin_pass, end_pass, submit
+    alloc_solid, alloc_image
+    draw_solid, flush_solid, draw_image, draw_text, draw_gradient
+    scissor, stencil_clear, stencil_fill, stencil_ref
+    cover_solid, cover_gradient
+    texture_alloc, texture_free, texture_update
+    read_pixels
+}
 ```
 
-## Error Model
+With this vtable, the execution engine (`engine.c`) has **zero** knowledge of Vulkan or software pixel buffers. Adding a new backend means implementing the vtable — the entire stack above it remains unchanged.
 
-flux uses a "creation-time return, runtime-internal" error model:
-- **Creation Failures:** (`fx_context_create`, etc.) return `NULL` and log the reason.
-- **Resource Limits:** Dynamic growth (vbuf, atlas, upload staging) is handled internally. The glyph atlas in particular evicts all cached entries and reuses its texture when a new glyph does not fit; the event is logged as a warning.
-- **Validation:** Integrated Vulkan validation layers route messages to the application's log handler.
+Current backends:
 
-## Surface Lifecycle
+| Backend | File | Description |
+|---|---|---|
+| **Software** | `renderer/software.c` | CPU scanline rasteriser with stencil buffer (~800 LOC). Proves the vtable fully. |
+| **Vulkan** | `renderer/vulkan/` | Stub ready for porting existing Vulkan code behind the vtable. |
 
-Surface-scoped state has two tiers with different lifetimes:
+### Execution engine (`engine.c`)
 
-| Tier | Built by | Torn down by | Survives resize? |
-|---|---|---|---|
-| Swapchain, swapchain images, framebuffers, stencil attachment, per-frame sync objects | `fx_swapchain_build` | `fx_swapchain_destroy` | No |
-| Render pass, descriptor set layout, pipeline layouts, pipelines, samplers, offscreen image and framebuffer | first `fx_swapchain_build` / `fx_surface_create_offscreen` | `fx_surface_destroy_pipelines` | Yes |
+Backend-agnostic op executor. Consumes a recorded display list and calls the renderer vtable for every op. Handles:
 
-Resizing a swapchain surface calls `fx_swapchain_destroy` followed
-by `fx_swapchain_build`; the second tier is preserved so a resize
-does not pay the pipeline creation cost.
+- Path → polyline flattening (delegates to geometry layer)
+- Polygon triangulation (delegates to geometry layer)
+- Stroke expansion (delegates to geometry layer)
+- Stencil-based multi-subpath path fill (renders fill-stencil + cover through vtable)
+- Clipping (scissor + stencil through vtable)
 
-## Related decisions
+### Resource layer (`src/resource/`)
 
-- [ADR-0002: Keep flux as a low-level rendering substrate](../adr/0002-keep-flux-as-low-level-rendering-substrate.md)
+Lifecycle-managed objects: context, images, glyph runs.
+
+## Data flow: two-phase architecture
+
+```
+Phase 1 — Recording (CPU, immediate)
+=====================================
+fx_surface_acquire() → fx_canvas*
+    │
+    ├── fx_fill_rect()        → append FX_OP_FILL_RECT
+    ├── fx_fill_path()        → append FX_OP_FILL_PATH
+    ├── fx_stroke_path()      → append FX_OP_STROKE_PATH
+    ├── fx_draw_image()       → append FX_OP_DRAW_IMAGE
+    ├── fx_draw_glyph_run()   → append FX_OP_DRAW_GLYPHS
+    ├── fx_clip_rect()        → append FX_OP_CLIP_RECT
+    └── fx_clip_path()        → append FX_OP_CLIP_PATH
+
+Phase 2 — Execute (at fx_surface_present)
+==========================================
+fx_engine_execute(canvas, renderer)
+    │
+    ├── For each op:
+    │   ├── Tessellate / flatten paths (geometry layer)
+    │   ├── Allocate vertices via renderer->alloc_solid/alloc_image
+    │   ├── Issue draws via renderer->draw_solid/draw_image/etc.
+    │   └── Manage clip state via renderer->scissor/stencil_*
+    │
+    └── renderer->submit()    (present to screen or make pixels readable)
+```
+
+## Key design decisions
+
+1. **Vtable at the renderer boundary** — the execution engine never calls a graphics API directly. Every pixel-related operation goes through `fx_renderer_vt`. This is the separation that enables multiple backends.
+
+2. **Opaque resource handles** — `fx_r_buffer` and `fx_r_texture` are interpreted only by the renderer. The engine allocates vertices through the renderer without knowing if they live in a Vulkan VkBuffer or a malloc'd array.
+
+3. **Batching lives in the renderer** — consecutive same-color solid draws are batched by the renderer internally. The engine just issues `draw_solid()` calls; the renderer decides when to flush.
+
+4. **Two-phase recording/execution preserved** — the existing architectural strength (CPU records while GPU renders) is maintained. The renderer vtable simply makes the "execute" phase backend-swappable.
+
+## See also
+
+- [Rendering pipeline](rendering-pipeline.md) — detailed op-by-op walkthrough.
+- [ADR-0003: Renderer vtable abstraction](../adr/0003-renderer-vtable.md) — decision record.
+- [Graphics foundations](graphics-foundations.md) — prerequisite hardware concepts.

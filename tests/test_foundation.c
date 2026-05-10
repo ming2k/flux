@@ -17,7 +17,7 @@ static bool test_path_object(void)
     fx_path *path = fx_path_create();
     fx_rect bounds = { 0 };
 
-    CHECK(path != NULL);
+    CHECK(path != nullptr);
     CHECK(fx_path_add_rect(path, &(fx_rect){ 10.0f, 20.0f, 30.0f, 40.0f }));
     CHECK(fx_path_verb_count(path) == 5);
     CHECK(fx_path_point_count(path) == 4);
@@ -80,16 +80,16 @@ static bool test_image_object(void)
         .data = pixels,
     });
 
-    CHECK(image != NULL);
+    CHECK(image != nullptr);
     CHECK(fx_image_get_desc(image, &out_desc));
     CHECK(out_desc.width == 2);
     CHECK(out_desc.height == 2);
     CHECK(out_desc.format == FX_FMT_RGBA8_UNORM);
     CHECK(out_desc.stride == 8);
-    CHECK(out_desc.data == NULL);
+    CHECK(out_desc.data == nullptr);
 
     copied_pixels = fx_image_data(image, &size, &stride);
-    CHECK(copied_pixels != NULL);
+    CHECK(copied_pixels != nullptr);
     CHECK(size == sizeof(pixels));
     CHECK(stride == 8);
     CHECK(memcmp(copied_pixels, pixels, sizeof(pixels)) == 0);
@@ -101,40 +101,18 @@ static bool test_image_object(void)
     return true;
 }
 
-static bool test_font_and_glyph_run(void)
+static bool test_glyph_run(void)
 {
-    fx_context fake_ctx = { 0 };
-    FT_Init_FreeType(&fake_ctx.ft_lib);
-
-    fx_font_desc desc = {
-        .family = "Noto Sans",
-        .source_name = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        .size = 16.0f,
-    };
-    fx_font_desc out_desc = { 0 };
-    const fx_glyph *glyphs;
-    fx_font *font = fx_font_create(&fake_ctx, &desc);
-    if (!font) {
-        /* Fallback if DejaVuSans is missing */
-        FT_Done_FreeType(fake_ctx.ft_lib);
-        return true;
-    }
     fx_glyph_run *run = fx_glyph_run_create(1);
 
-    CHECK(font != NULL);
-    CHECK(fx_font_get_desc(font, &out_desc));
-    CHECK(strcmp(out_desc.family, "Noto Sans") == 0);
-    CHECK(out_desc.size == 16.0f);
-
-
-    CHECK(run != NULL);
+    CHECK(run != nullptr);
     CHECK(fx_glyph_run_count(run) == 0);
     CHECK(fx_glyph_run_append(run, 17, 1.5f, 2.5f));
     CHECK(fx_glyph_run_append(run, 23, 11.5f, 2.5f));
     CHECK(fx_glyph_run_count(run) == 2);
 
-    glyphs = fx_glyph_run_data(run);
-    CHECK(glyphs != NULL);
+    const fx_glyph *glyphs = fx_glyph_run_data(run);
+    CHECK(glyphs != nullptr);
     CHECK(glyphs[0].glyph_id == 17);
     CHECK(glyphs[0].x == 1.5f);
     CHECK(glyphs[1].glyph_id == 23);
@@ -144,15 +122,12 @@ static bool test_font_and_glyph_run(void)
     CHECK(fx_glyph_run_count(run) == 0);
 
     fx_glyph_run_destroy(run);
-    fx_font_destroy(font);
-    FT_Done_FreeType(fake_ctx.ft_lib);
     return true;
 }
 
 static bool test_canvas_recording(void)
 {
     fx_context fake_ctx = { 0 };
-    FT_Init_FreeType(&fake_ctx.ft_lib);
     fx_surface surface = { 0 };
     uint32_t pixels[4] = {
         0x01020304u, 0x05060708u,
@@ -165,23 +140,19 @@ static bool test_canvas_recording(void)
         .format = FX_FMT_RGBA8_UNORM,
         .data = pixels,
     });
-    fx_font *font = fx_font_create(&fake_ctx, &(fx_font_desc){
-        .family = "Mono",
-        .size = 14.0f,
-        .source_name = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-    });
     fx_glyph_run *empty_run = fx_glyph_run_create(0);
     fx_glyph_run *run = fx_glyph_run_create(2);
 
-    CHECK(path != NULL);
-    CHECK(image != NULL);
-    CHECK(empty_run != NULL);
-    CHECK(run != NULL);
+    CHECK(path != nullptr);
+    CHECK(image != nullptr);
+    CHECK(empty_run != nullptr);
+    CHECK(run != nullptr);
     CHECK(fx_path_add_rect(path, &(fx_rect){ 5.0f, 6.0f, 7.0f, 8.0f }));
     CHECK(fx_glyph_run_append(run, 9, 1.0f, 2.0f));
 
     surface.canvas.owner = &surface;
     fx_matrix_identity(&surface.canvas.current_matrix);
+    surface.canvas.dpr = 1.0f;
     CHECK(fx_canvas_op_count(&surface.canvas) == 0);
 
     fx_clear(&surface.canvas, fx_color_rgba(1, 2, 3, 255));
@@ -200,7 +171,7 @@ static bool test_canvas_recording(void)
 
     /* Multi-subpath paths are accepted by fill and stroke */
     fx_path *multi = fx_path_create();
-    CHECK(multi != NULL);
+    CHECK(multi != nullptr);
     CHECK(fx_path_move_to(multi, 0.0f, 0.0f));
     CHECK(fx_path_line_to(multi, 10.0f, 0.0f));
     CHECK(fx_path_line_to(multi, 10.0f, 10.0f));
@@ -213,17 +184,14 @@ static bool test_canvas_recording(void)
     CHECK(fx_stroke_path(&surface.canvas, multi, &paint));
     fx_path_destroy(multi);
 
-    CHECK(fx_draw_image(&surface.canvas, image, NULL,
+    CHECK(fx_draw_image(&surface.canvas, image, nullptr,
                         &(fx_rect){ 20.0f, 30.0f, 40.0f, 50.0f }));
 
     paint.color = fx_color_rgba(255, 255, 255, 255);
-    if (font) {
-        CHECK(!fx_draw_glyph_run(&surface.canvas, font,
-                                 empty_run, 0.0f, 0.0f, &paint));
-        CHECK(fx_draw_glyph_run(&surface.canvas, font, run, 100.0f, 200.0f, &paint));
-    }
+    CHECK(!fx_draw_glyph_run(&surface.canvas, empty_run, 0.0f, 0.0f, &paint));
+    CHECK(fx_draw_glyph_run(&surface.canvas, run, 100.0f, 200.0f, &paint));
 
-    CHECK(fx_canvas_op_count(&surface.canvas) == (font ? 6 : 5));
+    CHECK(fx_canvas_op_count(&surface.canvas) == 6);
     CHECK(surface.canvas.ops[0].kind == FX_OP_FILL_PATH);
     CHECK(surface.canvas.ops[0].u.fill_path.path == path);
     CHECK(surface.canvas.ops[1].kind == FX_OP_STROKE_PATH);
@@ -236,11 +204,9 @@ static bool test_canvas_recording(void)
     CHECK(surface.canvas.ops[4].u.draw_image.src.w == 2.0f);
     CHECK(surface.canvas.ops[4].u.draw_image.src.h == 2.0f);
     CHECK(surface.canvas.ops[4].u.draw_image.dst.x == 20.0f);
-    if (font) {
-        CHECK(surface.canvas.ops[5].kind == FX_OP_DRAW_GLYPHS);
-        CHECK(surface.canvas.ops[5].u.draw_glyphs.run == run);
-        CHECK(surface.canvas.ops[5].u.draw_glyphs.x == 100.0f);
-    }
+    CHECK(surface.canvas.ops[5].kind == FX_OP_DRAW_GLYPHS);
+    CHECK(surface.canvas.ops[5].u.draw_glyphs.run == run);
+    CHECK(surface.canvas.ops[5].u.draw_glyphs.x == 100.0f);
 
     surface.canvas.op_count = 0;
     surface.canvas.has_clear = false;
@@ -249,16 +215,14 @@ static bool test_canvas_recording(void)
     CHECK(!surface.canvas.has_clear);
 
     free(surface.canvas.ops);
-    surface.canvas.ops = NULL;
+    surface.canvas.ops = nullptr;
     surface.canvas.op_cap = 0;
-    CHECK(surface.canvas.ops == NULL);
+    CHECK(surface.canvas.ops == nullptr);
 
     fx_glyph_run_destroy(empty_run);
     fx_glyph_run_destroy(run);
-    if (font) fx_font_destroy(font);
     fx_image_destroy(image);
     fx_path_destroy(path);
-    FT_Done_FreeType(fake_ctx.ft_lib);
     return true;
 }
 
@@ -266,7 +230,7 @@ int main(void)
 {
     if (!test_path_object()) return 1;
     if (!test_image_object()) return 1;
-    if (!test_font_and_glyph_run()) return 1;
+    if (!test_glyph_run()) return 1;
     if (!test_canvas_recording()) return 1;
     return 0;
 }

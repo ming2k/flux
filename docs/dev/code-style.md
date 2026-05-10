@@ -78,23 +78,14 @@ require a reader to look up the meaning.
 ## Error handling
 
 ```c
-// Creating something: return NULL, log before returning
-fx_surface *fx_surface_create_wayland(...) {
+// Creating something: return nullptr, log before returning
+fx_surface *fx_surface_create_offscreen(...) {
     ...
     if (something_failed) {
         FX_LOGE(ctx, "meaningful message: %d", code);
         free(s);
-        return NULL;
+        return nullptr;
     }
-}
-
-// Vulkan calls: FX_TRY_VK logs the error and returns false on failure
-FX_TRY_VK(ctx, vkQueueSubmit(queue, 1, &si, fence));
-
-// Draw calls: silent no-op on null inputs
-void fx_clear(fx_canvas *c, fx_color color) {
-    if (!c) return;
-    ...
 }
 ```
 
@@ -105,23 +96,51 @@ runtime (loop postconditions, etc.).
 
 ## Logging
 
+Five compile-time macros emit log messages, ordered by severity:
+
 ```c
-FX_LOGE(ctx, "format %s", arg);   // error — always printed
-FX_LOGW(ctx, "format %s", arg);   // warning
-FX_LOGI(ctx, "format %s", arg);   // info — startup events, sizes
+FX_LOGT(ctx, "format %s", arg);   // trace — very verbose internals
 FX_LOGD(ctx, "format %s", arg);   // debug — per-frame events
+FX_LOGI(ctx, "format %s", arg);   // info — startup events, sizes
+FX_LOGW(ctx, "format %s", arg);   // warning
+FX_LOGE(ctx, "format %s", arg);   // error — always printed
 ```
 
-In hot-path code, wrap `FX_LOGD` calls behind a compile-time check:
+### Compile-time elision
+
+`FX_LOGD` and `FX_LOGT` expand to nothing in `NDEBUG` builds (the default
+for release builds via meson `b_ndebug=if-release`). They incur **zero**
+overhead in shipped binaries. `FX_LOGI/W/E` are never elided.
+
+### Runtime filtering
+
+`fx_context_desc.min_log_level` controls the lowest severity that is
+actually formatted and emitted. The default is `FX_LOG_INFO`. Setting it
+to `FX_LOG_DEBUG` or `FX_LOG_TRACE` requires a non-`NDEBUG` build.
+
+### Custom log sink
 
 ```c
-#ifdef FX_DEBUG
-    FX_LOGD(ctx, "ring grew to %zu bytes", new_size);
-#endif
+void my_log(fx_log_level level,
+            const char *file, int line,
+            const char *fmt, const char *msg,
+            void *user);
 ```
 
-The default log sink writes to `stderr`. Users can supply their own
-`fx_log_fn` through `fx_context_desc`.
+The callback receives the source `file`, `line`, the original `fmt`
+string, and the already-formatted `msg`. This lets a structured logger
+re-parse the format arguments or forward the plain message without
+allocating.
+
+The default sink writes ISO-8601 timestamps and `file:line` to `stderr`:
+
+```
+[2026-05-01T12:34:56.789Z][flux E][device.c:108] vkCreateDevice failed: -3
+```
+
+`stderr` is locked with `flockfile` so interleaved messages from
+multiple threads are impossible (flux itself is single-threaded per
+context, but the application may log from other threads).
 
 ## Memory
 

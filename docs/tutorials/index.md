@@ -1,8 +1,9 @@
 # Tutorials
 
-Step-by-step lessons that take you from a fresh checkout to a verified local build.
+Step-by-step lessons that take you from a fresh checkout to a working application.
 
-1. [Getting Started](01-getting-started.md) - Build flux and run the unit smoke tests. (~10 min)
+1. [Getting Started](01-getting-started.md) — Build flux and run the unit smoke tests. (~10 min)
+2. [Building an Application](02-building-an-application.md) — Build a responsive UI with text, images, and clipping. (~30 min)
 
 ## Looking for something else?
 

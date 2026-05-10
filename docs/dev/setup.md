@@ -5,31 +5,24 @@ This document is for contributors who will modify flux source code. If you only 
 ## Prerequisites
 
 | Tool | Minimum | Why |
-|---|---|---|
-| GCC or Clang | GCC 12 / Clang 15 | C11 + GNU extensions |
+|---|---|---|---|
+| GCC or Clang | GCC 15 / Clang 18 | C23 |
 | Meson | 1.3 | build system |
 | Ninja | 1.10 | build backend |
 | Vulkan SDK | 1.2 | headers + loader |
-| wayland-client | 1.20 | Wayland IPC |
-| wayland-protocols | 1.25 | xdg-shell XML |
-| wayland-scanner | (with wayland-client) | code generation |
-| FreeType | 2.13 | font rasterization |
-| HarfBuzz | 8 | text shaping |
 | glslangValidator | any recent | shader compilation |
 | python3 | 3.8 | bin2c script |
 
 On Arch Linux:
 
 ```
-pacman -S vulkan-devel wayland wayland-protocols \
-          freetype2 harfbuzz glslang python meson ninja
+pacman -S vulkan-devel glslang python meson ninja
 ```
 
 On Ubuntu / Debian:
 
 ```
-apt install libvulkan-dev libwayland-dev wayland-protocols \
-            libfreetype-dev libharfbuzz-dev glslang-tools \
+apt install libvulkan-dev glslang-tools \
             python3 meson ninja-build
 ```
 
@@ -49,9 +42,6 @@ meson setup build --buildtype=release
 # build only the library, no examples
 meson setup build -Dexamples=false
 
-# force Wayland off (offscreen-only context)
-meson setup build -Dwayland=disabled
-
 # compile-in Vulkan validation layer support
 meson setup build -Dvalidation=enabled
 ```
@@ -63,22 +53,18 @@ meson configure build -Dexamples=true
 ninja -C build
 ```
 
-## Running examples
-
-There is one example: `hello_rect`. It requires an active Wayland
-compositor session (WAYLAND_DISPLAY must be set).
+## Running tests
 
 ```sh
-build/examples/hello_rect
+meson test -C build
 ```
 
-The window shows a slowly colour-cycling background. Close with the
-window manager or Ctrl-C.
+All tests run offscreen and do not require a display server.
 
 ## Validation layers
 
 ```sh
-FX_ENABLE_VALIDATION=1 build/examples/hello_rect
+FX_ENABLE_VALIDATION=1 meson test -C build
 ```
 
 This enables `VK_LAYER_KHRONOS_validation` and a debug messenger that
@@ -104,9 +90,19 @@ without it.
 
 ### Verbose logging
 
-To get debug-level messages, add `FX_LOG_DEBUG` calls in the area of
-interest and rebuild. A runtime flag (`FX_LOG_LEVEL=debug`) may be
-added in the future.
+`FX_LOGD` and `FX_LOGT` are elided in `NDEBUG` builds. To see debug or
+trace output, build with `--buildtype=debug` (which disables `NDEBUG`)
+and set `min_log_level` to `FX_LOG_DEBUG` or `FX_LOG_TRACE` in
+`fx_context_desc`:
+
+```c
+fx_context_desc desc = {
+    .min_log_level = FX_LOG_DEBUG,
+};
+```
+
+The default `stderr` sink includes ISO-8601 timestamps and
+`file:line` locations.
 
 ### GDB / LLDB
 
@@ -116,7 +112,7 @@ Both work normally — flux is a standard shared library. Build with
 ```sh
 meson setup build-debug --buildtype=debug
 ninja -C build-debug
-gdb --args build-debug/examples/hello_rect
+gdb --args build-debug/tests/test_foundation
 ```
 
 ### RenderDoc
@@ -125,7 +121,7 @@ RenderDoc can capture Vulkan frames from any flux application. Launch
 via the RenderDoc GUI or:
 
 ```sh
-renderdoccmd capture -c capture.rdc build/examples/hello_rect
+renderdoccmd capture -c capture.rdc build/tests/test_offscreen
 ```
 
 RenderDoc is particularly useful for inspecting the render pass clear
@@ -141,7 +137,7 @@ colour, the tessellated geometry, and atlas textures.
 Activate any layer via the environment:
 
 ```sh
-VK_INSTANCE_LAYERS=VK_LAYER_LUNARG_api_dump build/examples/hello_rect
+VK_INSTANCE_LAYERS=VK_LAYER_LUNARG_api_dump meson test -C build
 ```
 
 ## Incremental development loop
@@ -149,7 +145,7 @@ VK_INSTANCE_LAYERS=VK_LAYER_LUNARG_api_dump build/examples/hello_rect
 For tight iteration on a single file:
 
 ```sh
-ninja -C build src/libflux.so && build/examples/hello_rect
+ninja -C build src/libflux.so && meson test -C build
 ```
 
 Ninja's dependency graph means only the modified TU recompiles.

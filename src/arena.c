@@ -2,7 +2,7 @@
 
 void fx_arena_init(fx_arena *arena, size_t block_size)
 {
-    arena->head = NULL;
+    arena->head = nullptr;
     arena->block_size = block_size > 0 ? block_size : 65536;
 }
 
@@ -14,7 +14,7 @@ void fx_arena_destroy(fx_arena *arena)
         free(curr);
         curr = next;
     }
-    arena->head = NULL;
+    arena->head = nullptr;
 }
 
 void *fx_arena_alloc(fx_arena *arena, size_t size)
@@ -30,7 +30,7 @@ void *fx_arena_alloc(fx_arena *arena, size_t size)
 
     size_t alloc_size = size > arena->block_size ? size : arena->block_size;
     fx_arena_block *block = malloc(sizeof(fx_arena_block) + alloc_size);
-    if (!block) return NULL;
+    if (!block) return nullptr;
 
     block->size = alloc_size;
     block->used = size;

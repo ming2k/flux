@@ -54,7 +54,7 @@ static void test_clip_rect(void)
     fx_clip_rect(c, &clip);
 
     fx_rect fill = { .x = 0, .y = 0, .w = 64, .h = 64 };
-    fx_fill_rect(c, &fill, BLUE);
+    (void)fx_fill_rect(c, &fill, BLUE);
 
     fx_surface_present(s);
 
@@ -101,11 +101,11 @@ static void test_clip_reset(void)
     fx_rect clip = { .x = 0, .y = 0, .w = 16, .h = 16 };
     fx_clip_rect(c, &clip);
     fx_rect fill = { .x = 0, .y = 0, .w = 64, .h = 64 };
-    fx_fill_rect(c, &fill, BLUE);
+    (void)fx_fill_rect(c, &fill, BLUE);
 
     /* Reset clip and fill entire surface green */
     fx_reset_clip(c);
-    fx_fill_rect(c, &fill, GREEN);
+    (void)fx_fill_rect(c, &fill, GREEN);
 
     fx_surface_present(s);
 
@@ -144,7 +144,7 @@ static void test_clip_partial(void)
     fx_rect clip = { .x = 16, .y = 16, .w = 32, .h = 32 };
     fx_clip_rect(c, &clip);
     fx_rect fill = { .x = 0, .y = 0, .w = 64, .h = 64 };
-    fx_fill_rect(c, &fill, BLUE);
+    (void)fx_fill_rect(c, &fill, BLUE);
 
     fx_surface_present(s);
 
@@ -198,7 +198,7 @@ static void test_clip_path(void)
     fx_clip_path(c, path);
 
     fx_rect fill = { .x = 0, .y = 0, .w = 64, .h = 64 };
-    fx_fill_rect(c, &fill, BLUE);
+    (void)fx_fill_rect(c, &fill, BLUE);
 
     fx_surface_present(s);
 

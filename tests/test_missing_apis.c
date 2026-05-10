@@ -31,7 +31,7 @@ int main(void)
     fx_surface *s = fx_surface_create_offscreen(ctx, 32, 32,
                                                 FX_FMT_RGBA8_UNORM,
                                                 FX_CS_SRGB);
-    CHECK(s != NULL);
+    CHECK(s != nullptr);
     fx_surface_resize(s, 64, 64);
     /* Resize doesn't take effect until next acquire on swapchain surfaces;
      * for offscreen it is a no-op, but it must not crash. */
@@ -54,30 +54,33 @@ int main(void)
         .format = FX_FMT_RGBA8_UNORM,
         .data = &(uint32_t[4]){ 0xFF0000FF, 0x00FF00FF, 0x0000FFFF, 0xFFFFFFFF },
     });
-    CHECK(img != NULL);
+    CHECK(img != nullptr);
 
     s = fx_surface_create_offscreen(ctx, 16, 16,
                                     FX_FMT_RGBA8_UNORM, FX_CS_SRGB);
     fx_canvas *c = fx_surface_acquire(s);
-    CHECK(fx_draw_image(c, img, NULL, &(fx_rect){ 0, 0, 2, 2 }));
+    CHECK(fx_draw_image(c, img, nullptr, &(fx_rect){ 0, 0, 2, 2 }));
     fx_surface_present(s);
     fx_surface_destroy(s);
     fx_image_destroy(img);
 
-    /* fx_font_get_hb_font */
-    fx_font *font = fx_font_create(ctx, &(fx_font_desc){
-        .family = "Test",
-        .source_name = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        .size = 16.0f,
-    });
-    if (font) {
-        CHECK(fx_font_get_hb_font(font) != NULL);
-        float asc = 0, desc = 0;
-        fx_font_get_metrics(font, &asc, &desc);
-        CHECK(asc > 0.0f);
-        CHECK(desc <= 0.0f);
-        fx_font_destroy(font);
-    }
+    /* Glyph upload and draw */
+    uint8_t glyph_bitmap[4] = { 255, 255, 255, 255 };
+    CHECK(fx_glyph_upload(ctx, 1, glyph_bitmap, 2, 2, 0, 2, 2));
+
+    fx_glyph_run *run = fx_glyph_run_create(1);
+    CHECK(run != nullptr);
+    CHECK(fx_glyph_run_append(run, 1, 0.0f, 0.0f));
+
+    s = fx_surface_create_offscreen(ctx, 8, 8, FX_FMT_RGBA8_UNORM, FX_CS_SRGB);
+    CHECK(s != nullptr);
+    c = fx_surface_acquire(s);
+    fx_paint paint;
+    fx_paint_init(&paint, fx_color_rgba(255, 255, 255, 255));
+    CHECK(fx_draw_glyph_run(c, run, 0.0f, 0.0f, &paint));
+    fx_surface_present(s);
+    fx_surface_destroy(s);
+    fx_glyph_run_destroy(run);
 
     fx_context_destroy(ctx);
     printf("missing_apis OK\n");

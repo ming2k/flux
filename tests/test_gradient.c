@@ -38,7 +38,7 @@ int main(void)
     fx_surface *s = fx_surface_create_offscreen(ctx, 64, 64,
                                                 FX_FMT_RGBA8_UNORM,
                                                 FX_CS_SRGB);
-    CHECK(s != NULL);
+    CHECK(s != nullptr);
 
     /* --- Linear gradient: red → blue, left to right --- */
     fx_gradient *lin = fx_gradient_create_linear(ctx, &(fx_linear_gradient_desc){
@@ -48,10 +48,10 @@ int main(void)
         .stops = { 0.0f, 1.0f },
         .stop_count = 2,
     });
-    CHECK(lin != NULL);
+    CHECK(lin != nullptr);
 
     fx_canvas *c = fx_surface_acquire(s);
-    CHECK(c != NULL);
+    CHECK(c != nullptr);
 
     fx_paint paint;
     fx_paint_init(&paint, fx_color_rgba(0, 0, 0, 255));
@@ -59,7 +59,7 @@ int main(void)
 
     fx_path *rect_path = fx_path_create();
     fx_path_add_rect(rect_path, &(fx_rect){ 0.0f, 0.0f, 64.0f, 64.0f });
-    fx_fill_path(c, rect_path, &paint);
+    (void)fx_fill_path(c, rect_path, &paint);
     fx_surface_present(s);
 
     uint8_t *pixels = malloc(64 * 64 * 4);
@@ -86,14 +86,14 @@ int main(void)
         .stops = { 0.0f, 1.0f },
         .stop_count = 2,
     });
-    CHECK(rad != NULL);
+    CHECK(rad != nullptr);
 
     c = fx_surface_acquire(s);
     fx_paint_init(&paint, fx_color_rgba(0, 0, 0, 255));
     fx_paint_set_gradient(&paint, rad);
     rect_path = fx_path_create();
     fx_path_add_rect(rect_path, &(fx_rect){ 0.0f, 0.0f, 64.0f, 64.0f });
-    fx_fill_path(c, rect_path, &paint);
+    (void)fx_fill_path(c, rect_path, &paint);
     fx_surface_present(s);
 
     pixels = malloc(64 * 64 * 4);

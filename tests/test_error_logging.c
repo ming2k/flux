@@ -5,9 +5,12 @@
 static int g_error_count = 0;
 static int g_warn_count = 0;
 
-static void test_log_fn(fx_log_level level, const char *msg, void *user)
+static void test_log_fn(fx_log_level level,
+                        [[maybe_unused]] const char *file,
+                        [[maybe_unused]] int line,
+                        [[maybe_unused]] const char *fmt, const char *msg,
+                        [[maybe_unused]] void *user)
 {
-    (void)user;
     if (level == FX_LOG_ERROR) {
         g_error_count++;
         fprintf(stderr, "[ERROR] %s\n", msg);
@@ -30,7 +33,8 @@ static bool test_no_errors_on_valid_usage(void)
     fx_context_desc desc = {
         .app_name = "test_error_logging",
         .log = test_log_fn,
-        .log_user = NULL,
+        .log_user = nullptr,
+        .min_log_level = FX_LOG_INFO,
         .enable_validation = false,
     };
 
@@ -67,9 +71,9 @@ static bool test_no_errors_on_valid_usage(void)
 static bool test_errors_on_null_image_create(void)
 {
     g_error_count = 0;
-    fx_image *img = fx_image_create(NULL, NULL);
-    CHECK(img == NULL);
-    /* fx_image_create with NULL args should fail gracefully */
+    fx_image *img = fx_image_create(nullptr, nullptr);
+    CHECK(img == nullptr);
+    /* fx_image_create with nullptr args should fail gracefully */
     return true;
 }
 
@@ -77,8 +81,8 @@ static bool test_image_create_null_desc(void)
 {
     fx_context fake_ctx = { 0 };
     g_error_count = 0;
-    fx_image *img = fx_image_create(&fake_ctx, NULL);
-    CHECK(img == NULL);
+    fx_image *img = fx_image_create(&fake_ctx, nullptr);
+    CHECK(img == nullptr);
     return true;
 }
 

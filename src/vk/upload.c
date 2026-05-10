@@ -41,7 +41,7 @@ static bool ensure_staging(fx_context *ctx, size_t size)
                          ctx->upload.staging_alloc);
         ctx->upload.staging_buffer = VK_NULL_HANDLE;
         ctx->upload.staging_alloc = VK_NULL_HANDLE;
-        ctx->upload.staging_mapped = NULL;
+        ctx->upload.staging_mapped = nullptr;
     }
 
     size_t want = next_pow2(size);
@@ -85,7 +85,7 @@ bool fx_upload_init(fx_context *ctx)
     }
 
     VkFenceCreateInfo fci = { .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
-    if (vkCreateFence(ctx->device, &fci, NULL, &ctx->upload.fence)
+    if (vkCreateFence(ctx->device, &fci, nullptr, &ctx->upload.fence)
         != VK_SUCCESS) {
         vkFreeCommandBuffers(ctx->device, ctx->frame_cmd_pool, 1,
                              &ctx->upload.cmd);
@@ -103,10 +103,10 @@ void fx_upload_shutdown(fx_context *ctx)
                          ctx->upload.staging_alloc);
         ctx->upload.staging_buffer = VK_NULL_HANDLE;
         ctx->upload.staging_alloc = VK_NULL_HANDLE;
-        ctx->upload.staging_mapped = NULL;
+        ctx->upload.staging_mapped = nullptr;
     }
     if (ctx->upload.fence) {
-        vkDestroyFence(ctx->device, ctx->upload.fence, NULL);
+        vkDestroyFence(ctx->device, ctx->upload.fence, nullptr);
         ctx->upload.fence = VK_NULL_HANDLE;
     }
     if (ctx->upload.cmd) {
@@ -172,7 +172,7 @@ bool fx_upload_image(fx_context *ctx, VkImage image,
     };
     vkCmdPipelineBarrier(ctx->upload.cmd, src_stage,
                          VK_PIPELINE_STAGE_TRANSFER_BIT,
-                         0, 0, NULL, 0, NULL, 1, &to_dst);
+                         0, 0, nullptr, 0, nullptr, 1, &to_dst);
 
     VkBufferImageCopy region = {
         .bufferOffset = 0,
@@ -199,7 +199,7 @@ bool fx_upload_image(fx_context *ctx, VkImage image,
     vkCmdPipelineBarrier(ctx->upload.cmd,
                          VK_PIPELINE_STAGE_TRANSFER_BIT,
                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                         0, 0, NULL, 0, NULL, 1, &to_final);
+                         0, 0, nullptr, 0, nullptr, 1, &to_final);
 
     vkEndCommandBuffer(ctx->upload.cmd);
 

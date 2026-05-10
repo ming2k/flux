@@ -7,7 +7,7 @@
 static fx_vbuf_chunk *chunk_create(fx_context *ctx, size_t size)
 {
     fx_vbuf_chunk *chunk = calloc(1, sizeof(*chunk));
-    if (!chunk) return NULL;
+    if (!chunk) return nullptr;
 
     VkBufferCreateInfo bci = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -26,7 +26,7 @@ static fx_vbuf_chunk *chunk_create(fx_context *ctx, size_t size)
     if (vmaCreateBuffer(ctx->vma_allocator, &bci, &aci,
                         &chunk->buffer, &chunk->alloc, &ainfo) != VK_SUCCESS) {
         free(chunk);
-        return NULL;
+        return nullptr;
     }
 
     chunk->map = ainfo.pMappedData;
@@ -37,7 +37,7 @@ static fx_vbuf_chunk *chunk_create(fx_context *ctx, size_t size)
 void fx_vbuf_pool_init(fx_vbuf_pool *pool, fx_context *ctx)
 {
     pool->ctx = ctx;
-    pool->head = NULL;
+    pool->head = nullptr;
     pool->cursor = 0;
     pool->next_size = INITIAL_CHUNK_SIZE;
 }
@@ -51,7 +51,7 @@ void fx_vbuf_pool_destroy(fx_vbuf_pool *pool)
         free(chunk);
         chunk = next;
     }
-    pool->head = NULL;
+    pool->head = nullptr;
 }
 
 void fx_vbuf_pool_reset(fx_vbuf_pool *pool)
@@ -70,7 +70,7 @@ void *fx_vbuf_pool_alloc(fx_vbuf_pool *pool, size_t size,
         if (size > new_size) new_size = size;
 
         fx_vbuf_chunk *new_chunk = chunk_create(pool->ctx, new_size);
-        if (!new_chunk) return NULL;
+        if (!new_chunk) return nullptr;
 
         new_chunk->next = pool->head;
         pool->head = new_chunk;

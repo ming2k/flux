@@ -18,18 +18,18 @@
 static bool test_arc_quarter(void)
 {
     fx_path *path = fx_path_create();
-    fx_point *points = NULL;
+    fx_point *points = nullptr;
     size_t count = 0;
     fx_arena arena;
     fx_arena_init(&arena, 0);
 
-    CHECK(path != NULL);
+    CHECK(path != nullptr);
     CHECK(fx_path_move_to(path, 100.0f, 0.0f));
     CHECK(fx_path_arc_to(path, 100.0f, 100.0f, 0.0f, false, false, 0.0f, 100.0f));
     CHECK(fx_path_close(path));
 
     CHECK(fx_path_flatten_line_loop(path, 0.25f, &arena, &points, &count));
-    CHECK(points != NULL);
+    CHECK(points != nullptr);
     CHECK(count >= 4);
 
     /* End point should be near (0, 100) */
@@ -44,12 +44,12 @@ static bool test_arc_quarter(void)
 static bool test_arc_full_circle(void)
 {
     fx_path *path = fx_path_create();
-    fx_point *points = NULL;
+    fx_point *points = nullptr;
     size_t count = 0;
     fx_arena arena;
     fx_arena_init(&arena, 0);
 
-    CHECK(path != NULL);
+    CHECK(path != nullptr);
     CHECK(fx_path_move_to(path, 50.0f, 0.0f));
     /* Two 180-degree arcs make a full circle */
     CHECK(fx_path_arc_to(path, 50.0f, 50.0f, 0.0f, false, false, -50.0f, 0.0f));
@@ -57,7 +57,7 @@ static bool test_arc_full_circle(void)
     CHECK(fx_path_close(path));
 
     CHECK(fx_path_flatten_line_loop(path, 0.25f, &arena, &points, &count));
-    CHECK(points != NULL);
+    CHECK(points != nullptr);
     CHECK(count >= 8);
 
     /* End point should loop back to start */
@@ -73,7 +73,7 @@ static bool test_arc_degenerate(void)
 {
     fx_path *path = fx_path_create();
 
-    CHECK(path != NULL);
+    CHECK(path != nullptr);
     CHECK(fx_path_move_to(path, 10.0f, 10.0f));
     /* rx = 0 should degenerate to a line */
     CHECK(fx_path_arc_to(path, 0.0f, 50.0f, 0.0f, false, false, 60.0f, 10.0f));
@@ -87,7 +87,7 @@ static bool test_arc_zero_length(void)
 {
     fx_path *path = fx_path_create();
 
-    CHECK(path != NULL);
+    CHECK(path != nullptr);
     CHECK(fx_path_move_to(path, 10.0f, 10.0f));
     /* start == end should be a no-op */
     CHECK(fx_path_arc_to(path, 50.0f, 50.0f, 0.0f, false, false, 10.0f, 10.0f));

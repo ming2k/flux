@@ -33,7 +33,7 @@ static bool test_fill_rect_records_native_op(void)
     surface.canvas.has_clear = false;
     surface.canvas.clear_color = 0;
     free(surface.canvas.ops);
-    surface.canvas.ops = NULL;
+    surface.canvas.ops = nullptr;
     surface.canvas.op_cap = 0;
     return true;
 }
@@ -64,18 +64,18 @@ static bool test_fill_rect_with_transform(void)
     surface.canvas.has_clear = false;
     surface.canvas.clear_color = 0;
     free(surface.canvas.ops);
-    surface.canvas.ops = NULL;
+    surface.canvas.ops = nullptr;
     surface.canvas.op_cap = 0;
     free(surface.canvas.state_stack);
-    surface.canvas.state_stack = NULL;
+    surface.canvas.state_stack = nullptr;
     return true;
 }
 
 static bool test_fill_rect_null_safety(void)
 {
     fx_color green = fx_color_rgba(0, 255, 0, 255);
-    CHECK(!fx_fill_rect(NULL, &(fx_rect){0, 0, 1, 1}, green));
-    CHECK(!fx_fill_rect(&(fx_canvas){0}, NULL, green));
+    CHECK(!fx_fill_rect(nullptr, &(fx_rect){0, 0, 1, 1}, green));
+    CHECK(!fx_fill_rect(&(fx_canvas){0}, nullptr, green));
     return true;
 }
 

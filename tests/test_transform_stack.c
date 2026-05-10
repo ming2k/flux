@@ -142,18 +142,18 @@ static bool test_rotate_90_degrees(void)
 
 static bool test_null_safety(void)
 {
-    /* All transform functions must be safe with NULL canvas */
-    fx_save(NULL);
-    fx_restore(NULL);
-    fx_translate(NULL, 1.0f, 2.0f);
-    fx_scale(NULL, 1.0f, 2.0f);
-    fx_rotate(NULL, 1.0f);
-    fx_concat(NULL, &(fx_matrix){0});
-    fx_set_matrix(NULL, &(fx_matrix){0});
+    /* All transform functions must be safe with nullptr canvas */
+    fx_save(nullptr);
+    fx_restore(nullptr);
+    fx_translate(nullptr, 1.0f, 2.0f);
+    fx_scale(nullptr, 1.0f, 2.0f);
+    fx_rotate(nullptr, 1.0f);
+    fx_concat(nullptr, &(fx_matrix){0});
+    fx_set_matrix(nullptr, &(fx_matrix){0});
 
     fx_matrix m;
-    fx_get_matrix(NULL, &m);
-    /* Should not crash; matrix untouched if canvas is NULL */
+    fx_get_matrix(nullptr, &m);
+    /* Should not crash; matrix untouched if canvas is nullptr */
     return true;
 }
 

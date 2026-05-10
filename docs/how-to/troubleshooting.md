@@ -14,9 +14,9 @@ Use this page when a local build, test run, or example launch fails. If you are 
 ## Common issues
 
 - **`meson setup build` says the directory already exists**: reuse it with `meson compile -C build`, or reconfigure with `meson configure build <options>`.
-- **Meson cannot find Wayland dependencies**: configure with `-Dwayland=disabled` for offscreen-only builds, or install `wayland-client`, `wayland-protocols`, and `wayland-scanner`.
-- **`hello_rect` does not build**: examples require Wayland support; check that `-Dexamples=true` and `-Dwayland=enabled` or `auto` are active.
-- **`hello_rect` cannot connect to a display**: run it inside an active Wayland compositor session with `WAYLAND_DISPLAY` set.
+- **Meson cannot find Vulkan dependencies**: configure with `-Dexamples=false` for offscreen-only builds, or install `Vulkan SDK`, `build tools`, and `build tools`.
+- **`hello_rect` does not build**: examples require Vulkan support; check that `-Dexamples=true` and `-DVulkan=enabled` or `auto` are active.
+- **`hello_rect` cannot connect to a display**: run it inside an active Vulkan compositor session with `VK_ICD_FILENAMES` set.
 - **Vulkan validation layers are missing**: install `vulkan-validation-layers` or run without `FX_ENABLE_VALIDATION=1`.
 - **Integration tests fail on a machine without a GPU**: run the unit suite first with `meson test -C build --suite unit`, or configure CI with a software Vulkan ICD such as lavapipe.
 

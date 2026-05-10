@@ -13,7 +13,7 @@ enum {
     FX_PATH_CLOSE = 4,
 };
 
-#define FX_FLATTEN_MAX_DEPTH 16
+static constexpr int FX_FLATTEN_MAX_DEPTH = 16;
 
 static bool ensure_verb_capacity(fx_path *path, size_t extra)
 {
@@ -261,7 +261,7 @@ bool fx_path_cubic_to(fx_path *path,
 
 bool fx_path_close(fx_path *path)
 {
-    return push_verb_and_points(path, FX_PATH_CLOSE, NULL, 0);
+    return push_verb_and_points(path, FX_PATH_CLOSE, nullptr, 0);
 }
 
 bool fx_path_add_rect(fx_path *path, const fx_rect *rect)
@@ -587,7 +587,7 @@ bool fx_path_flatten_subpath(const fx_path *path, size_t subpath_index, float to
                              fx_point **out_points, size_t *out_count,
                              bool *out_closed)
 {
-    fx_point *flat = NULL;
+    fx_point *flat = nullptr;
     size_t flat_count = 0;
     size_t flat_cap = 0;
     float tol_sq;
@@ -595,7 +595,7 @@ bool fx_path_flatten_subpath(const fx_path *path, size_t subpath_index, float to
     size_t pt_i = 0;
     size_t move_seen = 0;
 
-    if (out_points) *out_points = NULL;
+    if (out_points) *out_points = nullptr;
     if (out_count) *out_count = 0;
     if (out_closed) *out_closed = false;
     if (!path || !out_points || !out_count) return false;
@@ -651,14 +651,14 @@ bool fx_path_flatten_polyline(const fx_path *path, float tolerance,
                               fx_point **out_points, size_t *out_count,
                               bool *out_closed)
 {
-    fx_point *flat = NULL;
+    fx_point *flat = nullptr;
     size_t flat_count = 0;
     size_t flat_cap = 0;
     float tol_sq;
     size_t end_verb, end_pt;
     bool closed = false;
 
-    if (out_points) *out_points = NULL;
+    if (out_points) *out_points = nullptr;
     if (out_count) *out_count = 0;
     if (out_closed) *out_closed = false;
     if (!path || !out_points || !out_count) return false;
@@ -699,7 +699,7 @@ bool fx_path_flatten_line_loop(const fx_path *path, float tolerance,
         return false;
     if (!closed) {
         /* Points were allocated in arena, so we can't 'free' them, but they'll be reclaimed with arena reset */
-        *out_points = NULL;
+        *out_points = nullptr;
         *out_count = 0;
         return false;
     }
@@ -731,15 +731,15 @@ void fx_matrix_transform_point(const fx_matrix *m, float *x, float *y)
 
 fx_path *fx_path_transform(const fx_path *src, const fx_matrix *m)
 {
-    if (!src || !m) return NULL;
+    if (!src || !m) return nullptr;
 
     fx_path *dst = fx_path_create();
-    if (!dst) return NULL;
+    if (!dst) return nullptr;
 
     if (!ensure_verb_capacity(dst, src->verb_count) ||
         !ensure_point_capacity(dst, src->point_count)) {
         fx_path_destroy(dst);
-        return NULL;
+        return nullptr;
     }
 
     memcpy(dst->verbs, src->verbs, src->verb_count);

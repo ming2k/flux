@@ -117,7 +117,7 @@ bool fx_make_render_pass(fx_surface *s, VkImageLayout final_layout)
         .dependencyCount = 1,
         .pDependencies   = deps,
     };
-    VkResult r = vkCreateRenderPass(s->ctx->device, &ci, NULL, &s->render_pass);
+    VkResult r = vkCreateRenderPass(s->ctx->device, &ci, nullptr, &s->render_pass);
     if (r != VK_SUCCESS) {
         FX_LOGE(s->ctx, "vkCreateRenderPass: %d", (int)r);
         return false;
@@ -184,7 +184,7 @@ static bool fx_make_template_render_pass(fx_context *ctx, fx_pipeline_set *ps)
         .dependencyCount = 1,
         .pDependencies   = deps,
     };
-    VkResult r = vkCreateRenderPass(ctx->device, &ci, NULL, &ps->template_render_pass);
+    VkResult r = vkCreateRenderPass(ctx->device, &ci, nullptr, &ps->template_render_pass);
     if (r != VK_SUCCESS) {
         FX_LOGE(ctx, "vkCreateRenderPass (template): %d", (int)r);
         return false;
@@ -195,23 +195,23 @@ static bool fx_make_template_render_pass(fx_context *ctx, fx_pipeline_set *ps)
 static void fx_pipeline_set_destroy_one(fx_context *ctx, fx_pipeline_set *ps)
 {
     VkDevice dev = ctx->device;
-    if (ps->blur_pipeline)           { vkDestroyPipeline(dev, ps->blur_pipeline, NULL); ps->blur_pipeline = VK_NULL_HANDLE; }
-    if (ps->blur_layout)             { vkDestroyPipelineLayout(dev, ps->blur_layout, NULL); ps->blur_layout = VK_NULL_HANDLE; }
-    if (ps->gradient_cover_pipeline) { vkDestroyPipeline(dev, ps->gradient_cover_pipeline, NULL); ps->gradient_cover_pipeline = VK_NULL_HANDLE; }
-    if (ps->solid_cover_pipeline)    { vkDestroyPipeline(dev, ps->solid_cover_pipeline, NULL); ps->solid_cover_pipeline = VK_NULL_HANDLE; }
-    if (ps->fill_stencil_pipeline)   { vkDestroyPipeline(dev, ps->fill_stencil_pipeline, NULL); ps->fill_stencil_pipeline = VK_NULL_HANDLE; }
-    if (ps->stencil_pipeline)        { vkDestroyPipeline(dev, ps->stencil_pipeline, NULL); ps->stencil_pipeline = VK_NULL_HANDLE; }
-    if (ps->stencil_layout)          { vkDestroyPipelineLayout(dev, ps->stencil_layout, NULL); ps->stencil_layout = VK_NULL_HANDLE; }
-    if (ps->gradient_pipeline)   { vkDestroyPipeline(dev, ps->gradient_pipeline, NULL); ps->gradient_pipeline = VK_NULL_HANDLE; }
-    if (ps->gradient_layout)     { vkDestroyPipelineLayout(dev, ps->gradient_layout, NULL); ps->gradient_layout = VK_NULL_HANDLE; }
-    if (ps->text_pipeline)       { vkDestroyPipeline(dev, ps->text_pipeline, NULL); ps->text_pipeline = VK_NULL_HANDLE; }
-    if (ps->text_layout)         { vkDestroyPipelineLayout(dev, ps->text_layout, NULL); ps->text_layout = VK_NULL_HANDLE; }
-    if (ps->image_pipeline)      { vkDestroyPipeline(dev, ps->image_pipeline, NULL); ps->image_pipeline = VK_NULL_HANDLE; }
-    if (ps->image_layout)        { vkDestroyPipelineLayout(dev, ps->image_layout, NULL); ps->image_layout = VK_NULL_HANDLE; }
-    if (ps->solid_rect_pipeline) { vkDestroyPipeline(dev, ps->solid_rect_pipeline, NULL); ps->solid_rect_pipeline = VK_NULL_HANDLE; }
-    if (ps->solid_rect_layout)   { vkDestroyPipelineLayout(dev, ps->solid_rect_layout, NULL); ps->solid_rect_layout = VK_NULL_HANDLE; }
-    if (ps->image_dsl)           { vkDestroyDescriptorSetLayout(dev, ps->image_dsl, NULL); ps->image_dsl = VK_NULL_HANDLE; }
-    if (ps->template_render_pass){ vkDestroyRenderPass(dev, ps->template_render_pass, NULL); ps->template_render_pass = VK_NULL_HANDLE; }
+    if (ps->blur_pipeline)           { vkDestroyPipeline(dev, ps->blur_pipeline, nullptr); ps->blur_pipeline = VK_NULL_HANDLE; }
+    if (ps->blur_layout)             { vkDestroyPipelineLayout(dev, ps->blur_layout, nullptr); ps->blur_layout = VK_NULL_HANDLE; }
+    if (ps->gradient_cover_pipeline) { vkDestroyPipeline(dev, ps->gradient_cover_pipeline, nullptr); ps->gradient_cover_pipeline = VK_NULL_HANDLE; }
+    if (ps->solid_cover_pipeline)    { vkDestroyPipeline(dev, ps->solid_cover_pipeline, nullptr); ps->solid_cover_pipeline = VK_NULL_HANDLE; }
+    if (ps->fill_stencil_pipeline)   { vkDestroyPipeline(dev, ps->fill_stencil_pipeline, nullptr); ps->fill_stencil_pipeline = VK_NULL_HANDLE; }
+    if (ps->stencil_pipeline)        { vkDestroyPipeline(dev, ps->stencil_pipeline, nullptr); ps->stencil_pipeline = VK_NULL_HANDLE; }
+    if (ps->stencil_layout)          { vkDestroyPipelineLayout(dev, ps->stencil_layout, nullptr); ps->stencil_layout = VK_NULL_HANDLE; }
+    if (ps->gradient_pipeline)   { vkDestroyPipeline(dev, ps->gradient_pipeline, nullptr); ps->gradient_pipeline = VK_NULL_HANDLE; }
+    if (ps->gradient_layout)     { vkDestroyPipelineLayout(dev, ps->gradient_layout, nullptr); ps->gradient_layout = VK_NULL_HANDLE; }
+    if (ps->text_pipeline)       { vkDestroyPipeline(dev, ps->text_pipeline, nullptr); ps->text_pipeline = VK_NULL_HANDLE; }
+    if (ps->text_layout)         { vkDestroyPipelineLayout(dev, ps->text_layout, nullptr); ps->text_layout = VK_NULL_HANDLE; }
+    if (ps->image_pipeline)      { vkDestroyPipeline(dev, ps->image_pipeline, nullptr); ps->image_pipeline = VK_NULL_HANDLE; }
+    if (ps->image_layout)        { vkDestroyPipelineLayout(dev, ps->image_layout, nullptr); ps->image_layout = VK_NULL_HANDLE; }
+    if (ps->solid_rect_pipeline) { vkDestroyPipeline(dev, ps->solid_rect_pipeline, nullptr); ps->solid_rect_pipeline = VK_NULL_HANDLE; }
+    if (ps->solid_rect_layout)   { vkDestroyPipelineLayout(dev, ps->solid_rect_layout, nullptr); ps->solid_rect_layout = VK_NULL_HANDLE; }
+    if (ps->image_dsl)           { vkDestroyDescriptorSetLayout(dev, ps->image_dsl, nullptr); ps->image_dsl = VK_NULL_HANDLE; }
+    if (ps->template_render_pass){ vkDestroyRenderPass(dev, ps->template_render_pass, nullptr); ps->template_render_pass = VK_NULL_HANDLE; }
 }
 
 static bool fx_make_fill_stencil_pipeline(fx_pipeline_set *ps, fx_context *ctx);
@@ -229,7 +229,7 @@ fx_pipeline_set *fx_pipeline_set_get(fx_context *ctx,
     }
     if (ctx->pipeline_set_count >= FX_MAX_PIPELINE_SETS) {
         FX_LOGE(ctx, "pipeline set limit reached");
-        return NULL;
+        return nullptr;
     }
     fx_pipeline_set *ps = &ctx->pipeline_sets[ctx->pipeline_set_count++];
     memset(ps, 0, sizeof(*ps));
@@ -252,7 +252,7 @@ fx_pipeline_set *fx_pipeline_set_get(fx_context *ctx,
 fail:
     fx_pipeline_set_destroy_one(ctx, ps);
     ctx->pipeline_set_count--;
-    return NULL;
+    return nullptr;
 }
 
 void fx_pipeline_set_destroy_all(fx_context *ctx)
@@ -272,7 +272,7 @@ static VkShaderModule make_shader_module(fx_context *ctx,
         .codeSize = code_size,
         .pCode    = code,
     };
-    if (vkCreateShaderModule(ctx->device, &ci, NULL, &module) != VK_SUCCESS) {
+    if (vkCreateShaderModule(ctx->device, &ci, nullptr, &module) != VK_SUCCESS) {
         FX_LOGE(ctx, "vkCreateShaderModule failed");
         return VK_NULL_HANDLE;
     }
@@ -369,18 +369,18 @@ static bool make_pipeline_core(
         .layout = layout, .renderPass = render_pass, .subpass = 0,
     };
 
-    if (vkCreateGraphicsPipelines(ctx->device, ctx->pipeline_cache, 1, &pci, NULL, out_pipeline) != VK_SUCCESS) {
+    if (vkCreateGraphicsPipelines(ctx->device, ctx->pipeline_cache, 1, &pci, nullptr, out_pipeline) != VK_SUCCESS) {
         FX_LOGE(ctx, "vkCreateGraphicsPipelines (%s) failed", name);
         goto fail;
     }
 
-    vkDestroyShaderModule(ctx->device, frag, NULL);
-    vkDestroyShaderModule(ctx->device, vert, NULL);
+    vkDestroyShaderModule(ctx->device, frag, nullptr);
+    vkDestroyShaderModule(ctx->device, vert, nullptr);
     return true;
 
 fail:
-    if (frag) vkDestroyShaderModule(ctx->device, frag, NULL);
-    if (vert) vkDestroyShaderModule(ctx->device, vert, NULL);
+    if (frag) vkDestroyShaderModule(ctx->device, frag, nullptr);
+    if (vert) vkDestroyShaderModule(ctx->device, vert, nullptr);
     return false;
 }
 
@@ -397,7 +397,7 @@ bool fx_make_image_dsl(fx_pipeline_set *ps, fx_context *ctx)
         .bindingCount = 1,
         .pBindings = &binding,
     };
-    if (vkCreateDescriptorSetLayout(ctx->device, &ci, NULL, &ps->image_dsl) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(ctx->device, &ci, nullptr, &ps->image_dsl) != VK_SUCCESS) {
         FX_LOGE(ctx, "vkCreateDescriptorSetLayout failed");
         return false;
     }
@@ -415,7 +415,7 @@ bool fx_make_image_pipeline(fx_pipeline_set *ps, fx_context *ctx)
         .setLayoutCount = 1, .pSetLayouts = &ps->image_dsl,
         .pushConstantRangeCount = 1, .pPushConstantRanges = &push_range,
     };
-    if (vkCreatePipelineLayout(ctx->device, &lci, NULL, &ps->image_layout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(ctx->device, &lci, nullptr, &ps->image_layout) != VK_SUCCESS) {
         FX_LOGE(ctx, "vkCreatePipelineLayout (image) failed");
         return false;
     }
@@ -446,7 +446,7 @@ bool fx_make_gradient_pipeline(fx_pipeline_set *ps, fx_context *ctx)
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .pushConstantRangeCount = 1, .pPushConstantRanges = &push_range,
     };
-    if (vkCreatePipelineLayout(ctx->device, &lci, NULL, &ps->gradient_layout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(ctx->device, &lci, nullptr, &ps->gradient_layout) != VK_SUCCESS) {
         FX_LOGE(ctx, "vkCreatePipelineLayout (gradient) failed");
         return false;
     }
@@ -477,7 +477,7 @@ bool fx_make_text_pipeline(fx_pipeline_set *ps, fx_context *ctx)
         .setLayoutCount = 1, .pSetLayouts = &ps->image_dsl,
         .pushConstantRangeCount = 1, .pPushConstantRanges = &push_range,
     };
-    if (vkCreatePipelineLayout(ctx->device, &lci, NULL, &ps->text_layout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(ctx->device, &lci, nullptr, &ps->text_layout) != VK_SUCCESS) {
         FX_LOGE(ctx, "vkCreatePipelineLayout (text) failed");
         return false;
     }
@@ -508,7 +508,7 @@ bool fx_make_solid_pipeline(fx_pipeline_set *ps, fx_context *ctx)
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .pushConstantRangeCount = 1, .pPushConstantRanges = &push_range,
     };
-    if (vkCreatePipelineLayout(ctx->device, &lci, NULL, &ps->solid_rect_layout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(ctx->device, &lci, nullptr, &ps->solid_rect_layout) != VK_SUCCESS) {
         FX_LOGE(ctx, "vkCreatePipelineLayout (solid) failed");
         return false;
     }
@@ -527,7 +527,7 @@ bool fx_make_solid_pipeline(fx_pipeline_set *ps, fx_context *ctx)
                                  VK_STENCIL_OP_KEEP, VK_COMPARE_OP_EQUAL, 0x00, 0,
                                  &ps->solid_rect_pipeline, "solid");
     if (!ok) {
-        vkDestroyPipelineLayout(ctx->device, ps->solid_rect_layout, NULL);
+        vkDestroyPipelineLayout(ctx->device, ps->solid_rect_layout, nullptr);
         ps->solid_rect_layout = VK_NULL_HANDLE;
     }
     return ok;
@@ -544,7 +544,7 @@ bool fx_make_blur_pipeline(fx_pipeline_set *ps, fx_context *ctx)
         .setLayoutCount = 1, .pSetLayouts = &ps->image_dsl,
         .pushConstantRangeCount = 1, .pPushConstantRanges = &push_range,
     };
-    if (vkCreatePipelineLayout(ctx->device, &lci, NULL, &ps->blur_layout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(ctx->device, &lci, nullptr, &ps->blur_layout) != VK_SUCCESS) {
         FX_LOGE(ctx, "vkCreatePipelineLayout (blur) failed");
         return false;
     }
@@ -575,7 +575,7 @@ bool fx_make_stencil_pipeline(fx_pipeline_set *ps, fx_context *ctx)
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .pushConstantRangeCount = 1, .pPushConstantRanges = &push_range,
     };
-    if (vkCreatePipelineLayout(ctx->device, &lci, NULL, &ps->stencil_layout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(ctx->device, &lci, nullptr, &ps->stencil_layout) != VK_SUCCESS) {
         FX_LOGE(ctx, "vkCreatePipelineLayout (stencil) failed");
         return false;
     }
@@ -594,7 +594,7 @@ bool fx_make_stencil_pipeline(fx_pipeline_set *ps, fx_context *ctx)
                                  VK_STENCIL_OP_REPLACE, VK_COMPARE_OP_ALWAYS, 0xFF, 1,
                                  &ps->stencil_pipeline, "stencil");
     if (!ok) {
-        vkDestroyPipelineLayout(ctx->device, ps->stencil_layout, NULL);
+        vkDestroyPipelineLayout(ctx->device, ps->stencil_layout, nullptr);
         ps->stencil_layout = VK_NULL_HANDLE;
     }
     return ok;
@@ -652,7 +652,7 @@ bool fx_make_gradient_cover_pipeline(fx_pipeline_set *ps, fx_context *ctx)
 
 bool fx_make_images(fx_surface *s)
 {
-    vkGetSwapchainImagesKHR(s->ctx->device, s->swapchain, &s->image_count, NULL);
+    vkGetSwapchainImagesKHR(s->ctx->device, s->swapchain, &s->image_count, nullptr);
     if (s->image_count > FX_MAX_SWAPCHAIN_IMAGES) {
         FX_LOGE(s->ctx, "swapchain image count %u exceeds cap %u",
                 s->image_count, FX_MAX_SWAPCHAIN_IMAGES);
@@ -676,7 +676,7 @@ bool fx_make_images(fx_surface *s)
                 .layerCount = 1,
             },
         };
-        if (vkCreateImageView(s->ctx->device, &vci, NULL,
+        if (vkCreateImageView(s->ctx->device, &vci, nullptr,
                               &s->images[i].view) != VK_SUCCESS) {
             FX_LOGE(s->ctx, "vkCreateImageView failed");
             return false;
@@ -692,7 +692,7 @@ bool fx_make_images(fx_surface *s)
             .height          = s->extent.height,
             .layers          = 1,
         };
-        if (vkCreateFramebuffer(s->ctx->device, &fci, NULL,
+        if (vkCreateFramebuffer(s->ctx->device, &fci, nullptr,
                                 &s->images[i].framebuffer) != VK_SUCCESS) {
             FX_LOGE(s->ctx, "vkCreateFramebuffer failed");
             return false;
@@ -723,16 +723,16 @@ bool fx_make_frames(fx_surface *s)
         .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
     };
-    if (vkCreateSampler(s->ctx->device, &sci_sampler, NULL, &s->sampler) != VK_SUCCESS) return false;
+    if (vkCreateSampler(s->ctx->device, &sci_sampler, nullptr, &s->sampler) != VK_SUCCESS) return false;
 
     for (uint32_t i = 0; i < FX_MAX_FRAMES_IN_FLIGHT; ++i) {
         if (vkAllocateCommandBuffers(s->ctx->device, &ai,
                                      &s->frames[i].cmd) != VK_SUCCESS) return false;
-        if (vkCreateSemaphore(s->ctx->device, &sci, NULL,
+        if (vkCreateSemaphore(s->ctx->device, &sci, nullptr,
                               &s->frames[i].image_available) != VK_SUCCESS) return false;
-        if (vkCreateSemaphore(s->ctx->device, &sci, NULL,
+        if (vkCreateSemaphore(s->ctx->device, &sci, nullptr,
                               &s->frames[i].render_finished) != VK_SUCCESS) return false;
-        if (vkCreateFence(s->ctx->device, &fci, NULL,
+        if (vkCreateFence(s->ctx->device, &fci, nullptr,
                           &s->frames[i].in_flight) != VK_SUCCESS) return false;
 
         fx_vbuf_pool_init(&s->frames[i].vbuf, s->ctx);
@@ -746,7 +746,7 @@ bool fx_make_frames(fx_surface *s)
             .poolSizeCount = 1,
             .pPoolSizes = pool_sizes,
         };
-        if (vkCreateDescriptorPool(s->ctx->device, &pci_desc, NULL, &s->frames[i].desc_pool) != VK_SUCCESS) return false;
+        if (vkCreateDescriptorPool(s->ctx->device, &pci_desc, nullptr, &s->frames[i].desc_pool) != VK_SUCCESS) return false;
     }
     return true;
 }
@@ -760,12 +760,12 @@ bool fx_swapchain_build(fx_surface *s)
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(phys, s->vk_surface, &caps);
 
     uint32_t nf = 0;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(phys, s->vk_surface, &nf, NULL);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(phys, s->vk_surface, &nf, nullptr);
     VkSurfaceFormatKHR *fmts = calloc(nf, sizeof(*fmts));
     vkGetPhysicalDeviceSurfaceFormatsKHR(phys, s->vk_surface, &nf, fmts);
 
     uint32_t np = 0;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(phys, s->vk_surface, &np, NULL);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(phys, s->vk_surface, &np, nullptr);
     VkPresentModeKHR *pms = calloc(np, sizeof(*pms));
     vkGetPhysicalDeviceSurfacePresentModesKHR(phys, s->vk_surface, &np, pms);
 
@@ -815,7 +815,7 @@ bool fx_swapchain_build(fx_surface *s)
             ci.compositeAlpha = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
     }
 
-    VkResult r = vkCreateSwapchainKHR(dev, &ci, NULL, &s->swapchain);
+    VkResult r = vkCreateSwapchainKHR(dev, &ci, nullptr, &s->swapchain);
     if (r != VK_SUCCESS) {
         FX_LOGE(s->ctx, "vkCreateSwapchainKHR: %d", (int)r);
         return false;
@@ -839,7 +839,7 @@ bool fx_swapchain_build(fx_surface *s)
         .usage = VMA_MEMORY_USAGE_GPU_ONLY,
     };
     r = vmaCreateImage(s->ctx->vma_allocator, &sici, &stencil_aci,
-                       &s->stencil_image, &s->stencil_alloc, NULL);
+                       &s->stencil_image, &s->stencil_alloc, nullptr);
     if (r != VK_SUCCESS) {
         FX_LOGE(s->ctx, "vmaCreateImage (stencil): %d", (int)r);
         return false;
@@ -856,7 +856,7 @@ bool fx_swapchain_build(fx_surface *s)
             .layerCount = 1,
         },
     };
-    r = vkCreateImageView(dev, &svci, NULL, &s->stencil_view);
+    r = vkCreateImageView(dev, &svci, nullptr, &s->stencil_view);
     if (r != VK_SUCCESS) {
         FX_LOGE(s->ctx, "vkCreateImageView (stencil): %d", (int)r);
         return false;
@@ -888,15 +888,15 @@ void fx_swapchain_destroy(fx_surface *s)
 
     for (uint32_t i = 0; i < FX_MAX_FRAMES_IN_FLIGHT; ++i) {
         if (s->frames[i].in_flight) {
-            vkDestroyFence(dev, s->frames[i].in_flight, NULL);
+            vkDestroyFence(dev, s->frames[i].in_flight, nullptr);
             s->frames[i].in_flight = VK_NULL_HANDLE;
         }
         if (s->frames[i].image_available) {
-            vkDestroySemaphore(dev, s->frames[i].image_available, NULL);
+            vkDestroySemaphore(dev, s->frames[i].image_available, nullptr);
             s->frames[i].image_available = VK_NULL_HANDLE;
         }
         if (s->frames[i].render_finished) {
-            vkDestroySemaphore(dev, s->frames[i].render_finished, NULL);
+            vkDestroySemaphore(dev, s->frames[i].render_finished, nullptr);
             s->frames[i].render_finished = VK_NULL_HANDLE;
         }
         if (s->frames[i].cmd) {
@@ -907,17 +907,17 @@ void fx_swapchain_destroy(fx_surface *s)
         fx_vbuf_pool_destroy(&s->frames[i].vbuf);
         fx_arena_destroy(&s->frames[i].arena);
         if (s->frames[i].desc_pool) {
-            vkDestroyDescriptorPool(dev, s->frames[i].desc_pool, NULL);
+            vkDestroyDescriptorPool(dev, s->frames[i].desc_pool, nullptr);
             s->frames[i].desc_pool = VK_NULL_HANDLE;
         }
     }
     for (uint32_t i = 0; i < s->image_count; ++i) {
         if (s->images[i].framebuffer) {
-            vkDestroyFramebuffer(dev, s->images[i].framebuffer, NULL);
+            vkDestroyFramebuffer(dev, s->images[i].framebuffer, nullptr);
             s->images[i].framebuffer = VK_NULL_HANDLE;
         }
         if (s->images[i].view) {
-            vkDestroyImageView(dev, s->images[i].view, NULL);
+            vkDestroyImageView(dev, s->images[i].view, nullptr);
             s->images[i].view = VK_NULL_HANDLE;
         }
         s->images[i].image = VK_NULL_HANDLE;
@@ -925,7 +925,7 @@ void fx_swapchain_destroy(fx_surface *s)
     s->image_count = 0;
 
     if (s->stencil_view) {
-        vkDestroyImageView(dev, s->stencil_view, NULL);
+        vkDestroyImageView(dev, s->stencil_view, nullptr);
         s->stencil_view = VK_NULL_HANDLE;
     }
     if (s->stencil_image) {
@@ -934,7 +934,7 @@ void fx_swapchain_destroy(fx_surface *s)
         s->stencil_alloc = VK_NULL_HANDLE;
     }
     if (s->swapchain) {
-        vkDestroySwapchainKHR(dev, s->swapchain, NULL);
+        vkDestroySwapchainKHR(dev, s->swapchain, nullptr);
         s->swapchain = VK_NULL_HANDLE;
     }
 }
@@ -946,11 +946,11 @@ void fx_surface_destroy_pipelines(fx_surface *s)
     VkDevice dev = s->ctx->device;
 
     if (s->sampler) {
-        vkDestroySampler(dev, s->sampler, NULL);
+        vkDestroySampler(dev, s->sampler, nullptr);
         s->sampler = VK_NULL_HANDLE;
     }
     if (s->render_pass) {
-        vkDestroyRenderPass(dev, s->render_pass, NULL);
+        vkDestroyRenderPass(dev, s->render_pass, nullptr);
         s->render_pass = VK_NULL_HANDLE;
     }
 }

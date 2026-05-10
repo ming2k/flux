@@ -24,10 +24,10 @@ For full package names, see [Developer setup](../dev/setup.md).
 ## Step 1: Configure the build
 
 ```bash
-meson setup build -Dwayland=disabled
+meson setup build -Dexamples=false
 ```
 
-You should see Meson finish configuration and print a build directory summary. Disabling Wayland keeps this first run focused on the library and tests rather than a compositor session.
+You should see Meson finish configuration and print a build directory summary. Disabling Vulkan keeps this first run focused on the library and tests rather than a compositor session.
 
 > **If you see "Directory already configured":** use the existing build directory and continue to the next step.
 
@@ -68,5 +68,5 @@ The exact test count may grow as the project adds coverage, but failures should 
 ## Troubleshooting
 
 - **Meson cannot find Vulkan, FreeType, HarfBuzz, or glslangValidator**: install the packages listed in [Developer setup](../dev/setup.md).
-- **Wayland examples do not build**: keep `-Dwayland=disabled` for this tutorial, or install the Wayland dependencies from [Developer setup](../dev/setup.md).
+- **Examples do not build**: keep `-Dexamples=false` for this tutorial, or install the Vulkan dependencies from [Developer setup](../dev/setup.md).
 - See [How to troubleshoot common issues](../how-to/troubleshooting.md) for more.

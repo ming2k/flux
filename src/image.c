@@ -51,7 +51,7 @@ static bool layout_to_shader_read(fx_context *ctx, VkImage image)
     vkCmdPipelineBarrier(ctx->upload.cmd,
                          VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                         0, 0, NULL, 0, NULL, 1, &barrier);
+                         0, 0, nullptr, 0, nullptr, 1, &barrier);
     vkEndCommandBuffer(ctx->upload.cmd);
 
     VkSubmitInfo si = {
@@ -72,20 +72,20 @@ fx_image *fx_image_create(fx_context *ctx, const fx_image_desc *desc)
     size_t bpp;
     size_t stride;
 
-    if (!ctx || !desc || desc->width == 0 || desc->height == 0) return NULL;
+    if (!ctx || !desc || desc->width == 0 || desc->height == 0) return nullptr;
 
     bpp = bytes_per_pixel(desc->format);
-    if (!bpp) return NULL;
+    if (!bpp) return nullptr;
 
     stride = desc->stride ? desc->stride : (size_t)desc->width * bpp;
-    if (stride < (size_t)desc->width * bpp) return NULL;
+    if (stride < (size_t)desc->width * bpp) return nullptr;
 
     image = calloc(1, sizeof(*image));
-    if (!image) return NULL;
+    if (!image) return nullptr;
 
     image->ctx = ctx;
     image->desc = *desc;
-    image->desc.data = NULL;
+    image->desc.data = nullptr;
     image->desc.stride = stride;
     if (image->desc.usage == 0) {
         image->desc.usage = FX_IMAGE_USAGE_SAMPLED | FX_IMAGE_USAGE_TRANSFER_DST;
@@ -96,7 +96,7 @@ fx_image *fx_image_create(fx_context *ctx, const fx_image_desc *desc)
         image->data = malloc(data_size);
         if (!image->data) {
             free(image);
-            return NULL;
+            return nullptr;
         }
         memcpy(image->data, desc->data, data_size);
         image->data_size = data_size;
@@ -123,10 +123,10 @@ fx_image *fx_image_create(fx_context *ctx, const fx_image_desc *desc)
         .usage = VMA_MEMORY_USAGE_GPU_ONLY,
     };
     if (vmaCreateImage(ctx->vma_allocator, &ici, &aci,
-                       &image->vk_image, &image->vma_alloc, NULL) != VK_SUCCESS) {
+                       &image->vk_image, &image->vma_alloc, nullptr) != VK_SUCCESS) {
         FX_LOGE(ctx, "vmaCreateImage failed");
         fx_image_destroy(image);
-        return NULL;
+        return nullptr;
     }
 
     VkImageViewCreateInfo vci = {
@@ -140,10 +140,10 @@ fx_image *fx_image_create(fx_context *ctx, const fx_image_desc *desc)
             .layerCount = 1,
         },
     };
-    if (vkCreateImageView(ctx->device, &vci, NULL, &image->vk_view) != VK_SUCCESS) {
+    if (vkCreateImageView(ctx->device, &vci, nullptr, &image->vk_view) != VK_SUCCESS) {
         FX_LOGE(ctx, "vkCreateImageView failed");
         fx_image_destroy(image);
-        return NULL;
+        return nullptr;
     }
 
     if (image->data) {
@@ -154,12 +154,12 @@ fx_image *fx_image_create(fx_context *ctx, const fx_image_desc *desc)
                              image->data, image->desc.stride, bpp)) {
             FX_LOGE(ctx, "initial image upload failed");
             fx_image_destroy(image);
-            return NULL;
+            return nullptr;
         }
     } else if (!layout_to_shader_read(ctx, image->vk_image)) {
         FX_LOGE(ctx, "image layout transition failed");
         fx_image_destroy(image);
-        return NULL;
+        return nullptr;
     }
 
     return image;
@@ -169,7 +169,7 @@ void fx_image_destroy(fx_image *image)
 {
     if (!image) return;
     if (image->ctx->device) {
-        if (image->vk_view) vkDestroyImageView(image->ctx->device, image->vk_view, NULL);
+        if (image->vk_view) vkDestroyImageView(image->ctx->device, image->vk_view, nullptr);
         if (image->vk_image) vmaDestroyImage(image->ctx->vma_allocator, image->vk_image, image->vma_alloc);
     }
     free(image->data);
@@ -181,7 +181,7 @@ bool fx_image_get_desc(const fx_image *image, fx_image_desc *out_desc)
     if (!image) return false;
     if (out_desc) {
         *out_desc = image->desc;
-        out_desc->data = NULL;
+        out_desc->data = nullptr;
     }
     return true;
 }
@@ -190,7 +190,7 @@ const void *fx_image_data(const fx_image *image,
                           size_t *out_size,
                           size_t *out_stride)
 {
-    if (!image) return NULL;
+    if (!image) return nullptr;
     if (out_size) *out_size = image->data_size;
     if (out_stride) *out_stride = image->desc.stride;
     return image->data;

@@ -1,0 +1,215 @@
+# Tutorial: Building a Complete Application
+
+**Estimated time:** 30 minutes  
+**Difficulty:** Intermediate  
+**Prerequisites:** [Getting Started](01-getting-started.md), basic C, Vulkan desktop session
+
+By the end of this tutorial you will have built a small interactive application that renders a responsive UI panel with text, icons, and clipping.
+
+## What you will build
+
+A 400×300 window containing:
+- A rounded header bar with a title
+- A scrollable content area with clipped text
+- A footer with status text
+
+## Step 1: Project structure
+
+Create a new directory for your project:
+
+```bash
+mkdir flux-tutorial-app && cd flux-tutorial-app
+```
+
+Create `meson.build`:
+
+```meson
+project('flux-tutorial-app', 'c',
+  version : '0.1.0',
+  default_options : ['warning_level=2', 'c_std=c11'])
+
+flux_dep = dependency('flux', required : true)
+Vulkan_client = dependency('Vulkan SDK', required : true)
+
+executable('tutorial_app',
+  'main.c',
+  dependencies : [flux_dep, Vulkan_client],
+  install : false)
+```
+
+Create `main.c` with the Vulkan boilerplate from `hello_rect.c`. For brevity, this tutorial focuses on the flux-specific drawing code. You can copy the Vulkan setup from `examples/hello_rect.c` in the flux repository.
+
+## Step 2: Load assets at startup
+
+Add a helper to load a font and an icon image:
+
+```c
+#include <flux/flux.h>
+#include <flux/flux_Vulkan.h>
+
+static fx_font *load_font(fx_context *ctx, const char *path, float size)
+{
+    fx_font_desc desc = {
+        .source_name = path,
+        .size = size,
+        .weight = 400,
+    };
+    fx_font *font = fx_font_create(ctx, &desc);
+    if (!font) fprintf(stderr, "failed to load font: %s\n", path);
+    return font;
+}
+
+static fx_image *load_icon(fx_context *ctx, const char *path)
+{
+    /* In a real app, decode PNG/JPEG into a pixel buffer first.
+     * Here we assume a 32×32 RGBA raw file for simplicity. */
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+
+    uint8_t pixels[32 * 32 * 4];
+    size_t n = fread(pixels, 1, sizeof(pixels), f);
+    fclose(f);
+    if (n != sizeof(pixels)) return NULL;
+
+    fx_image_desc desc = {
+        .width = 32,
+        .height = 32,
+        .format = FX_FMT_RGBA8_UNORM,
+        .data = pixels,
+        .stride = 32 * 4,
+    };
+    return fx_image_create(ctx, &desc);
+}
+```
+
+## Step 3: Shape text with HarfBuzz
+
+flux renders positioned glyph runs. Use HarfBuzz to shape UTF-8 text:
+
+```c
+#include <harfbuzz/hb.h>
+
+static fx_glyph_run *shape_text(fx_font *font, const char *utf8)
+{
+    hb_font_t *hb = fx_font_get_hb_font(font);
+    hb_buffer_t *buf = hb_buffer_create();
+    hb_buffer_add_utf8(buf, utf8, -1, 0, -1);
+    hb_buffer_guess_segment_properties(buf);
+    hb_shape(hb, buf, NULL, 0);
+
+    unsigned int count;
+    hb_glyph_info_t *infos = hb_buffer_get_glyph_infos(buf, &count);
+    hb_glyph_position_t *positions = hb_buffer_get_glyph_positions(buf, &count);
+
+    fx_glyph_run *run = fx_glyph_run_create(count);
+    float x = 0, y = 0;
+    for (unsigned int i = 0; i < count; ++i) {
+        fx_glyph_run_append(run, infos[i].codepoint,
+                            x + positions[i].x_offset / 64.0f,
+                            y + positions[i].y_offset / 64.0f);
+        x += positions[i].x_advance / 64.0f;
+        y += positions[i].y_advance / 64.0f;
+    }
+    hb_buffer_destroy(buf);
+    return run;
+}
+```
+
+## Step 4: Draw the UI
+
+Inside your per-frame loop, after `fx_surface_acquire`:
+
+```c
+fx_canvas *c = fx_surface_acquire(vs);
+if (!c) continue;
+
+/* Colors */
+fx_color bg = fx_color_rgba(245, 245, 250, 255);
+fx_color header_bg = fx_color_rgba(50, 100, 200, 255);
+fx_color text_color = fx_color_rgba(30, 30, 30, 255);
+fx_color status_color = fx_color_rgba(120, 120, 120, 255);
+
+/* Layout */
+float w = a.width;
+float h = a.height;
+float header_h = 48.0f;
+float footer_h = 32.0f;
+float margin = 16.0f;
+
+/* Background */
+fx_clear(c, bg);
+
+/* Header bar */
+fx_rect header = { 0, 0, w, header_h };
+fx_fill_rect(c, &header, header_bg);
+
+/* Header title */
+fx_paint paint;
+fx_paint_init(&paint, fx_color_rgba(255, 255, 255, 255));
+fx_draw_glyph_run(c, title_font, title_run, margin, 32.0f, &paint);
+
+/* Content area with clipping */
+fx_rect content = { margin, header_h + margin,
+                    w - margin * 2, h - header_h - footer_h - margin * 2 };
+fx_clip_rect(c, &content);
+
+/* Icon */
+fx_rect icon_dst = { margin, header_h + margin, 32, 32 };
+fx_draw_image(c, icon_image, NULL, &icon_dst);
+
+/* Body text */
+fx_paint_init(&paint, text_color);
+fx_draw_glyph_run(c, body_font, body_run, margin + 40, header_h + margin + 24, &paint);
+
+fx_reset_clip(c);
+
+/* Footer */
+fx_rect footer = { 0, h - footer_h, w, footer_h };
+fx_fill_rect(c, &footer, fx_color_rgba(230, 230, 235, 255));
+fx_paint_init(&paint, status_color);
+fx_draw_glyph_run(c, body_font, status_run, margin, h - 10.0f, &paint);
+
+fx_surface_present(vs);
+```
+
+## Step 5: Handle resizing
+
+Update the resize handler to adjust layout constants:
+
+```c
+if (a.width != last_w || a.height != last_h) {
+    fx_surface_resize(vs, a.width, a.height);
+    last_w = a.width;
+    last_h = a.height;
+    /* Layout is recomputed each frame, so no extra work needed. */
+}
+```
+
+## Step 6: Build and run
+
+```bash
+meson setup build
+meson compile -C build
+VK_ICD_FILENAMES=Vulkan-1 ./build/tutorial_app
+```
+
+## What you learned
+
+- Loading fonts and images once, then referencing them per frame.
+- Using HarfBuzz to shape text and feeding the result to `fx_glyph_run`.
+- Using `fx_clip_rect` to restrict drawing to a content area.
+- Computing layout each frame for responsive sizing.
+
+## Exercises
+
+1. **Rounded corners:** Build a path with `fx_path_arc_to` for the header bar.
+2. **Gradient header:** Replace the solid header color with a linear gradient.
+3. **Scroll offset:** Add a `scroll_y` variable and translate the content group with `fx_translate` before clipping.
+4. **Dynamic text:** Update the status text every second using `strftime`.
+
+## See also
+
+- [How to draw basic shapes](../how-to/draw-basic-shapes.md)
+- [How to render text](../how-to/render-text.md)
+- [How to render SVG assets](../how-to/render-svg-assets.md)
+- [How to optimize performance](../how-to/optimize-performance.md)

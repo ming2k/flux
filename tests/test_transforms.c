@@ -60,7 +60,7 @@ int main(void)
     fx_path *tp = fx_path_transform(p, &m1);
     assert(tp);
     fx_rect bounds;
-    fx_path_get_bounds(tp, &bounds);
+    (void)fx_path_get_bounds(tp, &bounds);
     assert(approx(bounds.x, 5.0f));
     assert(approx(bounds.y, 5.0f));
     assert(approx(bounds.w, 10.0f));

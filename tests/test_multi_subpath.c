@@ -45,15 +45,15 @@ int main(void)
     fx_surface *s = fx_surface_create_offscreen(ctx, 64, 64,
                                                 FX_FMT_RGBA8_UNORM,
                                                 FX_CS_SRGB);
-    CHECK(s != NULL);
+    CHECK(s != nullptr);
 
     /* --- Multi-subpath fill: two separate triangles --- */
     fx_canvas *c = fx_surface_acquire(s);
-    CHECK(c != NULL);
+    CHECK(c != nullptr);
     fx_clear(c, fx_color_rgba(0, 0, 0, 255));
 
     fx_path *path = fx_path_create();
-    CHECK(path != NULL);
+    CHECK(path != nullptr);
 
     /* Triangle 1: top-left */
     fx_path_move_to(path, 4.0f, 4.0f);
@@ -69,11 +69,11 @@ int main(void)
 
     fx_paint paint;
     fx_paint_init(&paint, fx_color_rgba(255, 0, 0, 255));
-    fx_fill_path(c, path, &paint);
+    (void)fx_fill_path(c, path, &paint);
     fx_surface_present(s);
 
     uint8_t *pixels = malloc(64 * 64 * 4);
-    CHECK(pixels != NULL);
+    CHECK(pixels != nullptr);
     CHECK(fx_surface_read_pixels(s, pixels, 64 * 4));
 
     /* Inside triangle 1 should be red */
@@ -105,11 +105,11 @@ int main(void)
     fx_path_close(path);
 
     fx_paint_init(&paint, fx_color_rgba(255, 0, 0, 255));
-    fx_fill_path(c, path, &paint);
+    (void)fx_fill_path(c, path, &paint);
     fx_surface_present(s);
 
     pixels = malloc(64 * 64 * 4);
-    CHECK(pixels != NULL);
+    CHECK(pixels != nullptr);
     CHECK(fx_surface_read_pixels(s, pixels, 64 * 4));
 
     /* Between outer and inner rect should be red */
@@ -135,11 +135,11 @@ int main(void)
     fx_path_line_to(path, 48.0f, 56.0f);
 
     paint.stroke_width = 2.0f;
-    fx_stroke_path(c, path, &paint);
+    (void)fx_stroke_path(c, path, &paint);
     fx_surface_present(s);
 
     pixels = malloc(64 * 64 * 4);
-    CHECK(pixels != NULL);
+    CHECK(pixels != nullptr);
     CHECK(fx_surface_read_pixels(s, pixels, 64 * 4));
 
     /* On first stroke segment should be red */

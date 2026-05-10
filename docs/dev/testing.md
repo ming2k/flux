@@ -55,8 +55,8 @@ Assertions:
 - `fx_canvas` records fill/stroke/image/glyph ops in order and resets
   cleanly between frames.
 
-This suite does not create a Wayland surface and does not require a
-working presentation path.
+This suite does not create a presentation surface and does not require a
+display server.
 
 ## Unit tests
 
@@ -160,8 +160,7 @@ The shipped integration tests create offscreen surfaces and read pixels back
 without a display server. CI forces Mesa lavapipe with `VK_ICD_FILENAMES` so the
 tests can run on hosted runners without a physical GPU.
 
-Wayland example smoke tests are still useful manual checks, but they are not
-part of the current automated release gate.
+Example programs are not part of the automated release gate.
 
 ## Performance benchmark
 
@@ -207,3 +206,7 @@ assert(error_count == 0);
 where `error_count` is the number of `FX_LOG_ERROR` messages. A
 single validation error fails the test, even if the rendered output
 matches the golden.
+
+The `fx_log_fn` callback receives source `file` and `line` in addition to
+the formatted message, so tests can optionally assert that errors originate
+from expected locations.

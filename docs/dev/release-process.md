@@ -122,6 +122,7 @@ or inline in the header.
 - [ ] All creation functions return `NULL` and log on failure.
 - [ ] No silent dropping of operations without logging (except explicit no-ops).
 - [ ] Custom log callback test asserts zero `FX_LOG_ERROR` during normal usage.
+- [ ] Log callback receives correct `file` and `line` for every emitted message.
 
 ### 4.3 Resource Management
 
@@ -171,8 +172,8 @@ or inline in the header.
 ### 6.2 Portability
 
 - [ ] Builds on Linux with GCC ≥ 11 and Clang ≥ 14.
-- [ ] Wayland support is optional (`-Dwayland=disabled` produces a headless-only
-  library that still passes unit + offscreen tests).
+- [ ] Library builds without platform dependencies (unit + offscreen tests pass
+  on systems without display servers).
 - [ ] No hard-coded Linux-only paths in public API (font paths in tests excepted).
 
 ### 6.3 Continuous Integration

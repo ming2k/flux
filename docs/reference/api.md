@@ -20,11 +20,42 @@ flux follows a simple own/borrow split:
 fx_context_desc desc = {
     .app_name = "shell-ui",
     .enable_validation = false,
+    .min_log_level = FX_LOG_INFO,
 };
 fx_context *ctx = fx_context_create(&desc);
 ```
 
 `fx_context` owns the Vulkan instance, device selection, and the context-wide **Glyph Atlas**.
+
+### Logging
+
+The library emits structured log messages through a user-provided callback
+or a default `stderr` sink. The callback signature is:
+
+```c
+void (*fx_log_fn)(fx_log_level level,
+                  const char *file, int line,
+                  const char *fmt, const char *msg,
+                  void *user);
+```
+
+- `file` / `line`: source location of the log site.
+- `fmt`: the original `printf` format string (useful for structured parsers).
+- `msg`: the fully formatted message (safe to forward without re-parsing).
+
+Log levels (in increasing severity):
+
+| Level | Macro | Elided in `NDEBUG`? | Typical use |
+|-------|-------|---------------------|-------------|
+| `FX_LOG_TRACE` | `FX_LOGT` | Yes | Internal bookkeeping |
+| `FX_LOG_DEBUG` | `FX_LOGD` | Yes | Per-frame events |
+| `FX_LOG_INFO`  | `FX_LOGI` | No | Startup, configuration |
+| `FX_LOG_WARN`  | `FX_LOGW` | No | Recoverable issues |
+| `FX_LOG_ERROR` | `FX_LOGE` | No | Failures |
+
+`fx_context_desc.min_log_level` filters at runtime. The default is
+`FX_LOG_INFO`; set it to `FX_LOG_DEBUG` or `FX_LOG_TRACE` to see more
+output (requires a debug build).
 
 Destroy the context and all associated resources when done:
 
@@ -54,19 +85,7 @@ VkInstance inst = fx_context_get_instance(ctx);
 
 ## Surfaces
 
-### Wayland surface
-
-```c
-#include <flux/flux_wayland.h>
-
-fx_surface *surface = fx_surface_create_wayland(ctx,
-    wl_display,
-    wl_surface,
-    1280, 720,
-    FX_CS_SRGB);
-```
-
-### Generic Vulkan surface
+### Vulkan surface
 
 For integration with an externally-created `VkSurfaceKHR`:
 

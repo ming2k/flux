@@ -157,7 +157,7 @@ For contributors implementing a new drawing primitive:
 
 Open a GitHub issue with:
 
-- OS, compositor, GPU make/model, Vulkan driver version.
+- OS, GPU make/model, Vulkan driver version.
 - Steps to reproduce (minimal example preferred).
 - Observed vs expected output (screenshot or pixel diff if visual).
 - Output of `FX_ENABLE_VALIDATION=1 <command>` if applicable.

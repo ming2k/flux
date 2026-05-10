@@ -72,43 +72,59 @@ blur_frag_spv = custom_target('blur_frag_spv',
             '@INPUT@', '-o', '@OUTPUT@'],
 )
 
-flux_sources = files(
-  'context.c',
-  'canvas.c',
-  'image.c',
-  'path.c',
-  'surface.c',
-  'stroker.c',
-  'tess.c',
-  'text.c',
-  'arena.c',
-  'vk/device.c',
-  'vk/swapchain.c',
-  'vk/memory.c',
-  'vk/upload.c',
-  'vk/vma.cpp',
-) + [
-  solid_color_vert_spv,
-  solid_color_frag_spv,
-  image_vert_spv,
-  image_frag_spv,
+spv_targets = [
+  solid_color_vert_spv, solid_color_frag_spv,
+  image_vert_spv,       image_frag_spv,
   text_frag_spv,
-  gradient_vert_spv,
-  gradient_frag_spv,
-  stencil_frag_spv,
-  blur_frag_spv,
+  gradient_vert_spv,    gradient_frag_spv,
+  stencil_frag_spv,     blur_frag_spv,
 ]
 
-flux_c_args = [
-  '-DFX_BUILDING=1',
-  '-DVK_USE_PLATFORM_WAYLAND_KHR=1',
-]
+# ---- New layered architecture sources ----
+# Math layer:    vectors, matrices, arena allocator
+# Geometry layer: path construction, bezier flattening, tessellation, strokes
+# State layer:   canvas recording, display lists, transform stack
+# Renderer:      backend abstraction (vtable) + software + vulkan
+# Engine:        backend-agnostic op execution
+# Surface:       lifecycle + present
+
+flux_layered_sources = files(
+  'math/matrix.c',
+  'math/arena.c',
+
+  'geometry/path.c',
+  'geometry/tess.c',
+  'geometry/stroker.c',
+
+  'state/canvas.c',
+
+  'resource/context.c',
+  'resource/image.c',
+  'resource/text.c',
+
+  'renderer/software.c',
+
+  'engine.c',
+  'surface.c',
+)
+
+# Vulkan backend (compiled when Vulkan hardware rendering is needed)
+# The device/swapchain/memory/upload files need porting to the vtable
+# interface. For now keep them out of the build — the stub vulkan_renderer
+# compiles and proves the architecture.
+flux_vk_sources = files(
+  'renderer/vulkan/vulkan_renderer.c',
+)
+
+flux_sources = flux_layered_sources + flux_vk_sources + spv_targets
+
+flux_c_args = ['-DFX_BUILDING=1']
 
 flux_lib = library('flux',
   flux_sources,
   include_directories : flux_inc,
   c_args              : flux_c_args,
-  dependencies        : [vulkan_dep, threads_dep, m_dep, ft_dep, hb_dep] + wayland_deps,
+  dependencies        : [vulkan_dep, threads_dep, m_dep],
   gnu_symbol_visibility : 'hidden',
   install             : true,
 )
@@ -116,9 +132,8 @@ flux_lib = library('flux',
 flux_dep = declare_dependency(
   link_with           : flux_lib,
   include_directories : flux_inc,
-  dependencies        : [vulkan_dep, ft_dep, hb_dep],
+  dependencies        : [vulkan_dep],
 )
 
 install_headers('../include/flux/flux.h',         subdir : 'flux')
 install_headers('../include/flux/flux_vulkan.h',  subdir : 'flux')
-install_headers('../include/flux/flux_wayland.h', subdir : 'flux')

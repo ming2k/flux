@@ -44,7 +44,7 @@ cc app.c -o app $(pkg-config --cflags --libs --static flux)
 
 Static linking pulls more transitive dependencies into the application link
 line, including Vulkan, FreeType, HarfBuzz, pthreads, math, and optional
-Wayland libraries when Wayland support is enabled.
+Vulkan libraries when Vulkan support is enabled.
 
 ## Meson Subproject
 

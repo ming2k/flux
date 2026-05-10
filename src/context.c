@@ -1,28 +1,94 @@
 #include "flux/flux_vulkan.h"
 #include "internal.h"
 
-static void default_log(fx_log_level lvl, const char *msg, void *user)
+#include <time.h>
+
+static const char *log_basename(const char *path)
 {
-    (void)user;
-    const char *tag = "?";
-    switch (lvl) {
-        case FX_LOG_ERROR: tag = "E"; break;
-        case FX_LOG_WARN:  tag = "W"; break;
-        case FX_LOG_INFO:  tag = "I"; break;
-        case FX_LOG_DEBUG: tag = "D"; break;
+    const char *p = path;
+    const char *base = path;
+    while (*p) {
+        if (*p == '/' || *p == '\\')
+            base = p + 1;
+        p++;
     }
-    fprintf(stderr, "[flux %s] %s\n", tag, msg);
+    return base;
 }
 
-void fx_log(const fx_context *ctx, fx_log_level lvl, const char *fmt, ...)
+static void default_log(fx_log_level lvl, const char *file, int line,
+                        [[maybe_unused]] const char *fmt, const char *msg,
+                        [[maybe_unused]] void *user)
 {
-    char buf[512];
+    const char *tag = "?";
+    switch (lvl) {
+        case FX_LOG_TRACE: tag = "T"; break;
+        case FX_LOG_DEBUG: tag = "D"; break;
+        case FX_LOG_INFO:  tag = "I"; break;
+        case FX_LOG_WARN:  tag = "W"; break;
+        case FX_LOG_ERROR: tag = "E"; break;
+    }
+
+    struct timespec ts;
+    if (clock_gettime(CLOCK_REALTIME, &ts) != 0) {
+        ts.tv_sec = 0;
+        ts.tv_nsec = 0;
+    }
+    struct tm tm;
+    gmtime_r(&ts.tv_sec, &tm);
+
+    char timebuf[64];
+    snprintf(timebuf, sizeof(timebuf),
+             "%04d-%02d-%02dT%02d:%02d:%02d.%03ldZ",
+             tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+             tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec / 1000000L);
+
+    flockfile(stderr);
+    fprintf(stderr, "[%s][flux %s][%s:%d] %s\n",
+            timebuf, tag, log_basename(file), line, msg);
+    funlockfile(stderr);
+}
+
+void fx_log_impl(const fx_context *ctx, fx_log_level lvl,
+                 const char *file, int line,
+                 const char *fmt, ...)
+{
+    if (!file || !fmt) return;
+
+    fx_log_level min_lvl = FX_LOG_INFO;
+    fx_log_fn cb = nullptr;
+    void *user = nullptr;
+
+    if (ctx) {
+        min_lvl = ctx->min_log_level;
+        cb = ctx->log;
+        user = ctx->log_user;
+    }
+
+    if (lvl < min_lvl) return;
+
+    char buf[1024];
     va_list ap;
     va_start(ap, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, ap);
+    int n = vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-    if (ctx && ctx->log) ctx->log(lvl, buf, ctx->log_user);
-    else                 default_log(lvl, buf, NULL);
+
+    if (n < 0) {
+        buf[0] = '\0';
+    } else if ((size_t)n >= sizeof(buf)) {
+        /* Truncated: overwrite tail with "..." */
+        if (sizeof(buf) > 4) {
+            buf[sizeof(buf) - 4] = '.';
+            buf[sizeof(buf) - 3] = '.';
+            buf[sizeof(buf) - 2] = '.';
+            buf[sizeof(buf) - 1] = '\0';
+        }
+    }
+
+    if (cb) {
+        cb(lvl, file, line, fmt, buf, user);
+    } else {
+        default_log(lvl, file, line, fmt, buf, user);
+    }
 }
 
 static bool env_flag(const char *name)
@@ -34,44 +100,37 @@ static bool env_flag(const char *name)
 fx_context *fx_context_create(const fx_context_desc *desc)
 {
     fx_context *ctx = calloc(1, sizeof(*ctx));
-    if (!ctx) return NULL;
+    if (!ctx) return nullptr;
     if (desc) {
-        ctx->log      = desc->log;
-        ctx->log_user = desc->log_user;
+        ctx->log           = desc->log;
+        ctx->log_user      = desc->log_user;
+        ctx->min_log_level = desc->min_log_level;
+    } else {
+        ctx->min_log_level = FX_LOG_INFO;
     }
 
     bool want_validation = desc && desc->enable_validation;
     if (!want_validation) want_validation = env_flag("FX_ENABLE_VALIDATION");
 
-    /* Always include Wayland surface support; offscreen-only
-     * contexts simply do not create a surface. */
     const char *inst_exts[] = {
         "VK_KHR_surface",
-        "VK_KHR_wayland_surface",
     };
     if (!fx_instance_create(ctx,
-                            desc ? desc->app_name : NULL,
+                            desc ? desc->app_name : nullptr,
                             want_validation,
                             inst_exts,
                             (uint32_t)(sizeof(inst_exts)/sizeof(*inst_exts)))) {
         free(ctx);
-        return NULL;
+        return nullptr;
     }
 
-    VkPipelineCacheCreateInfo pcci = {
+    [[maybe_unused]] VkPipelineCacheCreateInfo pcci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
     };
     /* Device may not exist yet; pipeline_cache is created on first surface. */
-    (void)pcci;
 
     /* Defer device creation until the first surface: surface support is
      * a queue-family selection input. */
-    if (FT_Init_FreeType(&ctx->ft_lib) != 0) {
-        FX_LOGE(ctx, "failed to initialize FreeType");
-        fx_device_shutdown(ctx);
-        free(ctx);
-        return NULL;
-    }
     return ctx;
 }
 
@@ -110,7 +169,8 @@ bool fx_context_get_device_caps(const fx_context *ctx, fx_device_caps *out_caps)
 void fx_context_destroy(fx_context *ctx)
 {
     if (!ctx) return;
-    if (ctx->ft_lib) FT_Done_FreeType(ctx->ft_lib);
+    if (ctx->atlas.image) fx_image_destroy(ctx->atlas.image);
+    free(ctx->atlas.entries);
     fx_device_shutdown(ctx);
     free(ctx);
 }

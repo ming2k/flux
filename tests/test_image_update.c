@@ -29,18 +29,18 @@ static bool test_image_update_pixels(void)
         .format = FX_FMT_RGBA8_UNORM,
         .data = initial,
     });
-    CHECK(image != NULL);
+    CHECK(image != nullptr);
 
     /* Verify initial copy */
     size_t size = 0, stride = 0;
     const uint32_t *data = fx_image_data(image, &size, &stride);
-    CHECK(data != NULL);
+    CHECK(data != nullptr);
     CHECK(memcmp(data, initial, sizeof(initial)) == 0);
 
     /* Update and verify */
     CHECK(fx_image_update(image, updated, 8));
     data = fx_image_data(image, &size, &stride);
-    CHECK(data != NULL);
+    CHECK(data != nullptr);
     CHECK(memcmp(data, updated, sizeof(updated)) == 0);
 
     /* Ensure old data is truly replaced */
@@ -53,7 +53,7 @@ static bool test_image_update_pixels(void)
 
 static bool test_image_update_null_safety(void)
 {
-    CHECK(!fx_image_update(NULL, NULL, 0));
+    CHECK(!fx_image_update(nullptr, nullptr, 0));
     return true;
 }
 

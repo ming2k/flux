@@ -16,9 +16,9 @@
 extern "C" {
 #endif
 
-FX_API VkInstance fx_context_get_instance(fx_context *ctx);
+FX_NODISCARD FX_API VkInstance fx_context_get_instance(fx_context *ctx);
 
-FX_API fx_surface *fx_surface_create_vulkan(fx_context *ctx,
+FX_NODISCARD FX_API fx_surface *fx_surface_create_vulkan(fx_context *ctx,
                                             VkSurfaceKHR vk_surface,
                                             int32_t width,
                                             int32_t height,

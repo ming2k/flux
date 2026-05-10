@@ -96,7 +96,7 @@ void fx_paint_init(fx_paint *paint, fx_color color)
     paint->miter_limit = 4.0f;
     paint->line_cap = FX_CAP_BUTT;
     paint->line_join = FX_JOIN_MITER;
-    paint->gradient = NULL;
+    paint->gradient = nullptr;
 }
 
 void fx_paint_set_gradient(fx_paint *paint, fx_gradient *gradient)
@@ -123,11 +123,14 @@ bool fx_fill_rect(fx_canvas *c, const fx_rect *rect, fx_color color)
         fx_matrix_transform_point(&m, &x3, &y3);
         fx_path *path = fx_path_create();
         if (!path) return false;
-        fx_path_move_to(path, x0, y0);
-        fx_path_line_to(path, x1, y1);
-        fx_path_line_to(path, x2, y2);
-        fx_path_line_to(path, x3, y3);
-        fx_path_close(path);
+        if (!fx_path_move_to(path, x0, y0) ||
+            !fx_path_line_to(path, x1, y1) ||
+            !fx_path_line_to(path, x2, y2) ||
+            !fx_path_line_to(path, x3, y3) ||
+            !fx_path_close(path)) {
+            fx_path_destroy(path);
+            return false;
+        }
         fx_paint p;
         fx_paint_init(&p, color);
         fx_op op = {
@@ -206,7 +209,7 @@ bool fx_draw_image(fx_canvas *c, const fx_image *image,
 {
     fx_rect full_src = { 0 };
     if (!c || !image || !dst) return false;
-    if (!fx_image_get_desc(image, NULL)) return false;
+    if (!fx_image_get_desc(image, nullptr)) return false;
 
     fx_rect scaled_dst = scale_rect_by_dpr(dst, c->dpr);
     fx_op op = {
@@ -247,9 +250,9 @@ fx_gradient *fx_gradient_create_linear(fx_context *ctx,
                                        const fx_linear_gradient_desc *desc)
 {
     if (!ctx || !desc || desc->stop_count < 2 || desc->stop_count > 4)
-        return NULL;
+        return nullptr;
     fx_gradient *g = calloc(1, sizeof(*g));
-    if (!g) return NULL;
+    if (!g) return nullptr;
     g->ctx = ctx;
     g->mode = 0;
     g->start[0] = desc->start.x;
@@ -268,9 +271,9 @@ fx_gradient *fx_gradient_create_radial(fx_context *ctx,
                                        const fx_radial_gradient_desc *desc)
 {
     if (!ctx || !desc || desc->stop_count < 2 || desc->stop_count > 4)
-        return NULL;
+        return nullptr;
     fx_gradient *g = calloc(1, sizeof(*g));
-    if (!g) return NULL;
+    if (!g) return nullptr;
     g->ctx = ctx;
     g->mode = 1;
     g->start[0] = desc->center.x;
@@ -361,11 +364,11 @@ void fx_clip_path(fx_canvas *c, const fx_path *path)
     push_op(c, &op);
 }
 
-bool fx_draw_glyph_run(fx_canvas *c, const fx_font *font,
+bool fx_draw_glyph_run(fx_canvas *c,
                        const fx_glyph_run *run,
                        float x, float y, const fx_paint *paint)
 {
-    if (!c || !font || !run || !paint || fx_glyph_run_count(run) == 0) return false;
+    if (!c || !run || !paint || fx_glyph_run_count(run) == 0) return false;
 
     x *= c->dpr;
     y *= c->dpr;
@@ -374,7 +377,6 @@ bool fx_draw_glyph_run(fx_canvas *c, const fx_font *font,
     fx_op op = {
         .kind = FX_OP_DRAW_GLYPHS,
         .u.draw_glyphs = {
-            .font = font,
             .run = run,
             .x = x,
             .y = y,

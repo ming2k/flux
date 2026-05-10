@@ -9,11 +9,10 @@ static const char *const k_required_device_exts[] = {
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL
 debug_cb(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-         VkDebugUtilsMessageTypeFlagsEXT         types,
+         [[maybe_unused]] VkDebugUtilsMessageTypeFlagsEXT types,
          const VkDebugUtilsMessengerCallbackDataEXT *data,
          void                                   *user)
 {
-    (void)types;
     fx_context *ctx = user;
     fx_log_level lvl = FX_LOG_INFO;
     if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
@@ -24,7 +23,7 @@ debug_cb(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
         lvl = FX_LOG_INFO;
     else
         lvl = FX_LOG_DEBUG;
-    fx_log(ctx, lvl, "[vk] %s", data->pMessage);
+    fx_log_impl(ctx, lvl, __FILE__, __LINE__, "[vk] %s", data->pMessage);
     return VK_FALSE;
 }
 
@@ -50,7 +49,7 @@ bool fx_instance_create(fx_context *ctx, const char *app_name,
 {
     /* Layers */
     uint32_t n_layers = 0;
-    vkEnumerateInstanceLayerProperties(&n_layers, NULL);
+    vkEnumerateInstanceLayerProperties(&n_layers, nullptr);
     VkLayerProperties *layers = calloc(n_layers, sizeof(*layers));
     if (n_layers) vkEnumerateInstanceLayerProperties(&n_layers, layers);
 
@@ -61,10 +60,10 @@ bool fx_instance_create(fx_context *ctx, const char *app_name,
 
     /* Extensions */
     uint32_t n_inst_exts = 0;
-    vkEnumerateInstanceExtensionProperties(NULL, &n_inst_exts, NULL);
+    vkEnumerateInstanceExtensionProperties(nullptr, &n_inst_exts, nullptr);
     VkExtensionProperties *inst_exts = calloc(n_inst_exts, sizeof(*inst_exts));
     if (n_inst_exts)
-        vkEnumerateInstanceExtensionProperties(NULL, &n_inst_exts, inst_exts);
+        vkEnumerateInstanceExtensionProperties(nullptr, &n_inst_exts, inst_exts);
 
     const char *enabled[16];
     uint32_t n_enabled = 0;
@@ -103,7 +102,7 @@ bool fx_instance_create(fx_context *ctx, const char *app_name,
         ci.ppEnabledLayerNames = layer_names;
     }
 
-    VkResult r = vkCreateInstance(&ci, NULL, &ctx->instance);
+    VkResult r = vkCreateInstance(&ci, nullptr, &ctx->instance);
     if (r != VK_SUCCESS) {
         FX_LOGE(ctx, "vkCreateInstance failed: %d", (int)r);
         return false;
@@ -128,7 +127,7 @@ bool fx_instance_create(fx_context *ctx, const char *app_name,
                 .pfnUserCallback = debug_cb,
                 .pUserData       = ctx,
             };
-            create_fn(ctx->instance, &mi, NULL, &ctx->debug_messenger);
+            create_fn(ctx->instance, &mi, nullptr, &ctx->debug_messenger);
         }
     }
     return true;
@@ -142,11 +141,11 @@ void fx_instance_destroy(fx_context *ctx)
             vkGetInstanceProcAddr(ctx->instance,
                                   "vkDestroyDebugUtilsMessengerEXT");
         if (destroy_fn)
-            destroy_fn(ctx->instance, ctx->debug_messenger, NULL);
+            destroy_fn(ctx->instance, ctx->debug_messenger, nullptr);
         ctx->debug_messenger = VK_NULL_HANDLE;
     }
     if (ctx->instance) {
-        vkDestroyInstance(ctx->instance, NULL);
+        vkDestroyInstance(ctx->instance, nullptr);
         ctx->instance = VK_NULL_HANDLE;
     }
 }
@@ -156,7 +155,7 @@ void fx_instance_destroy(fx_context *ctx)
 static uint32_t pick_graphics_family(VkPhysicalDevice p, VkSurfaceKHR surface)
 {
     uint32_t n = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(p, &n, NULL);
+    vkGetPhysicalDeviceQueueFamilyProperties(p, &n, nullptr);
     VkQueueFamilyProperties *qf = calloc(n, sizeof(*qf));
     vkGetPhysicalDeviceQueueFamilyProperties(p, &n, qf);
     uint32_t pick = UINT32_MAX;
@@ -188,7 +187,7 @@ static int score_device(VkPhysicalDevice p)
 bool fx_device_init(fx_context *ctx, VkSurfaceKHR probe_surface)
 {
     uint32_t n = 0;
-    vkEnumeratePhysicalDevices(ctx->instance, &n, NULL);
+    vkEnumeratePhysicalDevices(ctx->instance, &n, nullptr);
     if (!n) {
         FX_LOGE(ctx, "no Vulkan physical devices found");
         return false;
@@ -205,9 +204,9 @@ bool fx_device_init(fx_context *ctx, VkSurfaceKHR probe_surface)
 
         /* Check swapchain extension on this device. */
         uint32_t ne = 0;
-        vkEnumerateDeviceExtensionProperties(devs[i], NULL, &ne, NULL);
+        vkEnumerateDeviceExtensionProperties(devs[i], nullptr, &ne, nullptr);
         VkExtensionProperties *de = calloc(ne, sizeof(*de));
-        vkEnumerateDeviceExtensionProperties(devs[i], NULL, &ne, de);
+        vkEnumerateDeviceExtensionProperties(devs[i], nullptr, &ne, de);
         bool ok = true;
         for (size_t k = 0; k < sizeof(k_required_device_exts)/sizeof(*k_required_device_exts); ++k) {
             if (!has_ext(k_required_device_exts[k], de, ne)) { ok = false; break; }
@@ -255,7 +254,7 @@ bool fx_device_init(fx_context *ctx, VkSurfaceKHR probe_surface)
         .ppEnabledExtensionNames = k_required_device_exts,
         .pEnabledFeatures        = &feats,
     };
-    VkResult r = vkCreateDevice(ctx->phys, &dci, NULL, &ctx->device);
+    VkResult r = vkCreateDevice(ctx->phys, &dci, nullptr, &ctx->device);
     if (r != VK_SUCCESS) {
         FX_LOGE(ctx, "vkCreateDevice failed: %d", (int)r);
         return false;
@@ -268,13 +267,13 @@ bool fx_device_init(fx_context *ctx, VkSurfaceKHR probe_surface)
         .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         .queueFamilyIndex = ctx->graphics_family,
     };
-    FX_TRY_VK(ctx, vkCreateCommandPool(ctx->device, &pci, NULL,
+    FX_TRY_VK(ctx, vkCreateCommandPool(ctx->device, &pci, nullptr,
                                          &ctx->frame_cmd_pool));
 
     VkPipelineCacheCreateInfo pcci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
     };
-    if (vkCreatePipelineCache(ctx->device, &pcci, NULL, &ctx->pipeline_cache)
+    if (vkCreatePipelineCache(ctx->device, &pcci, nullptr, &ctx->pipeline_cache)
         != VK_SUCCESS) {
         FX_LOGE(ctx, "vkCreatePipelineCache failed");
         return false;
@@ -309,14 +308,14 @@ void fx_device_shutdown(fx_context *ctx)
             ctx->vma_allocator = VK_NULL_HANDLE;
         }
         if (ctx->pipeline_cache) {
-            vkDestroyPipelineCache(ctx->device, ctx->pipeline_cache, NULL);
+            vkDestroyPipelineCache(ctx->device, ctx->pipeline_cache, nullptr);
             ctx->pipeline_cache = VK_NULL_HANDLE;
         }
         if (ctx->frame_cmd_pool) {
-            vkDestroyCommandPool(ctx->device, ctx->frame_cmd_pool, NULL);
+            vkDestroyCommandPool(ctx->device, ctx->frame_cmd_pool, nullptr);
             ctx->frame_cmd_pool = VK_NULL_HANDLE;
         }
-        vkDestroyDevice(ctx->device, NULL);
+        vkDestroyDevice(ctx->device, nullptr);
         ctx->device = VK_NULL_HANDLE;
     }
     ctx->queue_supports_present = false;

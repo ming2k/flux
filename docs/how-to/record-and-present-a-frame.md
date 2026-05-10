@@ -26,7 +26,7 @@ void draw_frame(fx_surface *surface)
 }
 ```
 
-The application owns the event loop. On Wayland, process Wayland events, resize
+The application owns the event loop. On Vulkan, process Vulkan events, resize
 the flux surface when the window size changes, acquire a flux canvas, record the
 frame, and present.
 
@@ -37,4 +37,4 @@ frame.
 
 ## Verification
 
-For offscreen surfaces, call `fx_surface_read_pixels` after presenting and check that the output buffer contains the expected pixels. For Wayland surfaces, verify that the compositor displays the updated frame.
+For offscreen surfaces, call `fx_surface_read_pixels` after presenting and check that the output buffer contains the expected pixels. For Vulkan surfaces, verify that the compositor displays the updated frame.

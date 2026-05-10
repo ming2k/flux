@@ -16,7 +16,7 @@ static bool test_convex_polygon(void)
     fx_point poly[4] = {
         { 0, 0 }, { 10, 0 }, { 10, 10 }, { 0, 10 }
     };
-    fx_point *tris = NULL;
+    fx_point *tris = nullptr;
     size_t count = 0;
     fx_arena arena;
     fx_arena_init(&arena, 0);
@@ -33,7 +33,7 @@ static bool test_concave_polygon(void)
     fx_point poly[5] = {
         { 0, 0 }, { 10, 0 }, { 10, 10 }, { 5, 5 }, { 0, 10 }
     };
-    fx_point *tris = NULL;
+    fx_point *tris = nullptr;
     size_t count = 0;
     fx_arena arena;
     fx_arena_init(&arena, 0);
@@ -50,7 +50,7 @@ static bool test_reject_degenerate(void)
     fx_point poly[3] = {
         { 0, 0 }, { 10, 0 }, { 20, 0 }
     };
-    fx_point *tris = NULL;
+    fx_point *tris = nullptr;
     size_t count = 0;
     fx_arena arena;
     fx_arena_init(&arena, 0);

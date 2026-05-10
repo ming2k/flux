@@ -9,6 +9,18 @@ minor bumps; the commit that breaks ABI is called out explicitly below.
 
 ## [Unreleased]
 
+### Changed
+
+- **Logging system overhaul.** The `fx_log_fn` signature now carries
+  `file`, `line`, `fmt`, and `msg` so structured loggers can forward
+  the plain message or re-parse the format arguments. Log levels were
+  reordered to the standard `TRACE < DEBUG < INFO < WARN < ERROR` and
+  `fx_context_desc.min_log_level` was added for runtime filtering.
+  `FX_LOGD` and `FX_LOGT` expand to nothing in `NDEBUG` builds, giving
+  zero overhead in release binaries. The default `stderr` sink now
+  prints ISO-8601 timestamps and `file:line` locations and locks
+  `stderr` to prevent interleaving.
+
 ## [0.1.0] — 2026-04-25
 
 ### Added
