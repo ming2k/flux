@@ -1,51 +1,59 @@
 /*
- * Geometry layer: path construction, bezier flattening, tessellation, stroke expansion.
+ * Geometry layer: path construction (in path.c), bezier flattening,
+ * tessellation, stroke expansion. Backend-independent: no Vulkan, no
+ * pixel buffers — pure CPU geometry on user coordinates.
  *
- * All geometry is expressed in device-independent user coordinates.
- * These modules have no dependency on any rendering backend.
+ * The stroker takes a flux_stroke_style POD (defined in internal.h) so
+ * that it never depends on the public flux_paint handle layout.
  */
-#ifndef FX_GEOMETRY_H
-#define FX_GEOMETRY_H
+#ifndef FLUX_GEOMETRY_H
+#define FLUX_GEOMETRY_H
 
 #include "flux/flux.h"
 #include "math/arena.h"
+#include "visibility.h"
 #include <stdbool.h>
 #include <stddef.h>
 
-/* ---- path introspection (from path.c) ---- */
+/* Forward decl for flux_stroke_style (defined in internal.h). */
+struct flux_stroke_style;
 
-bool   fx_path_has_multiple_subpaths(const fx_path *path);
-size_t fx_path_subpath_count(const fx_path *path);
-bool   fx_path_is_axis_aligned_rect(const fx_path *path, fx_rect *out_rect);
-bool   fx_path_get_line_loop(const fx_path *path,
-                             const fx_point **out_points,
-                             size_t *out_count);
+/* ---- path introspection (path.c) ---- */
 
-/* Flatten a subpath to a polyline (beziers → line segments). */
-bool   fx_path_flatten_subpath(const fx_path *path, size_t subpath_index,
-                               float tolerance, fx_arena *arena,
-                               fx_point **out_points, size_t *out_count,
-                               bool *out_closed);
-bool   fx_path_flatten_polyline(const fx_path *path, float tolerance,
-                                fx_arena *arena,
-                                fx_point **out_points, size_t *out_count,
-                                bool *out_closed);
-bool   fx_path_flatten_line_loop(const fx_path *path, float tolerance,
-                                 fx_arena *arena,
-                                 fx_point **out_points, size_t *out_count);
+FLUX_INTERNAL bool   flux_path_has_multiple_subpaths(const flux_path *path);
+FLUX_INTERNAL size_t flux_path_subpath_count(const flux_path *path);
+FLUX_INTERNAL bool   flux_path_is_axis_aligned_rect(const flux_path *path,
+                                                    flux_rect *out_rect);
+FLUX_INTERNAL bool   flux_path_get_line_loop(const flux_path *path,
+                                             const flux_point **out_points,
+                                             size_t *out_count);
 
-/* ---- tessellation (from tess.c) ---- */
+FLUX_INTERNAL flux_result flux_path_flatten_subpath(const flux_path *path,
+                                                    size_t subpath_index,
+                                                    float tolerance, flux_arena *arena,
+                                                    flux_point **out_points,
+                                                    size_t *out_count,
+                                                    bool *out_closed);
+FLUX_INTERNAL flux_result flux_path_flatten_polyline(const flux_path *path, float tolerance,
+                                                     flux_arena *arena,
+                                                     flux_point **out_points, size_t *out_count,
+                                                     bool *out_closed);
+FLUX_INTERNAL flux_result flux_path_flatten_line_loop(const flux_path *path, float tolerance,
+                                                      flux_arena *arena,
+                                                      flux_point **out_points, size_t *out_count);
 
-/* Ear-clipping triangulation of a simple (non-self-intersecting) polygon. */
-bool   fx_tessellate_simple_polygon(const fx_point *points, size_t count,
-                                    fx_arena *arena,
-                                    fx_point **out_tris, size_t *out_count);
+/* ---- tessellation (tess.c) ---- */
 
-/* ---- stroke (from stroker.c) ---- */
+FLUX_INTERNAL flux_result flux_tessellate_simple_polygon(const flux_point *points, size_t count,
+                                                         flux_arena *arena,
+                                                         flux_point **out_tris,
+                                                         size_t *out_count);
 
-/* Expand a polyline into a triangle strip with caps and joins. */
-bool   fx_stroke_polyline(const fx_point *points, size_t count, bool closed,
-                          const fx_paint *paint, fx_arena *arena,
-                          fx_point **out_tris, size_t *out_count);
+/* ---- stroke (stroker.c) ---- */
 
-#endif /* FX_GEOMETRY_H */
+FLUX_INTERNAL flux_result flux_stroke_polyline(const flux_point *points, size_t count, bool closed,
+                                               const struct flux_stroke_style *style,
+                                               flux_arena *arena,
+                                               flux_point **out_tris, size_t *out_count);
+
+#endif /* FLUX_GEOMETRY_H */

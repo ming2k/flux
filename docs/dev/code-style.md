@@ -6,10 +6,11 @@ every file in the codebase.
 
 ## Language
 
-- **C11**. No C++, no compiler extensions except `__builtin_*` for
+- **C23**. No C++, no compiler extensions except `__builtin_*` for
   math intrinsics and the `__attribute__((visibility("hidden")))` /
   `__attribute__((format(...)))` GCC/Clang attributes.
-- `_Generic` and VLAs are allowed; alloca is not.
+- `nullptr`, `[[nodiscard]]`, `constexpr`, and designated initializers
+  are used extensively. `_Generic` and VLAs are allowed; alloca is not.
 - All source files compile clean at `-Wall -Wextra` with no
   suppression pragmas. Disable noisy-but-harmless warnings only at
   the meson project level, not per-file.
@@ -168,8 +169,8 @@ threading model is extended.
 - Internal declarations shared across two or more TUs live in
   `src/internal.h`. Internal declarations used by only one TU stay
   in that `.c` file as `static`.
-- Vulkan-specific code lives under `src/vk/`. Non-Vulkan code (`path`,
-  `stroker`, `tess`, `text`, `atlas`) must not include `<vulkan/vulkan.h>`
+- Vulkan-specific code lives under `src/rhi/vulkan/`. Non-Vulkan code
+  (`geometry/`, `state/`, `resource/`) must not include `<vulkan/vulkan.h>`
   directly — they depend only on the types in `internal.h`.
 
 ## Build constraints

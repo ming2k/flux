@@ -3,7 +3,7 @@
 layout(location = 0) in vec2 in_pos;
 layout(location = 0) out vec2 frag_pos;
 
-layout(push_constant) uniform fx_gradient_pc {
+layout(push_constant) uniform flux_gradient_pc {
     vec2 surface_size;
     uint mode;
     uint stop_count;

@@ -1,356 +1,374 @@
 # API Reference
 
-This document describes the public API of flux.
+This document is the canonical companion to `<flux/flux.h>`. The
+header is the source of truth; this page explains the conventions and
+the relationships between the moving parts.
 
-For application-level integration examples, including linking, system fonts,
-and SVG ingestion, see [How-to guides](../how-to/).
+For application-level integration recipes, see the [How-to
+guides](../how-to/).
 
-## Ownership
+## Conventions
 
-flux follows a simple own/borrow split:
+flux is a C foundation library. Every callable, type, and macro uses
+the `flux_` / `FLUX_` prefix and follows the rules below.
 
-- Objects returned by `*_create` are owned by the caller and destroyed with the matching `*_destroy`.
-- `fx_canvas` is borrowed. It is valid only from `fx_surface_acquire(s)` until the matching `fx_surface_present(s)`.
-- Recorded canvas ops borrow the resource objects they point at (`fx_image`, `fx_path`, `fx_font`, `fx_glyph_run`). You must keep them alive until the frame is presented.
-- Internal copies: When recording paths under a non-identity transformation matrix, flux creates an internal transformed copy. The canvas manages the lifecycle of these internal copies automatically.
+| Convention | Rule |
+|---|---|
+| Naming | `flux_*` for symbols, `FLUX_*` for macros and enum members. |
+| Handles | Opaque, refcounted. Never dereference. |
+| Constructors | Always `_create*`, take ctx + desc, return `flux_result` and write to `out_*`. |
+| Destructors | Always `_release`. NULL-safe. |
+| Sharing | `_retain` increments the refcount; chainable; NULL-safe. |
+| Errors | `flux_result`. Compare with `FLUX_OK`. `flux_result_string(r)` for diagnostics. |
+| Descriptors | Every `*_desc` starts with `uint32_t size`; set it to `sizeof(*desc)`. |
+| Thread model | One context per thread. Resources may not be shared between contexts. |
+
+### Borrowed vs owned
+
+flux is explicit about who owns what.
+
+- **Owned.** Anything returned from `_create*` is owned by the caller
+  and must be released. `flux_paint`, `flux_path`, `flux_gradient`,
+  `flux_image`, `flux_glyph_run`.
+- **Borrowed.** `flux_canvas` returned from `flux_surface_acquire` is
+  valid until the matching `flux_surface_present`. Do not retain it.
+- **Borrowed inside ops.** `flux_canvas_fill_path`, `_stroke_path`,
+  `_clip_path`, `_draw_image`, `_draw_glyph_run` borrow their resource
+  arguments. The caller must keep them alive until present.
+- **Snapshotted.** `flux_paint` is deep-copied (including dash array
+  and gradient retain) at record time, so the caller may release or
+  mutate the paint immediately.
 
 ## Context
 
 ```c
-fx_context_desc desc = {
-    .app_name = "shell-ui",
-    .enable_validation = false,
-    .min_log_level = FX_LOG_INFO,
+flux_context_desc desc = {
+    .size          = sizeof(desc),
+    .min_log_level = FLUX_LOG_INFO,
+    /* .allocator left zero-initialised → libc malloc */
 };
-fx_context *ctx = fx_context_create(&desc);
+flux_context *ctx = NULL;
+flux_result r = flux_context_create(&desc, &ctx);
 ```
 
-`fx_context` owns the Vulkan instance, device selection, and the context-wide **Glyph Atlas**.
+`desc` may be `NULL` for "all defaults."
 
-### Logging
+### Allocator
 
-The library emits structured log messages through a user-provided callback
-or a default `stderr` sink. The callback signature is:
+To route allocations through your own allocator, fill in
+`desc.allocator`:
 
 ```c
-void (*fx_log_fn)(fx_log_level level,
-                  const char *file, int line,
-                  const char *fmt, const char *msg,
-                  void *user);
+flux_context_desc desc = {
+    .size      = sizeof(desc),
+    .allocator = {
+        .alloc   = my_alloc,
+        .realloc = my_realloc,
+        .free    = my_free,
+        .user    = &my_arena,
+    },
+};
 ```
 
-- `file` / `line`: source location of the log site.
-- `fmt`: the original `printf` format string (useful for structured parsers).
-- `msg`: the fully formatted message (safe to forward without re-parsing).
+If any of `alloc` / `realloc` / `free` is non-NULL, all three must be.
+The allocator's user pointer is forwarded verbatim. The allocator
+must outlive the context and every resource derived from it.
 
-Log levels (in increasing severity):
+### Logger
 
-| Level | Macro | Elided in `NDEBUG`? | Typical use |
-|-------|-------|---------------------|-------------|
-| `FX_LOG_TRACE` | `FX_LOGT` | Yes | Internal bookkeeping |
-| `FX_LOG_DEBUG` | `FX_LOGD` | Yes | Per-frame events |
-| `FX_LOG_INFO`  | `FX_LOGI` | No | Startup, configuration |
-| `FX_LOG_WARN`  | `FX_LOGW` | No | Recoverable issues |
-| `FX_LOG_ERROR` | `FX_LOGE` | No | Failures |
+Set `desc.log` to a `flux_log_fn` to capture diagnostics. The default
+sink writes to `stderr` with timestamps and `file:line` annotations.
 
-`fx_context_desc.min_log_level` filters at runtime. The default is
-`FX_LOG_INFO`; set it to `FX_LOG_DEBUG` or `FX_LOG_TRACE` to see more
-output (requires a debug build).
+| Level | Macro (internal) | Elided in `NDEBUG`? |
+|---|---|---|
+| `FLUX_LOG_TRACE` | `FLUX_LOGT` | yes |
+| `FLUX_LOG_DEBUG` | `FLUX_LOGD` | yes |
+| `FLUX_LOG_INFO`  | `FLUX_LOGI` | no  |
+| `FLUX_LOG_WARN`  | `FLUX_LOGW` | no  |
+| `FLUX_LOG_ERROR` | `FLUX_LOGE` | no  |
 
-Destroy the context and all associated resources when done:
+Filter at runtime with `desc.min_log_level`.
+
+### Capabilities
 
 ```c
-fx_context_destroy(ctx);
+flux_capabilities caps = { .size = sizeof(caps) };
+flux_get_capabilities(&caps);
 ```
 
-### Device capabilities
+Reports `has_vulkan`, `has_software`, `has_stencil`, `has_msaa`,
+`max_gradient_stops`, `max_image_size`, `max_surface_size`. The struct
+is sized for forward compatibility.
 
-Query device capabilities after the first surface has triggered device initialization:
+## Math
+
+### Matrix
+
+`flux_matrix` stores six floats column-major:
+
+```
+[ m[0]  m[2]  m[4] ]
+[ m[1]  m[3]  m[5] ]
+[  0     0     1   ]
+```
 
 ```c
-fx_device_caps caps;
-fx_context_get_device_caps(ctx, &caps);
+flux_matrix m;
+flux_matrix_identity(&m);
+flux_matrix_translation(&m, 100.0f, 50.0f);
+flux_matrix_rotation(&m, 1.5707963f);
+
+flux_matrix product;
+flux_matrix_multiply(&product, &a, &b);
+
+flux_matrix inv;
+if (!flux_matrix_invert(&m, &inv)) { /* singular */ }
+
+float x = 0, y = 0;
+flux_matrix_transform_point(&m, &x, &y);
+
+flux_rect rect_out;
+flux_matrix_transform_rect(&m, &rect_in, &rect_out);
 ```
 
-Fields include `validation_enabled`, `max_image_dimension_2d`, `max_color_attachments`, and `api_version`.
+### Color
 
-The core header does not expose Vulkan types. Include the Vulkan interop header
-when integrating with external Vulkan code:
+```c
+flux_color c    = flux_color_rgba(255, 128, 0, 200);   // premultiplies
+flux_color cpre = flux_color_rgba_premul(160, 80, 0, 200); // already premul
+
+uint8_t r, g, b, a;
+flux_color_unpack(c, &r, &g, &b, &a);                  // undoes premul
+```
+
+`flux_color` is `0xAARRGGBB` premultiplied. The pack helpers are
+`static inline`; `unpack` is out-of-line.
+
+## Surface
+
+### Offscreen
+
+```c
+flux_surface *s = NULL;
+flux_surface_create_offscreen(ctx, 256, 256,
+    FLUX_FMT_RGBA8_UNORM, FLUX_CS_SRGB, &s);
+```
+
+### Vulkan
 
 ```c
 #include <flux/flux_vulkan.h>
 
-VkInstance inst = fx_context_get_instance(ctx);
+flux_vulkan_device dev = { .size = sizeof(dev) };
+flux_vulkan_device_create(&desc, exts, ext_count, &dev);
+
+flux_surface *s = NULL;
+flux_surface_create_vulkan(ctx, &dev, vk_surface,
+    width, height, FLUX_CS_SRGB, &s);
 ```
 
-## Surfaces
+flux borrows the device and the `VkSurfaceKHR` for the lifetime of
+the `flux_surface`. Both must outlive `flux_surface_release`.
 
-### Vulkan surface
-
-For integration with an externally-created `VkSurfaceKHR`:
+### Frame loop
 
 ```c
-#include <flux/flux_vulkan.h>
-
-fx_surface *surface = fx_surface_create_vulkan(ctx, vk_surface,
-                                               width, height, FX_CS_SRGB);
+flux_canvas *c = flux_surface_acquire(s);
+flux_canvas_clear(c, 0xFF202020u);
+/* ... drawing ops ... */
+flux_surface_present(s);
 ```
 
-### Offscreen surface
-
-Headless rendering to CPU-readable memory:
+### Resize, DPR, readback
 
 ```c
-fx_surface *surface = fx_surface_create_offscreen(ctx, 256, 256,
-                                                  FX_FMT_RGBA8_UNORM,
-                                                  FX_CS_SRGB);
-```
+flux_surface_resize(s, 1920, 1080);
+flux_surface_set_dpr(s, 2.0f);
 
-After presenting, read pixels back:
-
-```c
 uint8_t pixels[256 * 256 * 4];
-fx_surface_read_pixels(surface, pixels, 256 * 4);
+flux_surface_read_pixels(s, pixels, 0);   /* offscreen only */
 ```
 
-### Frame lifecycle
+`flux_surface_get_size`, `_get_format`, `_get_dpr` give read-only
+access to the current state.
+
+## Canvas
+
+The canvas records a display list during a frame. All operations are
+queued and replayed at present time.
+
+### Transform stack
 
 ```c
-fx_canvas *c = fx_surface_acquire(surface);
-/* record drawing commands ... */
-fx_surface_present(surface);
+flux_canvas_save(c);
+flux_canvas_translate(c, 100, 100);
+flux_canvas_rotate(c, 0.785f);
+flux_canvas_scale(c, 2.0f, 2.0f);
+/* ... */
+flux_canvas_restore(c);
 ```
 
-Destroy a surface and all per-frame resources:
-
-```c
-fx_surface_destroy(surface);
-```
-
-### Resize
-
-For swapchain surfaces, request a resize (takes effect on the next `fx_surface_acquire`):
-
-```c
-fx_surface_resize(surface, 1920, 1080);
-```
-
-### Device Pixel Ratio
-
-```c
-fx_surface_set_dpr(surface, 2.0f);   /* HiDPI */
-float dpr = fx_surface_get_dpr(surface);
-```
-
-## Matrix Transformations
-
-flux uses a 3x3 affine transformation stack. Transformations are applied on the CPU immediately during recording. This ensures that path flattening and stroking always happen at the final device resolution.
-
-```c
-fx_save(c);
-fx_translate(c, 100, 100);
-fx_rotate(c, M_PI / 4);
-fx_scale(c, 2.0, 2.0);
-
-// Draw something transformed...
-
-fx_restore(c);
-```
-
-Available functions:
-- `fx_save` / `fx_restore`: Push/pop the matrix stack.
-- `fx_translate`, `fx_scale`, `fx_rotate`: Combine a new transform into the current matrix.
-- `fx_concat`: Multiply the current matrix by a provided `fx_matrix`.
-- `fx_set_matrix` / `fx_get_matrix`: Direct access to the current matrix.
-
-Matrix math utilities:
-- `fx_matrix_multiply(out, a, b)`: Compose two matrices.
-- `fx_matrix_transform_point(m, &x, &y)`: Transform a single point.
-
-## Color
-
-Colors are `0xAARRGGBB` premultiplied alpha:
-
-```c
-fx_color orange = fx_color_rgba(255, 128, 0, 255); // non-premul -> premul
-```
-
-## Paint System
-
-The `fx_paint` object encapsulates all styling information for primitives.
-
-```c
-fx_paint paint;
-fx_paint_init(&paint, fx_color_rgba(255, 128, 0, 255)); // Solid orange
-
-paint.stroke_width = 4.0f;
-paint.line_cap = FX_CAP_ROUND;
-paint.line_join = FX_JOIN_ROUND;
-paint.miter_limit = 4.0f;
-```
-
-Available enums:
-- `fx_line_cap`: `FX_CAP_BUTT`, `FX_CAP_ROUND`, `FX_CAP_SQUARE`.
-- `fx_line_join`: `FX_JOIN_MITER`, `FX_JOIN_ROUND`, `FX_JOIN_BEVEL`.
-
-### Gradients
-
-Attach a gradient to a paint for gradient fills:
-
-```c
-fx_gradient *grad = fx_gradient_create_linear(ctx, &(fx_linear_gradient_desc){
-    .start = { 0, 0 },
-    .end   = { 100, 0 },
-    .colors = { 0xFFFF0000, 0xFF0000FF },
-    .stops  = { 0.0f, 1.0f },
-    .stop_count = 2,
-});
-
-fx_paint_set_gradient(&paint, grad);
-fx_fill_path(c, path, &paint);
-
-fx_gradient_destroy(grad);
-```
-
-Radial gradients are created with `fx_gradient_create_radial` using a center point and radius.
-
-## Drawing Primitives
-
-### Paths
-
-`fx_path` is an explicit verb/point stream.
-
-```c
-fx_path *path = fx_path_create();
-fx_path_move_to(path, 10.0f, 10.0f);
-fx_path_line_to(path, 110.0f, 10.0f);
-fx_path_close(path);
-
-fx_fill_path(c, path, &paint);
-fx_stroke_path(c, path, &paint);
-```
-
-Available functions:
-- `fx_path_move_to`, `fx_path_line_to`, `fx_path_quad_to`, `fx_path_cubic_to`, `fx_path_close`
-- `fx_path_add_rect` — convenience for an axis-aligned rectangle.
-- `fx_path_arc_to` — approximates an SVG elliptical arc as a sequence of cubic Bézier curves.
-- `fx_path_reset` — clear all verbs and points without freeing the path object.
-- `fx_path_destroy` — free the path and all internal data.
-
-Query path geometry:
-- `fx_path_get_bounds(path, &rect)` — compute the bounding box.
-- `fx_path_verb_count(path)` — number of verb commands.
-- `fx_path_point_count(path)` — number of control points.
-
-Transform a path on the CPU:
-- `fx_path_transform(src, &matrix)` — returns a new `fx_path*`; the original is untouched.
-
-> **Fill limitations:** `fx_fill_path` tessellates simple polygons (concave is OK).
-> Multi-subpath paths are filled using a stencil buffer with even-odd fill rule,
-> so holes (donut shapes) are correctly handled. Self-intersecting paths and
-> nonzero fill rule are not yet supported.
->
-> **Path lifetime:** `fx_fill_path` and `fx_stroke_path` record a *reference* to the
-> path; they do **not** copy it. The path must remain valid until the frame is
-> presented (`fx_surface_present`). Callers should destroy paths *after* present,
-> or use `fx_path_destroy` inside the canvas-reset hook if ownership is transferred.
-
-### Rect fills
-
-Convenience for axis-aligned rectangles without creating a path:
-
-```c
-fx_fill_rect(c, &(fx_rect){ 10, 10, 100, 50 }, fx_color_rgba(0, 0, 255, 255));
-```
+`flux_canvas_set_matrix` / `_get_matrix` / `_concat` give direct
+access. `_restore` on an empty stack returns `FLUX_ERROR_INVALID_STATE`.
 
 ### Clipping
 
-Restrict subsequent draws to a rectangular region using scissor testing. The clip rect is transformed by the current matrix.
-
 ```c
-fx_clip_rect(c, &(fx_rect){ 10, 10, 100, 100 });
-fx_fill_rect(c, &(fx_rect){ 0, 0, 200, 200 }, fx_color_rgba(255, 0, 0, 255));
-// Only the 100x100 region at (10,10) is red
-
-fx_reset_clip(c);
+flux_canvas_clip_rect(c, &(flux_rect){ 10, 10, 100, 100 });
+flux_canvas_clip_path(c, my_path);
+flux_canvas_reset_clip(c);
 ```
 
-Path clipping uses the stencil buffer (bounding-box scissor approximation):
+Rectangle clips are scissor-bound; path clips use the stencil buffer.
+
+### Drawing
 
 ```c
-fx_path *clip_path = fx_path_create();
-fx_path_move_to(clip_path, 0, 0);
-fx_path_line_to(clip_path, 100, 0);
-fx_path_line_to(clip_path, 0, 100);
-fx_path_close(clip_path);
-fx_clip_path(c, clip_path);
+flux_canvas_fill_rect (c, &(flux_rect){ 0, 0, 100, 50 }, 0xFF0000FFu);
+flux_canvas_fill_path (c, path, paint);
+flux_canvas_stroke_path(c, path, paint);
+flux_canvas_draw_image(c, image, /*src=*/NULL, /*dst=*/&dst_rect);
+flux_canvas_draw_glyph_run(c, run, x, y, paint);
+flux_canvas_apply_blur(c, 4.0f);   /* offscreen only */
 ```
 
-### Images
+## Paint
 
-`fx_image` handles GPU-resident pixel data.
+`flux_paint` is opaque; setters and getters mirror each other.
 
 ```c
-fx_image_desc img_desc = {
-    .width  = 64,
-    .height = 64,
-    .format = FX_FMT_RGBA8_UNORM,
-    .data   = pixels, // Optional initial CPU data
+flux_paint *p = NULL;
+flux_paint_create(ctx, &p);
+flux_paint_set_color       (p, 0xFFAABBCCu);
+flux_paint_set_stroke_width(p, 2.0f);
+flux_paint_set_line_cap    (p, FLUX_CAP_ROUND);
+flux_paint_set_line_join   (p, FLUX_JOIN_ROUND);
+flux_paint_set_miter_limit (p, 4.0f);
+flux_paint_set_fill_rule   (p, FLUX_FILL_NON_ZERO);
+flux_paint_set_blend_mode  (p, FLUX_BLEND_MULTIPLY);
+flux_paint_set_gradient    (p, my_gradient);
+flux_paint_set_dash        (p, (float[]){5, 2, 5}, 3, 0.0f);
+
+float w = flux_paint_get_stroke_width(p);
+flux_color c = flux_paint_get_color(p);
+```
+
+Negative stroke width and miter limits below 1.0 are rejected with
+`FLUX_ERROR_INVALID_ARGUMENT`.
+
+### Blend modes
+
+`SRC_OVER`, `DST_OVER`, `SRC_IN`, `DST_IN`, `SRC_OUT`, `DST_OUT`,
+`SRC_ATOP`, `DST_ATOP`, `XOR`, `PLUS`, `MULTIPLY`, `SCREEN`, `OVERLAY`.
+
+## Path
+
+`flux_path` is a verb/point stream.
+
+```c
+flux_path *p = NULL;
+flux_path_create(ctx, &p);
+
+flux_path_move_to (p, 10, 10);
+flux_path_line_to (p, 50, 10);
+flux_path_quad_to (p, 50, 30, 30, 30);
+flux_path_cubic_to(p, 20, 30, 10, 20, 10, 10);
+flux_path_close   (p);
+
+/* Convenience shapes. */
+flux_path_add_rect      (p, &(flux_rect){ 0, 0, 100, 80 });
+flux_path_add_round_rect(p, &(flux_rect){ 0, 0, 100, 50 }, 10.0f);
+flux_path_add_circle    (p, 50, 50, 25);
+flux_path_add_ellipse   (p, 50, 50, 30, 20);
+
+/* SVG arc. */
+flux_path_arc_to(p, rx, ry, rotation, large_arc, sweep, x, y);
+
+/* Queries. */
+flux_rect bounds;
+flux_path_get_bounds(p, &bounds);
+size_t verbs  = flux_path_verb_count(p);
+size_t points = flux_path_point_count(p);
+
+/* Transform — returns a new path. */
+flux_path *moved = NULL;
+flux_path_transform(p, &matrix, &moved);
+```
+
+## Gradient
+
+```c
+flux_color colors[3] = { 0xFFFF0000, 0xFF00FF00, 0xFF0000FF };
+float      stops [3] = { 0.0f, 0.5f, 1.0f };
+
+flux_linear_gradient_desc lg = {
+    .size       = sizeof(lg),
+    .start      = { 0, 0 },
+    .end        = { 100, 0 },
+    .colors     = colors,
+    .stops      = stops,
+    .stop_count = 3,
+    .extend     = FLUX_EXTEND_PAD,
 };
+flux_gradient *g = NULL;
+flux_gradient_create_linear(ctx, &lg, &g);
 
-fx_image *img = fx_image_create(ctx, &img_desc);
-fx_draw_image(c, img, NULL, &(fx_rect){ 0, 0, 64, 64 });
+flux_paint_set_gradient(paint, g);
 ```
 
-`fx_draw_image(c, img, src, dst)` draws a textured quad.
+`stop_count` must be in `[2, FLUX_MAX_GRADIENT_STOPS]`. Stops must be
+monotonically non-decreasing in `[0, 1]`. Radial gradients use
+`flux_radial_gradient_desc` with `center` and `radius`.
 
-Image management:
-- `fx_image_destroy(img)` — free GPU resources.
-- `fx_image_update(img, data, stride)` — upload new pixel data.
-- `fx_image_get_desc(img, &desc)` — query current descriptor.
-- `fx_image_data(img, &size, &stride)` — access the optional CPU-side pixel copy.
-
-Supported formats: `FX_FMT_BGRA8_UNORM`, `FX_FMT_RGBA8_UNORM`, `FX_FMT_A8_UNORM`.
-
-### Text
-
-flux consumes positioned glyph runs. High-level shaping (UTF-8 to glyph-ids) should be performed via HarfBuzz.
+## Image
 
 ```c
-fx_font *font = fx_font_create(ctx, &(fx_font_desc){
-    .family = "Noto Sans",
-    .source_name = "/path/to/font.ttf",
-    .size = 16.0f,
-});
+flux_image_desc desc = {
+    .size   = sizeof(desc),
+    .width  = 64, .height = 64,
+    .format = FLUX_FMT_RGBA8_UNORM,
+    .data   = pixels, .stride = 64 * 4,    // optional
+};
+flux_image *img = NULL;
+flux_image_create(ctx, &desc, &img);
 
-fx_glyph_run *run = fx_glyph_run_create(8);
-fx_glyph_run_append(run, glyph_id, x, y);
+flux_image_update       (img, new_pixels, 64 * 4);                /* full */
+flux_image_update_region(img, x, y, w, h, new_pixels, w * 4);     /* sub-region */
 
-fx_draw_glyph_run(c, font, run, 10, 20, &paint);
+uint32_t w, h;
+flux_image_get_size(img, &w, &h);
+flux_pixel_format fmt = flux_image_get_format(img);
 ```
 
-Font management:
-- `fx_font_destroy(font)`
-- `fx_font_get_desc(font, &desc)` — query the descriptor used at creation.
-- `fx_font_get_hb_font(font)` — borrow the underlying HarfBuzz font handle.
-- `fx_font_get_metrics(font, &ascender, &descender)` — pixel metrics. `ascender > 0`, `descender <= 0`.
+Wrap a presented offscreen surface as an image:
 
-Glyph run management:
-- `fx_glyph_run_destroy(run)`
-- `fx_glyph_run_reset(run)` — clear all glyphs without freeing.
-- `fx_glyph_run_count(run)` — number of glyphs.
-- `fx_glyph_run_data(run)` — pointer to the glyph array.
+```c
+flux_image *snap = NULL;
+flux_image_create_from_surface(s, &snap);
+```
 
-## Canvas introspection
+The image holds a refcount on the surface; release the image first if
+you tear both down.
 
-- `fx_canvas_op_count(c)` — number of recorded operations.
-- `fx_clear(c, color)` — set the background clear color for the frame.
+## Glyph run
 
-## Vulkan Implementation Status
+flux consumes positioned glyph runs. Shaping (UTF-8 → glyph IDs) and
+rasterisation are the caller's responsibility (HarfBuzz + FreeType is
+the typical pairing).
 
-- **Memory:** Per-frame dynamic ring buffers (`HOST_VISIBLE | HOST_COHERENT`).
-- **Batching:** Automatic grouping of sequential primitives with identical paint properties.
-- **Atlas:** Dynamic 2048x2048 `A8` glyph atlas.
-- **Pipelines:** Specialized shaders for solid geometry, textured quads, alpha-blended text, and gradients.
-- **Blending:** Full support for `SRC_OVER` alpha blending.
-- **Clipping:** Scissor-based rectangular clipping.
+```c
+flux_glyph_upload(ctx, glyph_id, bitmap, w, h, bx, by, advance);
+
+flux_glyph_run *run = NULL;
+flux_glyph_run_create(ctx, /* reserve */ 16, &run);
+flux_glyph_run_append(run, glyph_id, x, y);
+
+flux_canvas_draw_glyph_run(c, run, origin_x, origin_y, paint);
+```
+
+## See also
+
+- [`<flux/flux.h>`](../../include/flux/flux.h) — the canonical contract.
+- [API stability and deprecation policy](api-stability.md).
+- [Thread safety](thread-safety.md).
+- [Examples](../../examples/) — minimal, hello_rect, windowed.

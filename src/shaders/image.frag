@@ -5,7 +5,7 @@ layout(location = 0) out vec4 out_color;
 
 layout(binding = 0) uniform sampler2D tex;
 
-layout(push_constant) uniform fx_image_pc {
+layout(push_constant) uniform flux_image_pc {
     vec2 surface_size;
     vec2 pad;
 } pc;

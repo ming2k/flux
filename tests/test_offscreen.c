@@ -1,75 +1,41 @@
-#include "flux/flux.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <flux/flux.h>
+#include "test_helpers.h"
 
 int main(void)
 {
-    fx_context_desc desc = {
-        .app_name = "test_offscreen",
-        .enable_validation = false,
-    };
-    fx_context *ctx = fx_context_create(&desc);
-    if (!ctx) {
-        fprintf(stderr, "failed to create context\n");
-        return 1;
-    }
+    flux_context *ctx = NULL;
+    CHECK(flux_context_create(NULL, &ctx) == FLUX_OK);
 
-    fx_surface *s = fx_surface_create_offscreen(ctx, 64, 64,
-                                                FX_FMT_RGBA8_UNORM,
-                                                FX_CS_SRGB);
-    if (!s) {
-        fprintf(stderr, "failed to create offscreen surface\n");
-        fx_context_destroy(ctx);
-        return 1;
-    }
+    flux_surface *s = NULL;
+    CHECK(flux_surface_create_offscreen(ctx, 32, 32,
+            FLUX_FMT_RGBA8_UNORM, FLUX_CS_SRGB, &s) == FLUX_OK);
 
-    fx_canvas *c = fx_surface_acquire(s);
-    if (!c) {
-        fprintf(stderr, "failed to acquire canvas\n");
-        fx_surface_destroy(s);
-        fx_context_destroy(ctx);
-        return 1;
-    }
+    int32_t w = 0, h = 0;
+    CHECK(flux_surface_get_size(s, &w, &h) == FLUX_OK);
+    CHECK(w == 32 && h == 32);
+    CHECK(flux_surface_get_format(s) == FLUX_FMT_RGBA8_UNORM);
+    CHECK(approx_eq(flux_surface_get_dpr(s), 1.0f));
 
-    fx_clear(c, fx_color_rgba(255, 0, 0, 255));
-    fx_surface_present(s);
+    flux_canvas *c = flux_surface_acquire(s);
+    CHECK(c != NULL);
+    CHECK(flux_canvas_clear(c, flux_color_rgba(255, 0, 0, 255)) == FLUX_OK);
+    CHECK(flux_canvas_fill_rect(c, &(flux_rect){ 4, 4, 8, 8 },
+                                 flux_color_rgba(0, 0, 255, 255)) == FLUX_OK);
+    CHECK(flux_surface_present(s) == FLUX_OK);
 
-    uint8_t *pixels = malloc(64 * 64 * 4);
-    if (!fx_surface_read_pixels(s, pixels, 64 * 4)) {
-        fprintf(stderr, "failed to read pixels\n");
-        free(pixels);
-        fx_surface_destroy(s);
-        fx_context_destroy(ctx);
-        return 1;
-    }
+    static uint8_t pixels[32 * 32 * 4];
+    CHECK(flux_surface_read_pixels(s, pixels, 0) == FLUX_OK);
 
-    int errors = 0;
-    for (int y = 0; y < 64; ++y) {
-        for (int x = 0; x < 64; ++x) {
-            uint8_t r = pixels[(y * 64 + x) * 4 + 0];
-            uint8_t g = pixels[(y * 64 + x) * 4 + 1];
-            uint8_t b = pixels[(y * 64 + x) * 4 + 2];
-            uint8_t a = pixels[(y * 64 + x) * 4 + 3];
-            if (r != 255 || g != 0 || b != 0 || a != 255) {
-                if (errors < 5) {
-                    fprintf(stderr, "pixel(%d,%d) = %u,%u,%u,%u\n",
-                            x, y, r, g, b, a);
-                }
-                errors++;
-            }
-        }
-    }
+    /* Outside the rect: red. */
+    uint8_t *p_out = &pixels[(0 * 32 + 0) * 4];
+    CHECK(p_out[0] == 255 && p_out[1] == 0 && p_out[2] == 0);
 
-    free(pixels);
-    fx_surface_destroy(s);
-    fx_context_destroy(ctx);
+    /* Inside: blue. */
+    uint8_t *p_in = &pixels[(6 * 32 + 6) * 4];
+    CHECK(p_in[0] == 0 && p_in[1] == 0 && p_in[2] == 255);
 
-    if (errors) {
-        fprintf(stderr, "%d pixels wrong\n", errors);
-        return 1;
-    }
-
+    flux_surface_release(s);
+    flux_context_release(ctx);
     printf("offscreen OK\n");
     return 0;
 }

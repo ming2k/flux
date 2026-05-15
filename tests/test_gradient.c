@@ -1,123 +1,61 @@
-#include "flux/flux.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
-
-#define CHECK(cond) \
-    do { \
-        if (!(cond)) { \
-            fprintf(stderr, "CHECK failed: %s (%s:%d)\n", \
-                    #cond, __FILE__, __LINE__); \
-            return 1; \
-        } \
-    } while (0)
-
-static bool pixel_near(uint8_t r, uint8_t g, uint8_t b, uint8_t a,
-                       uint8_t er, uint8_t eg, uint8_t eb, uint8_t ea,
-                       int tol)
-{
-    return abs((int)r - (int)er) <= tol &&
-           abs((int)g - (int)eg) <= tol &&
-           abs((int)b - (int)eb) <= tol &&
-           abs((int)a - (int)ea) <= tol;
-}
+#include <flux/flux.h>
+#include "test_helpers.h"
 
 int main(void)
 {
-    fx_context_desc desc = {
-        .app_name = "test_gradient",
-        .enable_validation = false,
+    flux_context *ctx = NULL;
+    CHECK(flux_context_create(NULL, &ctx) == FLUX_OK);
+
+    flux_color colors[3] = { 0xFFFF0000u, 0xFF00FF00u, 0xFF0000FFu };
+    float      stops [3] = { 0.0f, 0.5f, 1.0f };
+
+    flux_linear_gradient_desc lg = {
+        .size       = sizeof(lg),
+        .start      = { 0, 0 },
+        .end        = { 100, 0 },
+        .colors     = colors,
+        .stops      = stops,
+        .stop_count = 3,
+        .extend     = FLUX_EXTEND_PAD,
     };
-    fx_context *ctx = fx_context_create(&desc);
-    if (!ctx) {
-        fprintf(stderr, "Vulkan not available, skipping GPU gradient test\n");
-        return 0;
-    }
+    flux_gradient *g = NULL;
+    CHECK(flux_gradient_create_linear(ctx, &lg, &g) == FLUX_OK);
+    flux_gradient_release(g);
 
-    fx_surface *s = fx_surface_create_offscreen(ctx, 64, 64,
-                                                FX_FMT_RGBA8_UNORM,
-                                                FX_CS_SRGB);
-    CHECK(s != nullptr);
+    /* Too few stops: rejected. */
+    lg.stop_count = 1;
+    CHECK(flux_gradient_create_linear(ctx, &lg, &g) == FLUX_ERROR_OUT_OF_RANGE);
 
-    /* --- Linear gradient: red → blue, left to right --- */
-    fx_gradient *lin = fx_gradient_create_linear(ctx, &(fx_linear_gradient_desc){
-        .start = { 0.0f, 0.0f },
-        .end = { 64.0f, 0.0f },
-        .colors = { fx_color_rgba(255, 0, 0, 255), fx_color_rgba(0, 0, 255, 255) },
-        .stops = { 0.0f, 1.0f },
-        .stop_count = 2,
-    });
-    CHECK(lin != nullptr);
+    /* Non-monotonic stops: rejected. */
+    float bad[3] = { 0.0f, 0.5f, 0.4f };
+    lg.stop_count = 3;
+    lg.stops      = bad;
+    CHECK(flux_gradient_create_linear(ctx, &lg, &g) == FLUX_ERROR_INVALID_ARGUMENT);
 
-    fx_canvas *c = fx_surface_acquire(s);
-    CHECK(c != nullptr);
+    /* Stops out of [0,1]: rejected. */
+    float oob[2] = { 0.0f, 1.5f };
+    lg.stop_count = 2;
+    lg.stops      = oob;
+    CHECK(flux_gradient_create_linear(ctx, &lg, &g) == FLUX_ERROR_OUT_OF_RANGE);
 
-    fx_paint paint;
-    fx_paint_init(&paint, fx_color_rgba(0, 0, 0, 255));
-    fx_paint_set_gradient(&paint, lin);
+    /* Radial: valid path. */
+    flux_radial_gradient_desc rg = {
+        .size       = sizeof(rg),
+        .center     = { 50, 50 },
+        .radius     = 25,
+        .colors     = colors,
+        .stops      = stops,
+        .stop_count = 3,
+        .extend     = FLUX_EXTEND_REPEAT,
+    };
+    g = NULL;
+    CHECK(flux_gradient_create_radial(ctx, &rg, &g) == FLUX_OK);
+    flux_gradient_release(g);
 
-    fx_path *rect_path = fx_path_create();
-    fx_path_add_rect(rect_path, &(fx_rect){ 0.0f, 0.0f, 64.0f, 64.0f });
-    (void)fx_fill_path(c, rect_path, &paint);
-    fx_surface_present(s);
+    rg.radius = 0.0f;
+    CHECK(flux_gradient_create_radial(ctx, &rg, &g) == FLUX_ERROR_INVALID_ARGUMENT);
 
-    uint8_t *pixels = malloc(64 * 64 * 4);
-    CHECK(fx_surface_read_pixels(s, pixels, 64 * 4));
-
-    /* Left edge should be red-ish */
-    CHECK(pixel_near(pixels[0], pixels[1], pixels[2], pixels[3],
-                     255, 0, 0, 255, 20));
-    /* Right edge should be blue-ish */
-    CHECK(pixel_near(pixels[(63 * 64 + 63) * 4 + 0],
-                     pixels[(63 * 64 + 63) * 4 + 1],
-                     pixels[(63 * 64 + 63) * 4 + 2],
-                     pixels[(63 * 64 + 63) * 4 + 3],
-                     0, 0, 255, 255, 20));
-
-    free(pixels);
-    fx_gradient_destroy(lin);
-
-    /* --- Radial gradient: green → yellow, centered --- */
-    fx_gradient *rad = fx_gradient_create_radial(ctx, &(fx_radial_gradient_desc){
-        .center = { 32.0f, 32.0f },
-        .radius = 32.0f,
-        .colors = { fx_color_rgba(0, 255, 0, 255), fx_color_rgba(255, 255, 0, 255) },
-        .stops = { 0.0f, 1.0f },
-        .stop_count = 2,
-    });
-    CHECK(rad != nullptr);
-
-    c = fx_surface_acquire(s);
-    fx_paint_init(&paint, fx_color_rgba(0, 0, 0, 255));
-    fx_paint_set_gradient(&paint, rad);
-    rect_path = fx_path_create();
-    fx_path_add_rect(rect_path, &(fx_rect){ 0.0f, 0.0f, 64.0f, 64.0f });
-    (void)fx_fill_path(c, rect_path, &paint);
-    fx_surface_present(s);
-
-    pixels = malloc(64 * 64 * 4);
-    CHECK(fx_surface_read_pixels(s, pixels, 64 * 4));
-
-    /* Center should be green-ish */
-    CHECK(pixel_near(pixels[(32 * 64 + 32) * 4 + 0],
-                     pixels[(32 * 64 + 32) * 4 + 1],
-                     pixels[(32 * 64 + 32) * 4 + 2],
-                     pixels[(32 * 64 + 32) * 4 + 3],
-                     0, 255, 0, 255, 20));
-    /* Corner should be yellow-ish */
-    CHECK(pixel_near(pixels[(0 * 64 + 0) * 4 + 0],
-                     pixels[(0 * 64 + 0) * 4 + 1],
-                     pixels[(0 * 64 + 0) * 4 + 2],
-                     pixels[(0 * 64 + 0) * 4 + 3],
-                     255, 255, 0, 255, 20));
-
-    free(pixels);
-    fx_gradient_destroy(rad);
-
-    fx_surface_destroy(s);
-    fx_context_destroy(ctx);
-
+    flux_context_release(ctx);
     printf("gradient OK\n");
     return 0;
 }

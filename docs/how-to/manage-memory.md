@@ -14,14 +14,12 @@ Objects created with `*_create` and destroyed with `*_destroy`:
 | `fx_surface` | `fx_surface_create_*` | `fx_surface_destroy` | Vulkan, Vulkan, or offscreen. |
 | `fx_image` | `fx_image_create` | `fx_image_destroy` | Retains a CPU-side pixel copy unless created without initial data. |
 | `fx_path` | `fx_path_create` | `fx_path_destroy` | CPU-side verb/point array. |
-| `fx_font` | `fx_font_create` | `fx_font_destroy` | Owns FreeType face and HarfBuzz font. |
 | `fx_gradient` | `fx_gradient_create_*` | `fx_gradient_destroy` | Small CPU struct (no GPU resource). |
 | `fx_glyph_run` | `fx_glyph_run_create` | `fx_glyph_run_destroy` | Dynamic glyph array. |
 
 ### Borrowed objects
 
 - `fx_canvas` — borrowed from the surface. Valid only between `fx_surface_acquire` and `fx_surface_present`. Do not store the pointer across frames.
-- `fx_font` (for glyph shaping) — `fx_font_get_hb_font` returns a borrowed HarfBuzz handle valid for the lifetime of the `fx_font`.
 - Resource references in recorded ops — when you call `fx_fill_path(c, path, paint)`, the canvas records a pointer to `path`. You must keep `path` alive until `fx_surface_present` completes.
 
 ### Internal copies
@@ -86,7 +84,6 @@ Destroy objects in reverse dependency order:
 fx_surface_destroy(surface);   /* waits on in-flight frames */
 fx_image_destroy(image);       /* safe after surface is done with it */
 fx_path_destroy(path);
-fx_font_destroy(font);
 fx_context_destroy(ctx);       /* destroys device, atlas, pipelines */
 ```
 

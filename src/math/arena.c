@@ -1,24 +1,24 @@
 #include "arena.h"
 #include <stdlib.h>
 
-void fx_arena_init(fx_arena *arena, size_t block_size)
+void flux_arena_init(flux_arena *arena, size_t block_size)
 {
     arena->head = nullptr;
     arena->block_size = block_size > 0 ? block_size : 65536;
 }
 
-void fx_arena_destroy(fx_arena *arena)
+void flux_arena_destroy(flux_arena *arena)
 {
-    fx_arena_block *curr = arena->head;
+    flux_arena_block *curr = arena->head;
     while (curr) {
-        fx_arena_block *next = curr->next;
+        flux_arena_block *next = curr->next;
         free(curr);
         curr = next;
     }
     arena->head = nullptr;
 }
 
-void *fx_arena_alloc(fx_arena *arena, size_t size)
+void *flux_arena_alloc(flux_arena *arena, size_t size)
 {
     size = (size + 7) & ~7;
 
@@ -29,7 +29,7 @@ void *fx_arena_alloc(fx_arena *arena, size_t size)
     }
 
     size_t alloc_size = size > arena->block_size ? size : arena->block_size;
-    fx_arena_block *block = malloc(sizeof(fx_arena_block) + alloc_size);
+    flux_arena_block *block = malloc(sizeof(flux_arena_block) + alloc_size);
     if (!block) return nullptr;
 
     block->size = alloc_size;
@@ -40,13 +40,13 @@ void *fx_arena_alloc(fx_arena *arena, size_t size)
     return block->data;
 }
 
-void fx_arena_reset(fx_arena *arena)
+void flux_arena_reset(flux_arena *arena)
 {
-    fx_arena_block *curr = arena->head;
+    flux_arena_block *curr = arena->head;
     if (!curr) return;
 
     while (curr->next) {
-        fx_arena_block *next = curr->next->next;
+        flux_arena_block *next = curr->next->next;
         free(curr->next);
         curr->next = next;
     }

@@ -52,7 +52,7 @@ Tests that exercise CPU-side logic without a GPU.
 
 | Test File | What It Covers | Gate |
 |-----------|----------------|------|
-| `test_foundation.c` | Path, image, font, glyph-run, canvas recording | Must pass |
+| `test_foundation.c` | Path, image, glyph-run, canvas recording | Must pass |
 | `test_path_flatten.c` | Quadratic & cubic Bézier flattening | Must pass |
 | `test_arc.c` | `fx_path_arc_to` approximation | Must pass |
 | `test_tess.c` | Simple polygon triangulation | Must pass |
@@ -135,7 +135,7 @@ or inline in the header.
 - [ ] Documentation states the thread-safety contract:
   - `fx_context` must be created/destroyed on one thread.
   - `fx_surface` and its canvas must be accessed on one thread at a time.
-  - Resources (`fx_image`, `fx_font`, `fx_path`) may be shared across surfaces
+  - Resources (`fx_image`, `fx_path`, `fx_glyph_run`) may be shared across surfaces
     but must not be mutated during a frame.
 
 ---

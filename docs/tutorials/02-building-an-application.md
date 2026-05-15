@@ -6,6 +6,13 @@
 
 By the end of this tutorial you will have built a small interactive application that renders a responsive UI panel with text, icons, and clipping.
 
+> **Note:** flux's hardware Vulkan backend is currently a stub. The code
+> below shows the intended API for windowed applications; to run it today
+> you would need an external Vulkan surface (GLFW, SDL, etc.) and a
+> working swapchain present path. The in-tree examples (`examples/minimal.c`,
+> `examples/hello_rect.c`) demonstrate offscreen rendering to PPM images
+> with the fully-functional software backend.
+
 ## What you will build
 
 A 400×300 window containing:
@@ -26,7 +33,7 @@ Create `meson.build`:
 ```meson
 project('flux-tutorial-app', 'c',
   version : '0.1.0',
-  default_options : ['warning_level=2', 'c_std=c11'])
+  default_options : ['warning_level=2', 'c_std=c23'])
 
 flux_dep = dependency('flux', required : true)
 Vulkan_client = dependency('Vulkan SDK', required : true)
@@ -37,27 +44,18 @@ executable('tutorial_app',
   install : false)
 ```
 
-Create `main.c` with the Vulkan boilerplate from `hello_rect.c`. For brevity, this tutorial focuses on the flux-specific drawing code. You can copy the Vulkan setup from `examples/hello_rect.c` in the flux repository.
+Create `main.c` and set up a Vulkan surface with your platform toolkit
+(GLFW, SDL, etc.). For brevity, this tutorial focuses on the
+flux-specific drawing code. See `examples/hello_rect.c` for a complete
+offscreen rendering example using the software backend.
 
 ## Step 2: Load assets at startup
 
-Add a helper to load a font and an icon image:
+Add a helper to load an icon image:
 
 ```c
 #include <flux/flux.h>
-#include <flux/flux_Vulkan.h>
-
-static fx_font *load_font(fx_context *ctx, const char *path, float size)
-{
-    fx_font_desc desc = {
-        .source_name = path,
-        .size = size,
-        .weight = 400,
-    };
-    fx_font *font = fx_font_create(ctx, &desc);
-    if (!font) fprintf(stderr, "failed to load font: %s\n", path);
-    return font;
-}
+#include <flux/flux_vulkan.h>
 
 static fx_image *load_icon(fx_context *ctx, const char *path)
 {
@@ -84,23 +82,40 @@ static fx_image *load_icon(fx_context *ctx, const char *path)
 
 ## Step 3: Shape text with HarfBuzz
 
-flux renders positioned glyph runs. Use HarfBuzz to shape UTF-8 text:
+flux renders positioned glyph runs. Use HarfBuzz to shape UTF-8 text,
+FreeType to rasterize glyphs, then upload bitmaps and build a run:
 
 ```c
 #include <harfbuzz/hb.h>
+#include <freetype/freetype.h>
 
-static fx_glyph_run *shape_text(fx_font *font, const char *utf8)
+static fx_glyph_run *shape_text(fx_context *ctx, FT_Face face,
+                                hb_font_t *hb_font, const char *utf8)
 {
-    hb_font_t *hb = fx_font_get_hb_font(font);
     hb_buffer_t *buf = hb_buffer_create();
     hb_buffer_add_utf8(buf, utf8, -1, 0, -1);
     hb_buffer_guess_segment_properties(buf);
-    hb_shape(hb, buf, NULL, 0);
+    hb_shape(hb_font, buf, NULL, 0);
 
     unsigned int count;
     hb_glyph_info_t *infos = hb_buffer_get_glyph_infos(buf, &count);
     hb_glyph_position_t *positions = hb_buffer_get_glyph_positions(buf, &count);
 
+    /* Upload each unique glyph bitmap to the flux atlas */
+    for (unsigned int i = 0; i < count; ++i) {
+        uint32_t gid = infos[i].codepoint;
+        FT_Load_Glyph(face, gid, FT_LOAD_RENDER);
+        FT_Bitmap *bm = &face->glyph->bitmap;
+        fx_glyph_upload(ctx, gid,
+                        bm->buffer,
+                        (int)bm->width,
+                        (int)bm->rows,
+                        face->glyph->bitmap_left,
+                        face->glyph->bitmap_top,
+                        (int)(face->glyph->advance.x >> 6));
+    }
+
+    /* Build glyph run with shaped positions */
     fx_glyph_run *run = fx_glyph_run_create(count);
     float x = 0, y = 0;
     for (unsigned int i = 0; i < count; ++i) {
@@ -146,7 +161,7 @@ fx_fill_rect(c, &header, header_bg);
 /* Header title */
 fx_paint paint;
 fx_paint_init(&paint, fx_color_rgba(255, 255, 255, 255));
-fx_draw_glyph_run(c, title_font, title_run, margin, 32.0f, &paint);
+fx_draw_glyph_run(c, title_run, margin, 32.0f, &paint);
 
 /* Content area with clipping */
 fx_rect content = { margin, header_h + margin,
@@ -159,7 +174,7 @@ fx_draw_image(c, icon_image, NULL, &icon_dst);
 
 /* Body text */
 fx_paint_init(&paint, text_color);
-fx_draw_glyph_run(c, body_font, body_run, margin + 40, header_h + margin + 24, &paint);
+fx_draw_glyph_run(c, body_run, margin + 40, header_h + margin + 24, &paint);
 
 fx_reset_clip(c);
 
@@ -167,7 +182,7 @@ fx_reset_clip(c);
 fx_rect footer = { 0, h - footer_h, w, footer_h };
 fx_fill_rect(c, &footer, fx_color_rgba(230, 230, 235, 255));
 fx_paint_init(&paint, status_color);
-fx_draw_glyph_run(c, body_font, status_run, margin, h - 10.0f, &paint);
+fx_draw_glyph_run(c, status_run, margin, h - 10.0f, &paint);
 
 fx_surface_present(vs);
 ```
@@ -195,8 +210,8 @@ VK_ICD_FILENAMES=Vulkan-1 ./build/tutorial_app
 
 ## What you learned
 
-- Loading fonts and images once, then referencing them per frame.
-- Using HarfBuzz to shape text and feeding the result to `fx_glyph_run`.
+- Loading images once, then referencing them per frame.
+- Using HarfBuzz to shape text and FreeType to rasterize glyphs, then feeding the result to `fx_glyph_run`.
 - Using `fx_clip_rect` to restrict drawing to a content area.
 - Computing layout each frame for responsive sizing.
 

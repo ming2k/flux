@@ -15,7 +15,6 @@ flux does not use internal locking. All objects are designed for single-threaded
 | `fx_canvas` | **No** | Valid only between `fx_surface_acquire` and `fx_surface_present` on the owning thread. |
 | `fx_image` | **No** | Create, update, and destroy from the context thread. Do not sample from one surface while updating from another. |
 | `fx_path` | **No** | Build and destroy from the context thread. |
-| `fx_font` | **No** | Create and destroy from the context thread. The HarfBuzz handle returned by `fx_font_get_hb_font` is borrowed; do not shape from a different thread than the one that will draw the resulting glyph run. |
 | `fx_glyph_run` | **No** | Append glyphs and draw from the context thread. |
 | `fx_gradient` | **No** | Create and destroy from the context thread. |
 
@@ -25,7 +24,7 @@ flux does not use internal locking. All objects are designed for single-threaded
 
 2. **CPU-side preparation.** You may construct pixel buffers, path data, or glyph runs on worker threads, but you must synchronize and hand them off to the context thread before calling any flux API that consumes them.
 
-3. **Read-only inspection.** Calling `fx_path_get_bounds`, `fx_canvas_op_count`, or `fx_font_get_metrics` from a different thread is safe only if no mutating API call is in flight on the owning thread.
+3. **Read-only inspection.** Calling `fx_path_get_bounds` or `fx_canvas_op_count` from a different thread is safe only if no mutating API call is in flight on the owning thread.
 
 ## Common pitfalls
 

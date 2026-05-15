@@ -15,9 +15,14 @@ flux core API
 surfaces, frame lifecycle, command recording, paths, paints, images,
 gradients, glyph atlas, positioned glyph runs
 
-flux backend integration
-Vulkan instance/device/swapchain execution, offscreen render targets,
-GPU memory, descriptor and pipeline management
+flux RHI abstraction
+`fx_rhi_vtbl` interface: backend-neutral execution engine calls vtable
+ops; concrete backends implement drawing + presentation.
+
+flux backend integration (Vulkan)
+Vulkan swapchain/present, offscreen render targets,
+GPU memory, descriptor and pipeline management. Full GPU rasterisation
+via recorded command buffers.
 
 system libraries and drivers
 Vulkan, allocators, GPU driver
@@ -29,7 +34,8 @@ Vulkan, allocators, GPU driver
 - 2D drawing vocabulary: paths, fills, strokes, clips, images, gradients, and positioned glyph runs.
 - Resource handles needed by the renderer: `fx_image`, `fx_path`, `fx_gradient`, and `fx_glyph_run`.
 - CPU-side geometry preparation: path flattening, tessellation, stroke expansion, glyph atlas packing, transient vertex upload.
-- Backend execution: Vulkan device selection, queues, command buffers, render passes, swapchains, pipelines, descriptor pools, offscreen readback.
+- Backend execution via the RHI vtable: device selection, queues, command buffers, render passes, swapchains, pipelines, descriptor pools, offscreen readback.
+- Software rasteriser: CPU scanline fill with stencil buffer, used as the offscreen fallback.
 - Ownership rules: created objects are caller-owned; recorded ops borrow caller resources until present; the canvas owns any internal transformed copies it creates.
 
 ## What flux does not own
@@ -45,20 +51,23 @@ Vulkan, allocators, GPU driver
 
 | Module | Source | Responsibility |
 |---|---|---|
-| Context | `src/context.c` | Lifetime, logging, backend initialization, context-wide caches |
-| Canvas | `src/canvas.c` | Command recording only: paint defaults, transform stack, clip commands, append-only display-list ops. No GPU work. |
-| Path | `src/path.c` | Path storage, bounds, transforms, flattening entry points |
-| Tessellation | `src/tess.c` | Simple polygon triangulation |
-| Stroker | `src/stroker.c` | Stroke expansion: caps, joins, miter limit |
-| Image | `src/image.c` | Image descriptors, CPU pixel copies, GPU upload |
-| Text | `src/text.c` | Glyph atlas management, glyph upload, glyph-run containers. Does not rasterize or shape. |
+| Context | `src/resource/context.c` | Lifetime, logging, backend initialization, context-wide caches |
+| Canvas | `src/state/canvas.c` | Command recording only: paint defaults, transform stack, clip commands, append-only display-list ops. No GPU work. |
+| Path | `src/geometry/path.c` | Path storage, bounds, transforms, flattening entry points |
+| Tessellation | `src/geometry/tess.c` | Simple polygon triangulation |
+| Stroker | `src/geometry/stroker.c` | Stroke expansion: caps, joins, miter limit |
+| Image | `src/resource/image.c` | Image descriptors, CPU pixel copies, GPU upload |
+| Text | `src/resource/text.c` | Glyph atlas management, glyph upload, glyph-run containers. Does not rasterize or shape. |
 | Surface | `src/surface.c` | Surface lifetime, frame lifecycle, op execution, batching, clipping state, presentation, offscreen readback |
-| Vulkan backend | `src/vk/*` | Instance/device selection, swapchain, pipelines, render passes, memory pools, upload staging |
+| RHI abstraction | `src/rhi/rhi.h` | `fx_rhi_vtbl` interface: backend-neutral ops for drawing, clipping, and presentation |
+| Software RHI | `src/rhi/software/software_rhi.c` | CPU scanline rasteriser with stencil buffer; offscreen fallback |
+| Vulkan RHI | `src/rhi/vulkan/vulkan_rhi.c` | Vulkan backend: device, swapchain, memory, upload, pipelines, and presentation |
+| Vulkan context | `src/resource/context.c` | Instance/device/queue initialization, physical device selection |
 
 ## Public header boundaries
 
 - `flux/flux.h` — Core graphics API. Backend-neutral; does not require Vulkan or other platform headers.
-- `flux/flux_vulkan.h` — Vulkan interop. Exposes `fx_context_get_instance` and `fx_surface_create_vulkan` for intentional Vulkan integration.
+- `flux/flux_vulkan.h` — Vulkan interop. Exposes `fx_surface_create_vulkan` for intentional Vulkan integration. Callers provide a complete `fx_vulkan_device` and `VkSurfaceKHR`; flux owns only the swapchain and render-time objects.
 - New backend-specific APIs live in their own integration headers instead of expanding `flux.h`.
 
 ## Change rules
@@ -67,7 +76,8 @@ Vulkan, allocators, GPU driver
 - If an API exposes backend/platform types, put it behind a named interop header.
 - If state affects rendering, it must be either public and recordable on `fx_canvas` or fully internal to execution. Do not keep planned feature state in core structs before the public contract exists.
 - Recording functions validate inputs before touching canvas or resource state.
-- Recording remains CPU-only. GPU commands are emitted only from surface present paths.
+- Recording remains CPU-only. GPU commands are emitted only from RHI `submit()` paths.
+- New backends implement the `fx_rhi_vtbl` interface; no engine or surface code may call a graphics API directly.
 
 ## See also
 

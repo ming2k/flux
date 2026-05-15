@@ -1,152 +1,175 @@
 /*
- * Surface lifecycle: create, acquire, present, destroy.
+ * Surface lifecycle: own an RHI device + canvas; bridge them at present.
  *
- * Surfaces own a renderer (backend) and a canvas (recording state).
- * The execution engine bridges them at present time.
+ * The flux_surface is the unit of "where pixels go." It binds together:
+ *   - a context (for allocator, logger, thread affinity);
+ *   - an RHI (the backend that owns swapchains, pipelines, buffers);
+ *   - a canvas (the recording state for one in-flight frame).
  */
 #include "internal.h"
+#include "rhi/rhi.h"
 
-#include <stdlib.h>
-#include <string.h>
+#ifndef FLUX_NO_VULKAN
+#include "flux/flux_vulkan.h"
+#endif
 
-/* ---- offscreen surface (software renderer) ---- */
+/* ------------------------------------------------------------------ */
+/*  Refcounting                                                       */
+/* ------------------------------------------------------------------ */
 
-fx_surface *fx_surface_create_offscreen(fx_context *ctx,
-                                        int32_t width, int32_t height,
-                                        fx_pixel_format format,
-                                        fx_color_space cs)
+flux_surface *flux_surface_retain(flux_surface *s)
 {
-    if (!ctx || width <= 0 || height <= 0) return nullptr;
-    (void)format; (void)cs;
-
-    fx_surface *s = calloc(1, sizeof(*s));
-    if (!s) return nullptr;
-
-    s->ctx = ctx;
-    s->is_offscreen = true;
-
-    /* Create the software renderer for this surface. */
-    s->renderer = fx_renderer_create_software((uint32_t)width, (uint32_t)height);
-    if (!s->renderer) {
-        free(s);
-        return nullptr;
-    }
-
-    s->canvas.owner = s;
-    fx_matrix_identity(&s->canvas.current_matrix);
-    s->canvas.dpr = 1.0f;
-
+    if (s) flux_ref_retain(&s->ref_count);
     return s;
 }
 
-/* ---- vulkan surface (stub — delegates to legacy path) ---- */
-
-#include "flux/flux_vulkan.h"
-
-fx_surface *fx_surface_create_vulkan(fx_context *ctx,
-                                     VkSurfaceKHR vk_surface,
-                                     int32_t width, int32_t height,
-                                     fx_color_space cs)
-{
-    /* Vulkan surface creation is not yet ported to the vtable.
-     * For now, return a stub that uses the software renderer. */
-    (void)vk_surface; (void)cs;
-    return fx_surface_create_offscreen(ctx, width, height, FX_FMT_BGRA8_UNORM, FX_CS_SRGB);
-}
-
-/* ---- destroy ---- */
-
-void fx_surface_destroy(fx_surface *s)
+void flux_surface_release(flux_surface *s)
 {
     if (!s) return;
-
-    if (s->renderer) {
-        const struct fx_renderer_vtbl *vt = fx_renderer_vt(s->renderer);
-        vt->destroy(s->renderer);
+    if (flux_ref_release(&s->ref_count) == 0) {
+        if (s->rhi) flux_rhi_vt(s->rhi)->destroy(s->rhi);
+        flux_canvas_dispose(&s->canvas);
+        flux_context *ctx = s->ctx;
+        flux_free(ctx, s);
+        flux_context_release(ctx);
     }
-
-    fx_canvas_dispose(&s->canvas);
-    free(s);
 }
 
-/* ---- resize ---- */
+/* ------------------------------------------------------------------ */
+/*  Construction                                                      */
+/* ------------------------------------------------------------------ */
 
-void fx_surface_resize(fx_surface *s, int32_t w, int32_t h)
+static flux_result init_surface(flux_surface *s, flux_context *ctx,
+                                flux_rhi_device *rhi, bool offscreen,
+                                int32_t w, int32_t h, flux_pixel_format fmt)
 {
-    if (!s) return;
-    s->needs_recreate = true;
-    (void)w; (void)h;
+    flux_ref_init(&s->ref_count);
+    s->ctx          = flux_context_retain(ctx);
+    s->rhi          = rhi;
+    s->is_offscreen = offscreen;
+    s->width        = w;
+    s->height       = h;
+    s->format       = fmt;
+
+    flux_canvas_init(&s->canvas, s);
+    return FLUX_OK;
 }
 
-/* ---- DPR ---- */
-
-void fx_surface_set_dpr(fx_surface *s, float dpr)
+flux_result flux_surface_create_offscreen(flux_context *ctx,
+                                          int32_t width, int32_t height,
+                                          flux_pixel_format format,
+                                          flux_color_space cs,
+                                          flux_surface **out_surface)
 {
-    if (!s || dpr <= 0.0f) return;
+    if (!ctx || width <= 0 || height <= 0 || !out_surface)
+        return FLUX_ERROR_INVALID_ARGUMENT;
+    (void)cs;
+
+    flux_rhi_device *rhi = flux_rhi_create_software((uint32_t)width, (uint32_t)height);
+    if (!rhi) return FLUX_ERROR_BACKEND_FAILURE;
+
+    flux_surface *s = flux_calloc(ctx, 1, sizeof(*s));
+    if (!s) {
+        flux_rhi_vt(rhi)->destroy(rhi);
+        return FLUX_ERROR_OUT_OF_MEMORY;
+    }
+    init_surface(s, ctx, rhi, true, width, height, format);
+    *out_surface = s;
+    return FLUX_OK;
+}
+
+#ifndef FLUX_NO_VULKAN
+flux_result flux_surface_create_vulkan(flux_context *ctx,
+                                       const flux_vulkan_device *device,
+                                       VkSurfaceKHR vk_surface,
+                                       int32_t width, int32_t height,
+                                       flux_color_space cs,
+                                       flux_surface **out_surface)
+{
+    if (!ctx || !device || !vk_surface || width <= 0 || height <= 0 || !out_surface)
+        return FLUX_ERROR_INVALID_ARGUMENT;
+    (void)cs;
+
+    flux_rhi_device *rhi = flux_rhi_create_vulkan(device, vk_surface, width, height);
+    if (!rhi) return FLUX_ERROR_BACKEND_FAILURE;
+
+    flux_surface *s = flux_calloc(ctx, 1, sizeof(*s));
+    if (!s) {
+        flux_rhi_vt(rhi)->destroy(rhi);
+        return FLUX_ERROR_OUT_OF_MEMORY;
+    }
+    init_surface(s, ctx, rhi, false, width, height, FLUX_FMT_BGRA8_UNORM);
+    *out_surface = s;
+    return FLUX_OK;
+}
+#endif
+
+/* ------------------------------------------------------------------ */
+/*  Resize / inspection                                               */
+/* ------------------------------------------------------------------ */
+
+flux_result flux_surface_resize(flux_surface *s, int32_t w, int32_t h)
+{
+    if (!s || w <= 0 || h <= 0) return FLUX_ERROR_INVALID_ARGUMENT;
+    if (s->rhi && !flux_rhi_vt(s->rhi)->resize(s->rhi, (uint32_t)w, (uint32_t)h))
+        return FLUX_ERROR_BACKEND_FAILURE;
+    s->width  = w;
+    s->height = h;
+    return FLUX_OK;
+}
+
+flux_result flux_surface_get_size(const flux_surface *s, int32_t *out_w, int32_t *out_h)
+{
+    if (!s) return FLUX_ERROR_INVALID_ARGUMENT;
+    if (out_w) *out_w = s->width;
+    if (out_h) *out_h = s->height;
+    return FLUX_OK;
+}
+
+flux_pixel_format flux_surface_get_format(const flux_surface *s)
+{
+    return s ? s->format : FLUX_FMT_RGBA8_UNORM;
+}
+
+flux_result flux_surface_set_dpr(flux_surface *s, float dpr)
+{
+    if (!s || dpr <= 0.0f) return FLUX_ERROR_INVALID_ARGUMENT;
     s->canvas.dpr = dpr;
+    return FLUX_OK;
 }
 
-float fx_surface_get_dpr(const fx_surface *s)
+float flux_surface_get_dpr(const flux_surface *s)
 {
     return s ? s->canvas.dpr : 1.0f;
 }
 
-/* ---- render-to-texture ---- */
+/* ------------------------------------------------------------------ */
+/*  Read pixels                                                       */
+/* ------------------------------------------------------------------ */
 
-fx_image *fx_image_create_from_surface(fx_surface *s)
+flux_result flux_surface_read_pixels(flux_surface *s, void *data, size_t stride)
 {
-    if (!s || !s->renderer) return nullptr;
-
-    const struct fx_renderer_vtbl *vt = fx_renderer_vt(s->renderer);
-    fx_r_texture *rtex = vt->surface_texture(s->renderer);
-    if (!rtex) return nullptr;
-
-    fx_image *img = calloc(1, sizeof(*img));
-    if (!img) return nullptr;
-
-    img->ctx = s->ctx;
-    img->rtex = rtex;
-    /* Set desc from surface dimensions */
-    uint32_t sw = 0, sh = 0;
-    vt->surface_extent(s->renderer, &sw, &sh);
-    img->desc.width = sw;
-    img->desc.height = sh;
-    img->desc.format = FX_FMT_BGRA8_UNORM;
-
-    return img;
+    if (!s || !s->rhi || !data) return FLUX_ERROR_INVALID_ARGUMENT;
+    if (!flux_rhi_vt(s->rhi)->read_pixels(s->rhi, data, stride))
+        return FLUX_ERROR_BACKEND_FAILURE;
+    return FLUX_OK;
 }
 
-/* ---- acquire / present ---- */
+/* ------------------------------------------------------------------ */
+/*  Acquire / present                                                 */
+/* ------------------------------------------------------------------ */
 
-fx_canvas *fx_surface_acquire(fx_surface *s)
+flux_canvas *flux_surface_acquire(flux_surface *s)
 {
-    if (!s) return nullptr;
-
-    if (s->renderer) {
-        const struct fx_renderer_vtbl *vt = fx_renderer_vt(s->renderer);
-        vt->begin_frame(s->renderer);
-    }
-
-    /* Reset recording state for the new frame. */
-    fx_canvas_reset(&s->canvas);
-    s->canvas.dpr = s->canvas.dpr > 0.0f ? s->canvas.dpr : 1.0f;
-
+    if (!s) return NULL;
+    if (s->rhi) flux_rhi_vt(s->rhi)->begin_frame(s->rhi);
+    flux_canvas_reset(&s->canvas);
+    if (s->canvas.dpr <= 0.0f) s->canvas.dpr = 1.0f;
     return &s->canvas;
 }
 
-void fx_surface_present(fx_surface *s)
+flux_result flux_surface_present(flux_surface *s)
 {
-    if (!s || !s->renderer) return;
-
-    /* Execute all recorded ops through the renderer vtable. */
-    fx_engine_execute(&s->canvas, s->renderer);
-}
-
-/* ---- read pixels ---- */
-
-bool fx_surface_read_pixels(fx_surface *s, void *data, size_t stride)
-{
-    if (!s || !s->renderer || !data) return false;
-    const struct fx_renderer_vtbl *vt = fx_renderer_vt(s->renderer);
-    return vt->read_pixels(s->renderer, data, stride);
+    if (!s || !s->rhi) return FLUX_ERROR_INVALID_ARGUMENT;
+    return flux_engine_execute(&s->canvas, s->rhi);
 }

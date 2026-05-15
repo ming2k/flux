@@ -113,7 +113,7 @@ The recursion stops when either:
 For a cubic curve, both inner control points must be within tolerance of the endpoint line. For a quadratic, only the single control point is checked.
 
 ```c
-// In src/path.c
+// In src/geometry/path.c
 if (depth >= FX_FLATTEN_MAX_DEPTH ||
     (point_line_distance_sq(p1, p0, p3) <= tol_sq &&
      point_line_distance_sq(p2, p0, p3) <= tol_sq)) {
@@ -143,4 +143,4 @@ SVG elliptical arcs are not native Bézier curves. flux approximates them as a s
 
 - [Rendering](rendering.md) — how flattened paths become GPU triangles.
 - [How to draw basic shapes](../how-to/draw-basic-shapes.md) — API usage examples.
-- `src/path.c` — flattening implementation (`flatten_quad_recursive`, `flatten_cubic_recursive`).
+- `src/geometry/path.c` — flattening implementation (`flatten_quad_recursive`, `flatten_cubic_recursive`).

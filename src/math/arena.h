@@ -3,27 +3,28 @@
  * Allocation is fast (just bump a pointer); reset is O(1)
  * per frame. The first block is retained across resets.
  */
-#ifndef FX_MATH_ARENA_H
-#define FX_MATH_ARENA_H
+#ifndef FLUX_MATH_ARENA_H
+#define FLUX_MATH_ARENA_H
 
+#include "visibility.h"
 #include <stddef.h>
 #include <stdint.h>
 
-typedef struct fx_arena_block {
-    struct fx_arena_block *next;
+typedef struct flux_arena_block {
+    struct flux_arena_block *next;
     size_t size;
     size_t used;
     uint8_t data[];
-} fx_arena_block;
+} flux_arena_block;
 
 typedef struct {
-    fx_arena_block *head;
+    flux_arena_block *head;
     size_t block_size;
-} fx_arena;
+} flux_arena;
 
-void  fx_arena_init(fx_arena *arena, size_t block_size);
-void  fx_arena_destroy(fx_arena *arena);
-void *fx_arena_alloc(fx_arena *arena, size_t size);
-void  fx_arena_reset(fx_arena *arena);
+FLUX_INTERNAL void  flux_arena_init(flux_arena *arena, size_t block_size);
+FLUX_INTERNAL void  flux_arena_destroy(flux_arena *arena);
+FLUX_INTERNAL void *flux_arena_alloc(flux_arena *arena, size_t size);
+FLUX_INTERNAL void  flux_arena_reset(flux_arena *arena);
 
-#endif /* FX_MATH_ARENA_H */
+#endif /* FLUX_MATH_ARENA_H */

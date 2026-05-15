@@ -3,7 +3,7 @@
 layout(location = 0) in vec2 in_pos;
 layout(location = 1) in vec2 in_uv;
 
-layout(push_constant) uniform fx_image_pc {
+layout(push_constant) uniform flux_image_pc {
     vec2 surface_size;
     vec2 pad;
 } pc;

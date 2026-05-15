@@ -11,7 +11,7 @@ Vulkan 1.2. No 1.3 features are required.
 
 flux uses two allocators with different lifetimes.
 
-### Per-Frame Linear Buffer Pool (`src/vk/memory.c`)
+### Per-Frame Linear Buffer Pool (`src/rhi/vulkan/vulkan_rhi.c`)
 
 Each in-flight frame owns an `fx_vbuf_pool`: a persistently mapped
 `HOST_VISIBLE | HOST_COHERENT` allocation used for vertices, indices, and
@@ -33,7 +33,7 @@ for maximum sampling performance via **VMA** (`vmaCreateImage`).
 All `VkDeviceMemory` backing is suballocated by VMA, so flux does not
 burn dedicated `VkDeviceMemory` slots per image.
 
-## Upload Subsystem (`src/vk/upload.c`)
+## Upload Subsystem (`src/rhi/vulkan/vulkan_rhi.c`)
 
 Every GPU upload in flux — image creation, `fx_image_update`, glyph
 atlas inserts — goes through one path on `fx_context`:
@@ -106,13 +106,14 @@ and resize. Only `fx_context_destroy` tears them down (via
 ## Glyph Atlas
 
 The **Glyph Atlas** is a context-global resource managed in
-`src/text.c`.
+`src/resource/text.c`.
 
 - **Format.** 2048×2048 `A8_UNORM` single-channel alpha.
 - **Algorithm.** Shelf-packing allocator with 2-pixel inter-glyph
   padding to prevent bilinear filtering bleed.
-- **Updates.** Missing glyphs are rasterized by FreeType during
-  recording and uploaded via the shared upload subsystem.
+- **Updates.** Callers rasterize glyphs externally (e.g., FreeType) and
+  upload bitmaps via `fx_glyph_upload`. The atlas packs them into the
+  GPU texture through the shared upload subsystem.
 - **Overflow.** When the atlas cannot fit a new glyph, flux logs a
   warning, evicts every cached entry, calls `vkDeviceWaitIdle` so
   in-flight frames release their references, and reuses the texture.

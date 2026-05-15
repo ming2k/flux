@@ -1,61 +1,90 @@
-/* Minimal glyph run implementation. */
+/*
+ * Glyph run: a small array of (glyph_id, x, y). The actual glyph atlas
+ * is owned by the backend; flux_glyph_upload is the seam where bitmaps
+ * are pushed into the atlas. Both are stubs at this layer; real
+ * rasterisation happens in the RHI.
+ */
 #include "internal.h"
-#include <stdlib.h>
-#include <string.h>
 
-fx_glyph_run *fx_glyph_run_create(size_t reserve)
+flux_result flux_glyph_upload(flux_context *ctx, uint32_t glyph_id,
+                              const uint8_t *bitmap, int w, int h,
+                              int bearing_x, int bearing_y, int advance)
 {
-    fx_glyph_run *run = calloc(1, sizeof(*run));
-    if (!run) return nullptr;
+    (void)glyph_id; (void)bitmap;
+    (void)bearing_x; (void)bearing_y; (void)advance;
+    if (!ctx) return FLUX_ERROR_INVALID_ARGUMENT;
+    if (w <= 0 || h <= 0) return FLUX_ERROR_INVALID_ARGUMENT;
+    return FLUX_OK;
+}
+
+flux_result flux_glyph_run_create(flux_context *ctx, size_t reserve,
+                                  flux_glyph_run **out_run)
+{
+    if (!ctx || !out_run) return FLUX_ERROR_INVALID_ARGUMENT;
+
+    flux_glyph_run *run = flux_calloc(ctx, 1, sizeof(*run));
+    if (!run) return FLUX_ERROR_OUT_OF_MEMORY;
+
+    flux_ref_init(&run->ref_count);
+    run->ctx = flux_context_retain(ctx);
     run->cap = reserve > 0 ? reserve : 16;
-    run->glyphs = calloc(run->cap, sizeof(fx_glyph));
-    if (!run->glyphs) { free(run); return nullptr; }
+    run->glyphs = flux_calloc(ctx, run->cap, sizeof(flux_glyph));
+    if (!run->glyphs) {
+        flux_context_release(run->ctx);
+        flux_free(ctx, run);
+        return FLUX_ERROR_OUT_OF_MEMORY;
+    }
+
+    *out_run = run;
+    return FLUX_OK;
+}
+
+flux_glyph_run *flux_glyph_run_retain(flux_glyph_run *run)
+{
+    if (run) flux_ref_retain(&run->ref_count);
     return run;
 }
 
-void fx_glyph_run_destroy(fx_glyph_run *run)
+void flux_glyph_run_release(flux_glyph_run *run)
 {
     if (!run) return;
-    free(run->glyphs);
-    free(run);
+    if (flux_ref_release(&run->ref_count) == 0) {
+        flux_context *ctx = run->ctx;
+        flux_free(ctx, run->glyphs);
+        flux_free(ctx, run);
+        flux_context_release(ctx);
+    }
 }
 
-void fx_glyph_run_reset(fx_glyph_run *run)
+void flux_glyph_run_clear(flux_glyph_run *run)
 {
-    if (!run) return;
-    run->count = 0;
+    if (run) run->count = 0;
 }
 
-bool fx_glyph_run_append(fx_glyph_run *run, uint32_t glyph_id, float x, float y)
+flux_result flux_glyph_run_append(flux_glyph_run *run, uint32_t glyph_id,
+                                  float x, float y)
 {
-    if (!run) return false;
+    if (!run) return FLUX_ERROR_INVALID_ARGUMENT;
     if (run->count >= run->cap) {
         size_t nc = run->cap * 2;
-        fx_glyph *ng = realloc(run->glyphs, nc * sizeof(fx_glyph));
-        if (!ng) return false;
+        flux_glyph *ng = flux_realloc(run->ctx, run->glyphs,
+                                      run->cap * sizeof(flux_glyph),
+                                      nc * sizeof(flux_glyph));
+        if (!ng) return FLUX_ERROR_OUT_OF_MEMORY;
         run->glyphs = ng;
         run->cap = nc;
     }
-    run->glyphs[run->count++] = (fx_glyph){ .glyph_id = glyph_id, .x = x, .y = y };
-    return true;
+    run->glyphs[run->count++] = (flux_glyph){ .glyph_id = glyph_id, .x = x, .y = y };
+    return FLUX_OK;
 }
 
-size_t fx_glyph_run_count(const fx_glyph_run *run)
+size_t flux_glyph_run_count(const flux_glyph_run *run)
 {
     return run ? run->count : 0;
 }
 
-const fx_glyph *fx_glyph_run_data(const fx_glyph_run *run)
+const flux_glyph *flux_glyph_run_data(const flux_glyph_run *run)
 {
-    return run ? run->glyphs : nullptr;
-}
-
-bool fx_glyph_upload(fx_context *ctx, uint32_t glyph_id,
-                     const uint8_t *bitmap, int w, int h,
-                     int bearing_x, int bearing_y, int advance)
-{
-    (void)ctx; (void)glyph_id;
-    (void)bitmap; (void)w; (void)h;
-    (void)bearing_x; (void)bearing_y; (void)advance;
-    return true;
+    if (!run || run->count == 0) return NULL;
+    return run->glyphs;
 }

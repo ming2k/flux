@@ -127,12 +127,13 @@ For contributors implementing a new drawing primitive:
 
 1. Add the declaration to `include/flux/flux.h` with a lifetime
    comment if any argument is borrowed.
-2. Append a `draw_op` in `src/canvas.c` — no GPU work.
-3. Add the tessellation / geometry emit path in `src/tess.c` or
-   `src/stroker.c`.
-4. Wire the `pipeline_key` into `src/batcher.c`.
-5. Add a GLSL shader pair in `src/shaders/` and register it in
-   `src/vk/pipeline.c`.
+2. Append a `draw_op` in `src/state/canvas.c` — no GPU work.
+3. Add the tessellation / geometry emit path in `src/geometry/tess.c` or
+   `src/geometry/stroker.c`.
+4. Wire the op kind into `src/engine.c` — backend-agnostic execution.
+5. Add the RHI method to `src/rhi/rhi.h` and implement it in
+   `src/rhi/software/software_rhi.c` and `src/rhi/vulkan/vulkan_rhi.c`.
+6. Add a GLSL shader pair in `src/shaders/` if the Vulkan backend needs it.
 6. Add a golden-image test scene in `tests/test_render_golden.c`.
 7. Update `docs/reference/api.md` with an example code snippet.
 

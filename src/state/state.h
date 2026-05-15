@@ -1,93 +1,90 @@
 /*
- * State layer: canvas recording, transform stack, paint management.
+ * Display-list op definitions consumed by engine.c.
  *
- * These modules are the "recording" half of the two-phase architecture.
- * They build display lists and manage graphics state but do not render
- * anything — that is the renderer's job at present time.
+ * Recorded at flux_canvas_* call time and replayed by the execution
+ * engine during flux_surface_present.
  */
-#ifndef FX_STATE_H
-#define FX_STATE_H
+#ifndef FLUX_STATE_H
+#define FLUX_STATE_H
 
 #include "flux/flux.h"
 #include <stdbool.h>
 #include <stddef.h>
 
-/* ---- op kinds recorded in the display list ---- */
+/* Forward decl: the actual struct lives in internal.h. */
+struct flux_paint_state;
+typedef struct flux_paint_state flux_paint_state;
 
-typedef enum {
-    FX_OP_FILL_RECT = 0,
-    FX_OP_FILL_PATH = 1,
-    FX_OP_STROKE_PATH = 2,
-    FX_OP_DRAW_IMAGE = 3,
-    FX_OP_DRAW_GLYPHS = 4,
-    FX_OP_CLIP_RECT = 5,
-    FX_OP_RESET_CLIP = 6,
-    FX_OP_CLIP_PATH = 7,
-    FX_OP_MASK_BLUR = 8,
-} fx_op_kind;
+typedef enum flux_op_kind {
+    FLUX_OP_FILL_RECT   = 0,
+    FLUX_OP_FILL_PATH   = 1,
+    FLUX_OP_STROKE_PATH = 2,
+    FLUX_OP_DRAW_IMAGE  = 3,
+    FLUX_OP_DRAW_GLYPHS = 4,
+    FLUX_OP_CLIP_RECT   = 5,
+    FLUX_OP_CLIP_PATH   = 6,
+    FLUX_OP_RESET_CLIP  = 7,
+    FLUX_OP_APPLY_BLUR  = 8,
+} flux_op_kind;
 
 typedef struct {
-    const fx_path   *path;
-    fx_paint         paint;
+    flux_rect  rect;
+    flux_color color;
+} flux_fill_rect_op;
+
+/* Paths in path-bearing ops are *borrowed* from the caller unless
+ * `owns_path` is true, in which case the canvas was forced to construct
+ * a transformed copy and owns it (release on canvas reset). */
+
+typedef struct {
+    const flux_path        *path;
+    struct flux_paint_state paint;
+    bool                    owns_path;
+} flux_fill_path_op;
+
+typedef struct {
+    const flux_path        *path;
+    struct flux_paint_state paint;
+    bool                    owns_path;
+} flux_stroke_path_op;
+
+typedef struct {
+    const flux_path *path;
     bool             owns_path;
-} fx_fill_path_op;
+} flux_clip_path_op;
 
 typedef struct {
-    const fx_path   *path;
-    fx_paint         paint;
-    bool             owns_path;
-} fx_stroke_path_op;
+    flux_rect rect;
+} flux_clip_rect_op;
 
 typedef struct {
-    const fx_image  *image;
-    fx_rect          src;
-    fx_rect          dst;
-} fx_draw_image_op;
+    const flux_image *image;        /* borrowed */
+    flux_rect         src;
+    flux_rect         dst;
+} flux_draw_image_op;
 
 typedef struct {
-    const fx_glyph_run *run;
-    float               x;
-    float               y;
-    fx_paint            paint;
-} fx_draw_glyphs_op;
-
-typedef struct {
-    fx_rect  rect;
-    fx_color color;
-} fx_fill_rect_op;
-
-typedef struct {
-    fx_rect rect;
-} fx_clip_rect_op;
+    const flux_glyph_run   *run;    /* borrowed */
+    float                   x, y;
+    struct flux_paint_state paint;
+} flux_draw_glyphs_op;
 
 typedef struct {
     float sigma;
-} fx_mask_blur_op;
+} flux_apply_blur_op;
 
-typedef struct {
-    fx_op_kind kind;
+typedef struct flux_op {
+    flux_op_kind kind;
     union {
-        fx_fill_rect_op    fill_rect;
-        fx_fill_path_op    fill_path;
-        fx_stroke_path_op  stroke_path;
-        fx_draw_image_op   draw_image;
-        fx_draw_glyphs_op  draw_glyphs;
-        fx_clip_rect_op    clip_rect;
-        fx_fill_path_op    clip_path;
-        fx_mask_blur_op    mask_blur;
+        flux_fill_rect_op   fill_rect;
+        flux_fill_path_op   fill_path;
+        flux_stroke_path_op stroke_path;
+        flux_draw_image_op  draw_image;
+        flux_draw_glyphs_op draw_glyphs;
+        flux_clip_rect_op   clip_rect;
+        flux_clip_path_op   clip_path;
+        flux_apply_blur_op  apply_blur;
     } u;
-} fx_op;
+} flux_op;
 
-/* ---- canvas (display list + transform stack) ---- */
-
-/* struct fx_canvas is defined in internal.h (public opaque type).
- * These helpers operate on it. */
-
-/* Append an op to the display list. */
-bool  fx_canvas_push_op(fx_canvas *c, const fx_op *op);
-
-/* Reset the canvas for a new frame (frees owned paths, clears ops). */
-void  fx_canvas_reset(fx_canvas *c);
-void  fx_canvas_dispose(fx_canvas *c);
-
-#endif /* FX_STATE_H */
+#endif /* FLUX_STATE_H */

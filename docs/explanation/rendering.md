@@ -16,7 +16,7 @@ See [Bézier curves](bezier-curves.md) for the full algorithm.
 
 ## Strokes
 
-Strokes are expanded CPU-side into fill polygons by the stroker (`src/stroker.c`).
+Strokes are expanded CPU-side into fill polygons by the stroker (`src/geometry/stroker.c`).
 - **Caps:** `BUTT`, `SQUARE`, and `ROUND`.
 - **Joins:** `MITER`, `ROUND`, and `BEVEL`.
 - **Miter Limit:** Implemented with automatic fallback to Bevel joins to prevent geometry spikes at sharp angles.

@@ -10,7 +10,7 @@ flux is organised into five layers, each with a clear responsibility:
 ├─────────────────────────────────────┤
 │  Geometry Layer  (geometry/)        │  Paths, Bézier flattening, tessellation, strokes
 ├─────────────────────────────────────┤
-│  Renderer Layer  (renderer/)        │  Backend vtable + Software + Vulkan backends
+│  RHI Layer        (rhi/)                  │  Backend vtable + Software + Vulkan backends
 ├─────────────────────────────────────┤
 │  Math Layer      (math/)            │  Matrices, rectangles, arena allocator
 └─────────────────────────────────────┘
@@ -49,12 +49,12 @@ The recording half of the two-phase architecture. Builds a display list of ops a
 | `canvas.c` | Op recording: fill rect, fill path, stroke path, draw image, draw glyphs, clip ops |
 | `state.h` | `fx_op`, `fx_op_kind`, and canvas helpers |
 
-### Renderer layer (`src/renderer/`)
+### RHI layer (`src/rhi/`)
 
-**This is the architectural keystone.** The `fx_renderer` vtable abstracts all backend-specific rendering behind a single interface:
+**This is the architectural keystone.** The `fx_rhi_device` vtable abstracts all backend-specific rendering behind a single interface:
 
 ```
-fx_renderer_vtbl {
+fx_rhi_vtbl {
     begin_frame, begin_pass, end_pass, submit
     alloc_solid, alloc_image
     draw_solid, flush_solid, draw_image, draw_text, draw_gradient
@@ -71,12 +71,12 @@ Current backends:
 
 | Backend | File | Description |
 |---|---|---|
-| **Software** | `renderer/software.c` | CPU scanline rasteriser with stencil buffer (~800 LOC). Proves the vtable fully. |
-| **Vulkan** | `renderer/vulkan/` | Stub ready for porting existing Vulkan code behind the vtable. |
+| **Software** | `rhi/software/software_rhi.c` | CPU scanline rasteriser with stencil buffer (~800 LOC). Proves the vtable fully. |
+| **Vulkan** | `rhi/vulkan/` | Stub ready for porting existing Vulkan code behind the vtable. |
 
 ### Execution engine (`engine.c`)
 
-Backend-agnostic op executor. Consumes a recorded display list and calls the renderer vtable for every op. Handles:
+Backend-agnostic op executor. Consumes a recorded display list and calls the RHI vtable for every op. Handles:
 
 - Path → polyline flattening (delegates to geometry layer)
 - Polygon triangulation (delegates to geometry layer)
@@ -105,26 +105,26 @@ fx_surface_acquire() → fx_canvas*
 
 Phase 2 — Execute (at fx_surface_present)
 ==========================================
-fx_engine_execute(canvas, renderer)
+fx_engine_execute(canvas, rhi)
     │
     ├── For each op:
     │   ├── Tessellate / flatten paths (geometry layer)
-    │   ├── Allocate vertices via renderer->alloc_solid/alloc_image
-    │   ├── Issue draws via renderer->draw_solid/draw_image/etc.
-    │   └── Manage clip state via renderer->scissor/stencil_*
+    │   ├── Allocate vertices via rhi->alloc_solid/alloc_image
+    │   ├── Issue draws via rhi->draw_solid/draw_image/etc.
+    │   └── Manage clip state via rhi->scissor/stencil_*
     │
-    └── renderer->submit()    (present to screen or make pixels readable)
+    └── rhi->submit()    (present to screen or make pixels readable)
 ```
 
 ## Key design decisions
 
-1. **Vtable at the renderer boundary** — the execution engine never calls a graphics API directly. Every pixel-related operation goes through `fx_renderer_vt`. This is the separation that enables multiple backends.
+1. **Vtable at the RHI boundary** — the execution engine never calls a graphics API directly. Every pixel-related operation goes through `fx_rhi_vt`. This is the separation that enables multiple backends.
 
-2. **Opaque resource handles** — `fx_r_buffer` and `fx_r_texture` are interpreted only by the renderer. The engine allocates vertices through the renderer without knowing if they live in a Vulkan VkBuffer or a malloc'd array.
+2. **Opaque resource handles** — `fx_r_buffer` and `fx_r_texture` are interpreted only by the RHI. The engine allocates vertices through the RHI without knowing if they live in a Vulkan VkBuffer or a malloc'd array.
 
-3. **Batching lives in the renderer** — consecutive same-color solid draws are batched by the renderer internally. The engine just issues `draw_solid()` calls; the renderer decides when to flush.
+3. **Batching lives in the RHI** — consecutive same-color solid draws are batched by the RHI internally. The engine just issues `draw_solid()` calls; the RHI decides when to flush.
 
-4. **Two-phase recording/execution preserved** — the existing architectural strength (CPU records while GPU renders) is maintained. The renderer vtable simply makes the "execute" phase backend-swappable.
+4. **Two-phase recording/execution preserved** — the existing architectural strength (CPU records while GPU renders) is maintained. The RHI vtable simply makes the "execute" phase backend-swappable.
 
 ## See also
 

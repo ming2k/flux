@@ -64,7 +64,7 @@ Transferring pixel data from CPU memory to GPU memory. flux uses a unified uploa
 ## H
 
 **HarfBuzz**  
-The open-source text shaping library used by flux for glyph positioning. `fx_font_get_hb_font` exposes the underlying HarfBuzz font handle.
+An open-source text shaping library commonly used above flux to convert UTF-8 text into positioned glyph IDs. flux does not link HarfBuzz; callers shape text externally and submit glyph runs via `fx_glyph_run` and `fx_glyph_upload`.
 
 ## I
 

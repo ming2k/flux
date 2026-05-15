@@ -50,7 +50,7 @@ Assertions:
 - `fx_path` records verbs/points correctly and tracks bounds.
 - `fx_image` applies default stride/usage rules and retains a private
   pixel copy.
-- `fx_font` and `fx_glyph_run` preserve explicit metadata and glyph
+- `fx_glyph_run` preserves explicit metadata and glyph
   placement.
 - `fx_canvas` records fill/stroke/image/glyph ops in order and resets
   cleanly between frames.

@@ -5,7 +5,9 @@ layout(location = 0) out vec4 out_color;
 
 layout(set = 0, binding = 0) uniform sampler2D src;
 
-layout(push_constant) uniform fx_blur_pc {
+layout(push_constant) uniform flux_blur_pc {
+    vec2 surface_size;
+    vec2 pad;
     vec2 texel_size;
 } pc;
 

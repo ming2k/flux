@@ -142,7 +142,7 @@ The benchmark reports p50/p95/p99/peak frame times. Compare before and after num
 
 - [ ] Group solid-color fills together to maximize batching.
 - [ ] Use `fx_fill_rect` for rectangles instead of building a path.
-- [ ] Cache `fx_path`, `fx_image`, and `fx_font` objects across frames.
+- [ ] Cache `fx_path` and `fx_image` objects across frames.
 - [ ] Pre-load common glyphs to avoid atlas eviction.
 - [ ] Double-buffer dynamically updated images.
 - [ ] Debounce window resizes.

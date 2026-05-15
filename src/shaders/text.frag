@@ -3,7 +3,7 @@
 layout(location = 0) in vec2 in_uv;
 layout(location = 0) out vec4 out_color;
 
-layout(push_constant) uniform fx_text_pc {
+layout(push_constant) uniform flux_text_pc {
     vec2 surface_size;
     vec2 pad;
     vec4 color;

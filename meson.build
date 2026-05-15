@@ -1,6 +1,6 @@
 project('flux', ['c', 'cpp'],
-  version : '0.1.0',
-  license : 'Apache-2.0',
+  version : '0.2.0',
+  license : 'GPL-3.0',
   default_options : [
     'c_std=c23',
     'warning_level=2',
@@ -18,7 +18,7 @@ add_project_arguments(
   language : 'c',
 )
 
-vulkan_dep   = dependency('vulkan',        version : '>=1.2')
+vulkan_dep   = dependency('vulkan',        version : '>=1.2', required : false)
 threads_dep  = dependency('threads')
 m_dep        = cc.find_library('m', required : false)
 
@@ -39,6 +39,6 @@ pkg.generate(
   libraries   : flux_lib,
   name        : 'flux',
   filebase    : 'flux',
-  description : 'Low-level 2D graphics foundation on Vulkan',
+  description : 'Low-level 2D graphics foundation with software and Vulkan backends',
   version     : meson.project_version(),
 )

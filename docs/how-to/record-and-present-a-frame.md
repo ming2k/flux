@@ -30,7 +30,7 @@ The application owns the event loop. On Vulkan, process Vulkan events, resize
 the flux surface when the window size changes, acquire a flux canvas, record the
 frame, and present.
 
-Recorded operations borrow resources such as `fx_path`, `fx_image`, `fx_font`,
+Recorded operations borrow resources such as `fx_path`, `fx_image`,
 and `fx_glyph_run` until present. Destroy or mutate those objects only after the
 frame has been presented unless the object is not referenced by the current
 frame.

@@ -53,7 +53,7 @@ Once the caller has rasterized a glyph to a bitmap, flux takes over:
 
 | Stage | Responsibility | Implementation |
 |---|---|---|
-| **Atlas management** | Pack glyph bitmaps into a 2048×2048 `A8_UNORM` GPU texture. Evict and reuse when full. | `src/text.c` |
+| **Atlas management** | Pack glyph bitmaps into a 2048×2048 `A8_UNORM` GPU texture. Evict and reuse when full. | `src/resource/text.c` |
 | **Rendering** | Draw each glyph as a textured quad. The fragment shader multiplies the paint color by the atlas alpha. | `src/surface.c` + text.frag |
 
 ## The atlas in detail
