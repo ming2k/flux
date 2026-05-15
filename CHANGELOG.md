@@ -7,6 +7,32 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 Dates are ISO 8601. Pre-1.0 minor releases may introduce breaking
 changes; the breaking commit is called out explicitly.
 
+## [0.2.1] — 2026-05-15
+
+### Added
+
+- **Software backend: all 13 blend modes.** `blend_pixel()` now implements
+  the full Porter-Duff set (`SRC_OVER`, `DST_OVER`, `SRC_IN`, `DST_IN`,
+  `SRC_OUT`, `DST_OUT`, `SRC_ATOP`, `DST_ATOP`, `XOR`) plus separable
+  modes (`PLUS`, `MULTIPLY`, `SCREEN`, `OVERLAY`). `SRC_OVER` retains its
+  fast path.
+- **Software backend: BGRA8 and A8 texture formats.** `sw_texture_alloc`
+  now computes correct stride per format; `raster_image` performs channel
+  swizzling (BGRA8) or alpha-only sampling (A8) as appropriate.
+- **Vulkan: asynchronous texture upload via staging buffer pool.**
+  `upload_texture_data()` no longer creates temporary buffers, command
+  buffers, and fences for every upload. A ring of reusable staging buffers
+  feeds a dedicated transfer command buffer; the CPU returns immediately
+  and buffers are reclaimed when the GPU fence signals.
+- **Vulkan: persistent pipeline cache.** `VkPipelineCache` is loaded from
+  `~/.cache/flux/pipeline_cache.bin` at startup and saved at shutdown.
+  Swapchain resize no longer recompiles SPIR-V from scratch.
+
+### Fixed
+
+- `FLUX_OP_FILL_RECT` now respects the current blend mode set by
+  `flux_paint_set_blend_mode` via the RHI vtable.
+
 ## [0.2.0] — 2026-05-15
 
 **Stabilisation release.** This release fixes all known crash and
@@ -52,6 +78,7 @@ clipping, fence-tracked image updates, VMA integration. Superseded.
 
 First tagged development preview.
 
+[0.2.1]: https://github.com/anthropics/flux/releases/tag/v0.2.1
 [0.2.0]: https://github.com/anthropics/flux/releases/tag/v0.2.0
 [0.1.0]: https://github.com/anthropics/flux/compare/v0.0.2...v0.1.0
 [0.0.2]: https://github.com/anthropics/flux/compare/v0.0.1...v0.0.2

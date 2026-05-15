@@ -82,7 +82,7 @@ extern "C" {
 
 #define FLUX_VERSION_MAJOR 0
 #define FLUX_VERSION_MINOR 2
-#define FLUX_VERSION_PATCH 0
+#define FLUX_VERSION_PATCH 1
 
 /* Encoded as 0xMMmmpp00 (24-bit semantic version, low 8 bits reserved). */
 #define FLUX_VERSION_NUMBER \

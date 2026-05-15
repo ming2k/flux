@@ -4,6 +4,102 @@
 #include "vk_internal.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
+#define PIPELINE_CACHE_DIR  ".cache/flux"
+#define PIPELINE_CACHE_FILE "pipeline_cache.bin"
+
+static void get_pipeline_cache_path(char *out, size_t out_size)
+{
+    const char *home = getenv("HOME");
+    if (!home) home = "/tmp";
+    snprintf(out, out_size, "%s/%s/%s", home, PIPELINE_CACHE_DIR, PIPELINE_CACHE_FILE);
+}
+
+static bool load_pipeline_cache(vk_renderer *vk)
+{
+    VkDevice dev = vk->device.device;
+    char path[512];
+    get_pipeline_cache_path(path, sizeof(path));
+
+    FILE *f = fopen(path, "rb");
+    if (!f) goto create_empty;
+
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (size <= 0) { fclose(f); goto create_empty; }
+
+    void *data = malloc(size);
+    if (!data) { fclose(f); goto create_empty; }
+
+    if (fread(data, 1, size, f) != (size_t)size) {
+        free(data);
+        fclose(f);
+        goto create_empty;
+    }
+    fclose(f);
+
+    VkPipelineCacheCreateInfo ci = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+        .initialDataSize = size,
+        .pInitialData = data,
+    };
+    VkResult res = vkCreatePipelineCache(dev, &ci, nullptr, &vk->pipeline_cache);
+    free(data);
+    FLUX_VK_CHECK(res);
+    return res == VK_SUCCESS;
+
+create_empty:
+    {
+        VkPipelineCacheCreateInfo ci = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+        };
+        VkResult res = vkCreatePipelineCache(dev, &ci, nullptr, &vk->pipeline_cache);
+        FLUX_VK_CHECK(res);
+        return res == VK_SUCCESS;
+    }
+}
+
+static void save_pipeline_cache(vk_renderer *vk)
+{
+    VkDevice dev = vk->device.device;
+    if (vk->pipeline_cache == VK_NULL_HANDLE) return;
+
+    size_t size = 0;
+    VkResult res = vkGetPipelineCacheData(dev, vk->pipeline_cache, &size, nullptr);
+    if (res != VK_SUCCESS || size == 0) return;
+
+    void *data = malloc(size);
+    if (!data) return;
+
+    res = vkGetPipelineCacheData(dev, vk->pipeline_cache, &size, data);
+    if (res != VK_SUCCESS) {
+        free(data);
+        return;
+    }
+
+    char path[512];
+    get_pipeline_cache_path(path, sizeof(path));
+
+    const char *home = getenv("HOME");
+    if (home) {
+        char dir[512];
+        snprintf(dir, sizeof(dir), "%s/.cache", home);
+        mkdir(dir, 0755);
+        snprintf(dir, sizeof(dir), "%s/%s", home, PIPELINE_CACHE_DIR);
+        mkdir(dir, 0755);
+    }
+
+    FILE *f = fopen(path, "wb");
+    if (f) {
+        fwrite(data, 1, size, f);
+        fclose(f);
+    }
+    free(data);
+}
 
 void vk_destroy(flux_rhi_device *r)
 {
@@ -13,6 +109,12 @@ void vk_destroy(flux_rhi_device *r)
     if (dev == VK_NULL_HANDLE) { free(vk); return; }
 
     FLUX_VK_CHECK(vkDeviceWaitIdle(dev));
+
+    save_pipeline_cache(vk);
+    if (vk->pipeline_cache) {
+        vkDestroyPipelineCache(dev, vk->pipeline_cache, nullptr);
+        vk->pipeline_cache = VK_NULL_HANDLE;
+    }
 
     destroy_pipelines(vk);
 
@@ -47,6 +149,11 @@ void vk_destroy(flux_rhi_device *r)
         if (f->fence) vkDestroyFence(dev, f->fence, nullptr);
     }
 
+    staging_pool_destroy(vk);
+    if (vk->transfer_fence) vkDestroyFence(dev, vk->transfer_fence, nullptr);
+    if (vk->transfer_cmd) vkFreeCommandBuffers(dev, vk->transfer_cmd_pool, 1, &vk->transfer_cmd);
+    if (vk->transfer_cmd_pool) vkDestroyCommandPool(dev, vk->transfer_cmd_pool, nullptr);
+
     if (vk->cmd_pool) vkDestroyCommandPool(dev, vk->cmd_pool, nullptr);
     free(vk);
 }
@@ -72,6 +179,12 @@ void vk_begin_frame(flux_rhi_device *r)
         }
         vk->w = vk->sc_extent.width;
         vk->h = vk->sc_extent.height;
+    }
+
+    if (vk->transfer_pending) {
+        VkResult fence_res = vkGetFenceStatus(vk->device.device, vk->transfer_fence);
+        if (fence_res == VK_SUCCESS)
+            staging_pool_gc(vk);
     }
 
     vk_frame *f = &vk->frames[vk->frame_idx];
@@ -207,6 +320,12 @@ void vk_submit(flux_rhi_device *r)
 
     vk->frame_began = false;
     vk->frame_idx = (vk->frame_idx + 1) % FLUX_MAX_FRAMES_IN_FLIGHT;
+
+    if (vk->transfer_pending) {
+        VkResult fence_res = vkGetFenceStatus(vk->device.device, vk->transfer_fence);
+        if (fence_res == VK_SUCCESS)
+            staging_pool_gc(vk);
+    }
 }
 
 bool vk_read_pixels(flux_rhi_device *r, void *data, size_t stride)
@@ -395,6 +514,12 @@ flux_image_vertex *vk_alloc_image(flux_rhi_device *r, size_t n,
     return ptr;
 }
 
+static void vk_blend_mode(flux_rhi_device *r, flux_blend_mode mode)
+{
+    (void)r;
+    (void)mode;
+}
+
 static const flux_rhi_vtbl vk_vtbl = {
     .destroy         = vk_destroy,
     .surface_extent  = vk_surface_extent,
@@ -418,6 +543,7 @@ static const flux_rhi_vtbl vk_vtbl = {
     .cover_solid     = vk_cover_solid,
     .cover_gradient  = vk_cover_gradient,
     .blur            = vk_blur,
+    .set_blend_mode  = vk_blend_mode,
     .texture_alloc   = vk_texture_alloc,
     .texture_free    = vk_texture_free,
     .texture_update  = vk_texture_update,
@@ -492,6 +618,44 @@ flux_rhi_device *flux_rhi_create_vulkan(const flux_vulkan_device *device,
         .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
     };
     FLUX_VK_CHECK(vkCreateSampler(dev, &sci_sampler, nullptr, &vk->sampler));
+
+    VkCommandPoolCreateInfo transfer_cpi = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = vk->device.graphics_family,
+    };
+    res = vkCreateCommandPool(dev, &transfer_cpi, nullptr, &vk->transfer_cmd_pool);
+    FLUX_VK_CHECK(res);
+    if (res != VK_SUCCESS) {
+        vk_destroy((flux_rhi_device *)vk);
+        return nullptr;
+    }
+
+    VkCommandBufferAllocateInfo transfer_ai = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = vk->transfer_cmd_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    res = vkAllocateCommandBuffers(dev, &transfer_ai, &vk->transfer_cmd);
+    FLUX_VK_CHECK(res);
+    if (res != VK_SUCCESS) {
+        vk_destroy((flux_rhi_device *)vk);
+        return nullptr;
+    }
+
+    VkFenceCreateInfo transfer_fci = { .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+    res = vkCreateFence(dev, &transfer_fci, nullptr, &vk->transfer_fence);
+    FLUX_VK_CHECK(res);
+    if (res != VK_SUCCESS) {
+        vk_destroy((flux_rhi_device *)vk);
+        return nullptr;
+    }
+
+    if (!load_pipeline_cache(vk)) {
+        vk_destroy((flux_rhi_device *)vk);
+        return nullptr;
+    }
 
     return (flux_rhi_device *)vk;
 }

@@ -144,7 +144,7 @@ bool make_pipeline_core(
         .subpass             = 0,
     };
 
-    VkResult res = vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &pci, nullptr, out_pipeline);
+    VkResult res = vkCreateGraphicsPipelines(dev, vk->pipeline_cache, 1, &pci, nullptr, out_pipeline);
     FLUX_VK_CHECK(res);
     if (res != VK_SUCCESS)
         goto fail;

@@ -337,12 +337,14 @@ flux_result flux_engine_execute(flux_canvas *canvas, flux_rhi_device *r)
         }
 
         case FLUX_OP_FILL_RECT:
+            vt(r)->set_blend_mode(r, FLUX_BLEND_SRC_OVER);
             draw_solid_rect(r, &op->u.fill_rect.rect, op->u.fill_rect.color);
             continue;
 
         case FLUX_OP_FILL_PATH: {
             const flux_path *fp = op->u.fill_path.path;
             const flux_paint_state *p = &op->u.fill_path.paint;
+            vt(r)->set_blend_mode(r, p->blend_mode);
             const flux_gradient *gr = p->gradient;
             flux_rect rr;
 
@@ -361,6 +363,7 @@ flux_result flux_engine_execute(flux_canvas *canvas, flux_rhi_device *r)
         case FLUX_OP_STROKE_PATH: {
             const flux_path *sp = op->u.stroke_path.path;
             const flux_paint_state *p = &op->u.stroke_path.paint;
+            vt(r)->set_blend_mode(r, p->blend_mode);
             flux_stroke_style style = {
                 .line_cap     = p->line_cap,
                 .line_join    = p->line_join,
@@ -400,6 +403,7 @@ flux_result flux_engine_execute(flux_canvas *canvas, flux_rhi_device *r)
         }
 
         case FLUX_OP_DRAW_IMAGE: {
+            vt(r)->set_blend_mode(r, FLUX_BLEND_SRC_OVER);
             const flux_draw_image_op *io = &op->u.draw_image;
             vt(r)->flush_solid(r);
 
@@ -437,6 +441,7 @@ flux_result flux_engine_execute(flux_canvas *canvas, flux_rhi_device *r)
             continue;
 
         case FLUX_OP_DRAW_GLYPHS:
+            vt(r)->set_blend_mode(r, op->u.draw_glyphs.paint.blend_mode);
             vt(r)->flush_solid(r);
             continue;
         }

@@ -24,6 +24,7 @@
 #define FLUX_MAX_SWAPCHAIN_IMAGES 8
 #define FLUX_MAX_FRAMES_IN_FLIGHT 2
 #define FLUX_MAX_DESC_CACHE       64
+#define FLUX_MAX_STAGING_BUFFERS  8
 #define VERTEX_BUF_INITIAL      (1 << 20) /* 1 MiB */
 
 /* ------------------------------------------------------------------ */
@@ -102,6 +103,19 @@ typedef struct {
 } vk_frame;
 
 typedef struct {
+    VkBuffer       buf;
+    VkDeviceMemory mem;
+    size_t         size;
+    void          *map;
+    bool           in_use;
+} vk_staging_buffer;
+
+typedef struct {
+    vk_staging_buffer buffers[FLUX_MAX_STAGING_BUFFERS];
+    uint32_t          count;
+} vk_staging_pool;
+
+typedef struct {
     const flux_rhi_vtbl *vtbl;
     flux_vulkan_device   device;
 
@@ -155,6 +169,14 @@ typedef struct {
 
     uint32_t w, h;
     bool needs_recreate;
+
+    vk_staging_pool  staging_pool;
+    VkCommandPool    transfer_cmd_pool;
+    VkCommandBuffer  transfer_cmd;
+    VkFence          transfer_fence;
+    bool             transfer_pending;
+
+    VkPipelineCache  pipeline_cache;
 } vk_renderer;
 
 #define VKR(r) ((vk_renderer *)(r))
@@ -260,6 +282,8 @@ extern void vk_texture_free(flux_rhi_device *r, flux_r_texture *tex);
 extern void vk_texture_update(flux_rhi_device *r, flux_r_texture *tex,
                               const void *data, uint32_t x, uint32_t y, uint32_t w, uint32_t h);
 extern flux_r_texture *vk_surface_texture(flux_rhi_device *r);
+extern void staging_pool_gc(vk_renderer *vk);
+extern void staging_pool_destroy(vk_renderer *vk);
 
 /* ------------------------------------------------------------------ */
 /*  Draw commands (vk_draw.c)                                         */

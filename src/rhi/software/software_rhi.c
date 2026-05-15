@@ -52,6 +52,7 @@ typedef struct sw_batch {
     uint32_t  first;
     uint32_t  count;
     bool      active;
+    flux_blend_mode blend_mode;
 } sw_batch;
 
 typedef struct sw_renderer {
@@ -77,6 +78,7 @@ typedef struct sw_renderer {
     uint32_t    scissor_w, scissor_h;
     uint32_t    stencil_ref;
     int         stencil_fill_rule;
+    flux_blend_mode blend_mode;
 } sw_renderer;
 
 /* vtable forward decls */
@@ -99,6 +101,7 @@ static void  sw_scissor(flux_rhi_device *r, int32_t x, int32_t y, uint32_t w, ui
 static void  sw_stencil_clear(flux_rhi_device *r, int32_t x, int32_t y, uint32_t w, uint32_t h);
 static void  sw_stencil_fill(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, int fill_rule);
 static void  sw_blur(flux_rhi_device *r, float sigma);
+static void  sw_blend_mode(flux_rhi_device *r, flux_blend_mode mode);
 static flux_r_texture *sw_surface_texture(flux_rhi_device *r);
 static void  sw_stencil_ref(flux_rhi_device *r, uint32_t ref);
 static void  sw_cover_solid(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, flux_color color);
@@ -116,19 +119,138 @@ static inline uint8_t to_u8(float v) {
     return (uint8_t)(iv < 0 ? 0 : iv > 255 ? 255 : iv);
 }
 
-static void blend_pixel(uint8_t *dst, uint8_t sr, uint8_t sg, uint8_t sb, uint8_t sa)
+static void blend_pixel(uint8_t *dst, uint8_t sr, uint8_t sg, uint8_t sb, uint8_t sa, flux_blend_mode mode)
 {
-    if (sa == 0) return;
-    if (sa == 255) {
-        dst[0] = sr; dst[1] = sg; dst[2] = sb; dst[3] = 255;
+    if (mode == FLUX_BLEND_SRC_OVER) {
+        if (sa == 0) return;
+        if (sa == 255) {
+            dst[0] = sr; dst[1] = sg; dst[2] = sb; dst[3] = 255;
+            return;
+        }
+        uint32_t da = dst[3];
+        uint32_t inv_a = 255 - sa;
+        dst[0] = (uint8_t)(((uint32_t)sr * 255 + (uint32_t)dst[0] * inv_a) / 255);
+        dst[1] = (uint8_t)(((uint32_t)sg * 255 + (uint32_t)dst[1] * inv_a) / 255);
+        dst[2] = (uint8_t)(((uint32_t)sb * 255 + (uint32_t)dst[2] * inv_a) / 255);
+        dst[3] = (uint8_t)(sa + (da * inv_a) / 255);
         return;
     }
-    uint32_t da = dst[3];
-    uint32_t inv_a = 255 - sa;
-    dst[0] = (uint8_t)(((uint32_t)sr * 255 + (uint32_t)dst[0] * inv_a) / 255);
-    dst[1] = (uint8_t)(((uint32_t)sg * 255 + (uint32_t)dst[1] * inv_a) / 255);
-    dst[2] = (uint8_t)(((uint32_t)sb * 255 + (uint32_t)dst[2] * inv_a) / 255);
-    dst[3] = (uint8_t)(sa + (da * inv_a) / 255);
+
+    uint8_t dr = dst[0], dg = dst[1], db = dst[2], da = dst[3];
+
+    switch (mode) {
+    case FLUX_BLEND_DST_OVER: {
+        uint32_t fa = 255 - da;
+        dst[0] = (uint8_t)(((uint32_t)sr * fa + (uint32_t)dr * 255) / 255);
+        dst[1] = (uint8_t)(((uint32_t)sg * fa + (uint32_t)dg * 255) / 255);
+        dst[2] = (uint8_t)(((uint32_t)sb * fa + (uint32_t)db * 255) / 255);
+        dst[3] = (uint8_t)(((uint32_t)sa * fa + (uint32_t)da * 255) / 255);
+        break;
+    }
+    case FLUX_BLEND_SRC_IN: {
+        dst[0] = (uint8_t)(((uint32_t)sr * da) / 255);
+        dst[1] = (uint8_t)(((uint32_t)sg * da) / 255);
+        dst[2] = (uint8_t)(((uint32_t)sb * da) / 255);
+        dst[3] = (uint8_t)(((uint32_t)sa * da) / 255);
+        break;
+    }
+    case FLUX_BLEND_DST_IN: {
+        dst[0] = (uint8_t)(((uint32_t)dr * sa) / 255);
+        dst[1] = (uint8_t)(((uint32_t)dg * sa) / 255);
+        dst[2] = (uint8_t)(((uint32_t)db * sa) / 255);
+        dst[3] = (uint8_t)(((uint32_t)da * sa) / 255);
+        break;
+    }
+    case FLUX_BLEND_SRC_OUT: {
+        uint32_t fa = 255 - da;
+        dst[0] = (uint8_t)(((uint32_t)sr * fa) / 255);
+        dst[1] = (uint8_t)(((uint32_t)sg * fa) / 255);
+        dst[2] = (uint8_t)(((uint32_t)sb * fa) / 255);
+        dst[3] = (uint8_t)(((uint32_t)sa * fa) / 255);
+        break;
+    }
+    case FLUX_BLEND_DST_OUT: {
+        uint32_t fb = 255 - sa;
+        dst[0] = (uint8_t)(((uint32_t)dr * fb) / 255);
+        dst[1] = (uint8_t)(((uint32_t)dg * fb) / 255);
+        dst[2] = (uint8_t)(((uint32_t)db * fb) / 255);
+        dst[3] = (uint8_t)(((uint32_t)da * fb) / 255);
+        break;
+    }
+    case FLUX_BLEND_SRC_ATOP: {
+        dst[0] = (uint8_t)(((uint32_t)sr * da + (uint32_t)dr * (255 - sa)) / 255);
+        dst[1] = (uint8_t)(((uint32_t)sg * da + (uint32_t)dg * (255 - sa)) / 255);
+        dst[2] = (uint8_t)(((uint32_t)sb * da + (uint32_t)db * (255 - sa)) / 255);
+        dst[3] = (uint8_t)(((uint32_t)sa * da + (uint32_t)da * (255 - sa)) / 255);
+        break;
+    }
+    case FLUX_BLEND_DST_ATOP: {
+        dst[0] = (uint8_t)(((uint32_t)sr * (255 - da) + (uint32_t)dr * sa) / 255);
+        dst[1] = (uint8_t)(((uint32_t)sg * (255 - da) + (uint32_t)dg * sa) / 255);
+        dst[2] = (uint8_t)(((uint32_t)sb * (255 - da) + (uint32_t)db * sa) / 255);
+        dst[3] = (uint8_t)(((uint32_t)sa * (255 - da) + (uint32_t)da * sa) / 255);
+        break;
+    }
+    case FLUX_BLEND_XOR: {
+        uint32_t fa = 255 - da;
+        uint32_t fb = 255 - sa;
+        dst[0] = (uint8_t)(((uint32_t)sr * fa + (uint32_t)dr * fb) / 255);
+        dst[1] = (uint8_t)(((uint32_t)sg * fa + (uint32_t)dg * fb) / 255);
+        dst[2] = (uint8_t)(((uint32_t)sb * fa + (uint32_t)db * fb) / 255);
+        dst[3] = (uint8_t)(((uint32_t)sa * fa + (uint32_t)da * fb) / 255);
+        break;
+    }
+    case FLUX_BLEND_PLUS: {
+        uint16_t r = (uint16_t)sr + dr;
+        uint16_t g = (uint16_t)sg + dg;
+        uint16_t b = (uint16_t)sb + db;
+        uint16_t a = (uint16_t)sa + da;
+        dst[0] = r > 255 ? 255 : (uint8_t)r;
+        dst[1] = g > 255 ? 255 : (uint8_t)g;
+        dst[2] = b > 255 ? 255 : (uint8_t)b;
+        dst[3] = a > 255 ? 255 : (uint8_t)a;
+        break;
+    }
+    case FLUX_BLEND_MULTIPLY:
+    case FLUX_BLEND_SCREEN:
+    case FLUX_BLEND_OVERLAY: {
+        float sa_f = sa / 255.0f;
+        float da_f = da / 255.0f;
+        float s[3], d[3];
+        for (int i = 0; i < 3; i++) {
+            uint8_t sv = i == 0 ? sr : i == 1 ? sg : sb;
+            uint8_t dv = i == 0 ? dr : i == 1 ? dg : db;
+            s[i] = sa_f > 0.0f ? (sv / 255.0f) / sa_f : 0.0f;
+            d[i] = da_f > 0.0f ? (dv / 255.0f) / da_f : 0.0f;
+        }
+        float r[3];
+        for (int i = 0; i < 3; i++) {
+            float bval;
+            if (mode == FLUX_BLEND_MULTIPLY) {
+                bval = s[i] * d[i];
+            } else if (mode == FLUX_BLEND_SCREEN) {
+                bval = s[i] + d[i] - s[i] * d[i];
+            } else { /* OVERLAY */
+                if (d[i] < 0.5f)
+                    bval = 2.0f * s[i] * d[i];
+                else
+                    bval = 1.0f - 2.0f * (1.0f - s[i]) * (1.0f - d[i]);
+            }
+            r[i] = s[i] * (1.0f - da_f) + d[i] * (1.0f - sa_f) + bval * sa_f * da_f;
+        }
+        float ra = sa_f + da_f * (1.0f - sa_f);
+        if (ra > 0.0f) {
+            for (int i = 0; i < 3; i++)
+                dst[i] = (uint8_t)(r[i] * ra * 255.0f + 0.5f);
+        } else {
+            dst[0] = dst[1] = dst[2] = 0;
+        }
+        dst[3] = (uint8_t)(ra * 255.0f + 0.5f);
+        break;
+    }
+    default:
+        break;
+    }
 }
 
 static inline int32_t min_i(int32_t a, int32_t b) { return a < b ? a : b; }
@@ -216,11 +338,11 @@ static void raster_solid(sw_renderer *sw,
                         ? ((*sp & 1) != 0)      /* even-odd */
                         : (*sp != 0);            /* non-zero */
                     if (pass)
-                        blend_pixel(p, cover_r, cover_g, cover_b, cover_a);
+                        blend_pixel(p, cover_r, cover_g, cover_b, cover_a, sw->blend_mode);
                 } else {
                     /* Normal drawing: stencil acts as a mask against stencil_ref. */
                     if (*sp == sw->stencil_ref)
-                        blend_pixel(p, r, g, b, a);
+                        blend_pixel(p, r, g, b, a, sw->blend_mode);
                 }
             }
 
@@ -341,7 +463,7 @@ static void raster_gradient(sw_renderer *sw,
                     t = t < 0.0f ? 0.0f : t > 1.0f ? 1.0f : t;
                     uint8_t col[4];
                     eval_gradient(grad, t, col);
-                    blend_pixel(p, col[0], col[1], col[2], col[3]);
+                    blend_pixel(p, col[0], col[1], col[2], col[3], sw->blend_mode);
                 }
             }
             w0 += A01; w1 += A12; w2 += A20;
@@ -403,26 +525,53 @@ static void raster_image(sw_renderer *sw,
                 int32_t cu1 = clampi(iu + 1, 0, (int32_t)tex->w - 1);
                 int32_t cv1 = clampi(iv + 1, 0, (int32_t)tex->h - 1);
 
-                uint8_t *t00 = tex->pixels + (size_t)cv0 * tex->stride + (size_t)cu0 * 4;
-                uint8_t *t10 = tex->pixels + (size_t)cv0 * tex->stride + (size_t)cu1 * 4;
-                uint8_t *t01 = tex->pixels + (size_t)cv1 * tex->stride + (size_t)cu0 * 4;
-                uint8_t *t11 = tex->pixels + (size_t)cv1 * tex->stride + (size_t)cu1 * 4;
+                uint8_t r00, g00, b00, a00;
+                uint8_t r10, g10, b10, a10;
+                uint8_t r01, g01, b01, a01;
+                uint8_t r11, g11, b11, a11;
 
-                float ir = (float)t00[0] * (1-fu)*(1-fv) + (float)t10[0] * fu*(1-fv) +
-                          (float)t01[0] * (1-fu)*fv + (float)t11[0] * fu*fv;
-                float ig = (float)t00[1] * (1-fu)*(1-fv) + (float)t10[1] * fu*(1-fv) +
-                          (float)t01[1] * (1-fu)*fv + (float)t11[1] * fu*fv;
-                float ib = (float)t00[2] * (1-fu)*(1-fv) + (float)t10[2] * fu*(1-fv) +
-                          (float)t01[2] * (1-fu)*fv + (float)t11[2] * fu*fv;
-                float ia = (float)t00[3] * (1-fu)*(1-fv) + (float)t10[3] * fu*(1-fv) +
-                          (float)t01[3] * (1-fu)*fv + (float)t11[3] * fu*fv;
+                if (tex->fmt == FLUX_FMT_A8_UNORM) {
+                    uint8_t *p00 = tex->pixels + (size_t)cv0 * tex->stride + (size_t)cu0;
+                    uint8_t *p10 = tex->pixels + (size_t)cv0 * tex->stride + (size_t)cu1;
+                    uint8_t *p01 = tex->pixels + (size_t)cv1 * tex->stride + (size_t)cu0;
+                    uint8_t *p11 = tex->pixels + (size_t)cv1 * tex->stride + (size_t)cu1;
+                    r00 = g00 = b00 = a00 = p00[0];
+                    r10 = g10 = b10 = a10 = p10[0];
+                    r01 = g01 = b01 = a01 = p01[0];
+                    r11 = g11 = b11 = a11 = p11[0];
+                } else {
+                    uint8_t *p00 = tex->pixels + (size_t)cv0 * tex->stride + (size_t)cu0 * 4;
+                    uint8_t *p10 = tex->pixels + (size_t)cv0 * tex->stride + (size_t)cu1 * 4;
+                    uint8_t *p01 = tex->pixels + (size_t)cv1 * tex->stride + (size_t)cu0 * 4;
+                    uint8_t *p11 = tex->pixels + (size_t)cv1 * tex->stride + (size_t)cu1 * 4;
+                    if (tex->fmt == FLUX_FMT_BGRA8_UNORM) {
+                        r00 = p00[2]; g00 = p00[1]; b00 = p00[0]; a00 = p00[3];
+                        r10 = p10[2]; g10 = p10[1]; b10 = p10[0]; a10 = p10[3];
+                        r01 = p01[2]; g01 = p01[1]; b01 = p01[0]; a01 = p01[3];
+                        r11 = p11[2]; g11 = p11[1]; b11 = p11[0]; a11 = p11[3];
+                    } else {
+                        r00 = p00[0]; g00 = p00[1]; b00 = p00[2]; a00 = p00[3];
+                        r10 = p10[0]; g10 = p10[1]; b10 = p10[2]; a10 = p10[3];
+                        r01 = p01[0]; g01 = p01[1]; b01 = p01[2]; a01 = p01[3];
+                        r11 = p11[0]; g11 = p11[1]; b11 = p11[2]; a11 = p11[3];
+                    }
+                }
+
+                float ir = (float)r00 * (1-fu)*(1-fv) + (float)r10 * fu*(1-fv) +
+                          (float)r01 * (1-fu)*fv + (float)r11 * fu*fv;
+                float ig = (float)g00 * (1-fu)*(1-fv) + (float)g10 * fu*(1-fv) +
+                          (float)g01 * (1-fu)*fv + (float)g11 * fu*fv;
+                float ib = (float)b00 * (1-fu)*(1-fv) + (float)b10 * fu*(1-fv) +
+                          (float)b01 * (1-fu)*fv + (float)b11 * fu*fv;
+                float ia = (float)a00 * (1-fu)*(1-fv) + (float)a10 * fu*(1-fv) +
+                          (float)a01 * (1-fu)*fv + (float)a11 * fu*fv;
 
                 uint8_t r = (uint8_t)((ir / 255.0f) * tint_r + 0.5f);
                 uint8_t g = (uint8_t)((ig / 255.0f) * tint_g + 0.5f);
                 uint8_t b = (uint8_t)((ib / 255.0f) * tint_b + 0.5f);
                 uint8_t a = (uint8_t)((ia / 255.0f) * tint_a + 0.5f);
 
-                blend_pixel(p, r, g, b, a);
+                blend_pixel(p, r, g, b, a, sw->blend_mode);
             }
             p += 4;
         }
@@ -457,6 +606,7 @@ static const flux_rhi_vtbl *sw_vtable_init(sw_renderer *sw)
         .cover_solid      = sw_cover_solid,
         .cover_gradient   = sw_cover_gradient,
         .blur             = sw_blur,
+        .set_blend_mode   = sw_blend_mode,
         .texture_alloc    = sw_texture_alloc,
         .texture_free     = sw_texture_free,
         .texture_update   = sw_texture_update,
@@ -537,9 +687,16 @@ static void sw_begin_frame(flux_rhi_device *r)
     sw->buf_count = 0;
 }
 
+static void sw_blend_mode(flux_rhi_device *r, flux_blend_mode mode)
+{
+    sw_renderer *sw = self(r);
+    sw->blend_mode = mode;
+}
+
 static void sw_begin_pass(flux_rhi_device *r, flux_color clear)
 {
     sw_renderer *sw = self(r);
+    sw->blend_mode = FLUX_BLEND_SRC_OVER;
     if (clear) {
         uint8_t cr = (clear >> 16) & 0xFF, cg = (clear >> 8) & 0xFF;
         uint8_t cb = clear & 0xFF, ca = (clear >> 24) & 0xFF;
@@ -669,12 +826,13 @@ static void sw_draw_solid(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first
 {
     sw_renderer *sw = self(r);
     uint32_t bi = buffer_index(sw, buf);
-    if (sw->batch.active && (sw->batch.color != color || sw->batch.buf_index != bi)) {
+    if (sw->batch.active && (sw->batch.color != color || sw->batch.buf_index != bi || sw->batch.blend_mode != sw->blend_mode)) {
         sw_flush_solid(r);
     }
     if (!sw->batch.active) {
         sw->batch.color = color;
         sw->batch.buf_index = bi;
+        sw->batch.blend_mode = sw->blend_mode;
         sw->batch.first = first;
         sw->batch.count = count;
         sw->batch.active = true;
@@ -938,11 +1096,9 @@ static flux_r_texture *sw_texture_alloc(flux_rhi_device *r, uint32_t w, uint32_t
     sw_texture *t = calloc(1, sizeof(*t));
     if (!t) return nullptr;
 
-    if (fmt != FLUX_FMT_RGBA8_UNORM) {
-        /* Software backend currently only supports RGBA8 textures. */
-        free(t); return nullptr;
-    }
-    size_t real_stride = stride > 0 ? stride : (size_t)w * 4;
+    uint32_t bpp = flux_pixel_format_bytes(fmt);
+    if (bpp == 0) { free(t); return nullptr; }
+    size_t real_stride = stride > 0 ? stride : (size_t)w * bpp;
     t->pixels = malloc((size_t)h * real_stride);
     if (!t->pixels) { free(t); return nullptr; }
     t->w = w; t->h = h; t->stride = real_stride; t->fmt = fmt;
@@ -972,9 +1128,10 @@ static void sw_texture_update(flux_rhi_device *r, flux_r_texture *tex, const voi
     (void)r;
     sw_texture *t = (sw_texture *)tex;
     if (!t || !data) return;
+    uint32_t bpp = flux_pixel_format_bytes(t->fmt);
     for (uint32_t row = 0; row < h; row++) {
-        const uint8_t *src = (const uint8_t *)data + (size_t)row * w * 4;
-        uint8_t *dst = t->pixels + (size_t)(y + row) * t->stride + (size_t)x * 4;
-        memcpy(dst, src, (size_t)w * 4);
+        const uint8_t *src = (const uint8_t *)data + (size_t)row * w * bpp;
+        uint8_t *dst = t->pixels + (size_t)(y + row) * t->stride + (size_t)x * bpp;
+        memcpy(dst, src, (size_t)w * bpp);
     }
 }

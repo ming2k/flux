@@ -118,6 +118,9 @@ struct flux_rhi_vtbl {
      * Called between begin_pass / end_pass (requires active render pass). */
     void  (*blur)(flux_rhi_device *r, float sigma);
 
+    /* ---- blend mode ---- */
+    void  (*set_blend_mode)(flux_rhi_device *r, flux_blend_mode mode);
+
     /* ---- texture resources ---- */
 
     /* Allocate a texture that draw_image can reference.
