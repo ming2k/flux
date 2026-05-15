@@ -13,7 +13,7 @@ flux uses two allocators with different lifetimes.
 
 ### Per-Frame Linear Buffer Pool (`src/rhi/vulkan/vulkan_rhi.c`)
 
-Each in-flight frame owns an `fx_vbuf_pool`: a persistently mapped
+Each in-flight frame owns an `flux_vbuf_pool`: a persistently mapped
 `HOST_VISIBLE | HOST_COHERENT` allocation used for vertices, indices, and
 small uniforms written each frame.
 
@@ -21,7 +21,7 @@ small uniforms written each frame.
   the current chunk, the pool allocates a new chunk (doubling the size)
   and chains it in. Old chunks are retired and destroyed only after the
   frame's fence signals, ensuring GPU safety.
-- **Reset per frame.** `fx_vbuf_pool_reset` rewinds the write cursor
+- **Reset per frame.** `flux_vbuf_pool_reset` rewinds the write cursor
   when the frame's in-flight fence signals. Memory is not freed between
   frames.
 - **Alignment.** All allocations are 16-byte aligned.
@@ -35,8 +35,8 @@ burn dedicated `VkDeviceMemory` slots per image.
 
 ## Upload Subsystem (`src/rhi/vulkan/vulkan_rhi.c`)
 
-Every GPU upload in flux — image creation, `fx_image_update`, glyph
-atlas inserts — goes through one path on `fx_context`:
+Every GPU upload in flux — image creation, `flux_image_update`, glyph
+atlas inserts — goes through one path on `flux_context`:
 
 - **Persistent staging buffer.** Host-visible, host-coherent,
   persistently mapped. Grows power-of-two on demand, never shrinks.
@@ -46,7 +46,7 @@ atlas inserts — goes through one path on `fx_context`:
   at device init and destroyed at device shutdown. The upload path
   calls `vkResetCommandBuffer` + `vkResetFences` per upload rather
   than allocating new objects.
-- **Layout-aware barriers.** `fx_upload_image` takes the caller's
+- **Layout-aware barriers.** `flux_upload_image` takes the caller's
   `old_layout` and emits an appropriate barrier (source stage and
   access mask) so that `UNDEFINED`, `TRANSFER_DST_OPTIMAL`, and
   `SHADER_READ_ONLY_OPTIMAL` all work as source layouts.
@@ -57,17 +57,17 @@ atlas inserts — goes through one path on `fx_context`:
   later optimization — see the known gaps in
   [release process](../dev/release-process.md).
 
-The upload subsystem is private to `fx_context`; callers never touch
-it directly. The public surface is `fx_image_create`,
-`fx_image_update`, and internally `fx_atlas_ensure_glyph`.
+The upload subsystem is private to `flux_context`; callers never touch
+it directly. The public surface is `flux_image_create`,
+`flux_image_update`, and internally `flux_atlas_ensure_glyph`.
 
 ## Draw Call Batching
 
 The renderer automatically batches primitives to minimize Vulkan
 overhead.
 
-- **Grouping.** Sequential `fx_fill_path` / `fx_stroke_path` ops that
-  share the same `fx_paint` color and pipeline are merged into a
+- **Grouping.** Sequential `flux_fill_path` / `flux_stroke_path` ops that
+  share the same `flux_paint` color and pipeline are merged into a
   single `vkCmdDraw`.
 - **Flushing.** A batch is flushed when:
     1. The paint color changes.
@@ -79,10 +79,10 @@ overhead.
 ## Pipeline Architecture
 
 Pipelines are **context-shared**, not surface-lifetime. They are keyed
-by `(format, samples)` and stored in `fx_context.pipeline_sets[]`.
+by `(format, samples)` and stored in `flux_context.pipeline_sets[]`.
 A pipeline set is created on first use and reused across every surface
-and resize. Only `fx_context_destroy` tears them down (via
-`fx_pipeline_set_destroy_all`).
+and resize. Only `flux_context_destroy` tears them down (via
+`flux_pipeline_set_destroy_all`).
 
 | Pipeline | Vertex Format | Push Constants | Descriptor Sets |
 |---|---|---|---|
@@ -90,18 +90,39 @@ and resize. Only `fx_context_destroy` tears them down (via
 | **Image** | `pos[2]`, `uv[2]` | `surface_size` | 1 (Sampler + Image) |
 | **Text** | `pos[2]`, `uv[2]` | `surface_size`, `color` | 1 (Sampler + Atlas) |
 | **Gradient** | `pos[2]` | `surface_size`, mode, stops, colors | None |
+| **Cover** | `pos[2]` | `surface_size`, `color` | None |
 | **Stencil** | `pos[2]` | `surface_size` | None |
 | **Blur** | `pos[2]`, `uv[2]` | `surface_size`, direction, sigma | 1 (Sampler + Image) |
+| **Fringe** | `pos[2]`, `coverage` | `surface_size`, `color` | None |
 
 - **Topology.** All pipelines use `TRIANGLE_LIST`.
-- **Blending.** All pipelines are configured for `SRC_OVER`
-  (`ONE`, `ONE_MINUS_SRC_ALPHA`) pre-multiplied alpha.
+- **Blending.** Blend mode is set dynamically via
+  `vkCmdSetColorBlendEquationEXT` from `VK_EXT_extended_dynamic_state3`.
+  All 13 `flux_blend_mode` values are supported: the 12 Porter-Duff
+  modes map to standard `VkBlendFactor` pairs, while `MULTIPLY`,
+  `SCREEN`, and `OVERLAY` require `VK_EXT_blend_operation_advanced`
+  and fall back to `SRC_OVER` when that extension is unavailable.
 - **Push constants** are used for frequently changing per-draw state
   (viewport size, primary color, gradient stops). This avoids UBO
   binding churn.
 - **Dynamic state.** `VK_DYNAMIC_STATE_VIEWPORT`,
-  `VK_DYNAMIC_STATE_SCISSOR`, and `VK_DYNAMIC_STATE_STENCIL_REFERENCE`
-  are dynamic so pipelines survive viewport and clip changes.
+  `VK_DYNAMIC_STATE_SCISSOR`, `VK_DYNAMIC_STATE_STENCIL_REFERENCE`,
+  and `VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT` are dynamic so
+  pipelines survive viewport, clip, and blend-mode changes without
+  pipeline variants.
+
+## Path Anti-Aliasing
+
+Path fills use **stencil-then-cover** with an additional **fringe** pass:
+
+1. **Stencil.** Tessellated path triangles increment the stencil buffer.
+2. **Cover.** A bounding-box quad fills pixels where stencil == 1.
+3. **Fringe.** Extra triangles expand each path edge outward by 0.5 px.
+   Per-vertex coverage (1.0 on the original edge, 0.0 on the outer
+   boundary) is interpolated in the fragment shader and multiplied
+   with the draw colour before blending.
+
+This gives smooth silhouette edges without MSAA or analytic coverage.
 
 ## Glyph Atlas
 
@@ -112,16 +133,14 @@ The **Glyph Atlas** is a context-global resource managed in
 - **Algorithm.** Shelf-packing allocator with 2-pixel inter-glyph
   padding to prevent bilinear filtering bleed.
 - **Updates.** Callers rasterize glyphs externally (e.g., FreeType) and
-  upload bitmaps via `fx_glyph_upload`. The atlas packs them into the
+  upload bitmaps via `flux_glyph_upload`. The atlas packs them into the
   GPU texture through the shared upload subsystem.
-- **Overflow.** When the atlas cannot fit a new glyph, flux logs a
-  warning, evicts every cached entry, calls `vkDeviceWaitIdle` so
-  in-flight frames release their references, and reuses the texture.
-  No entry pointers outlive a single `fx_atlas_ensure_glyph` call
-  (they are value-copied into the caller's `fx_atlas_entry`), so the
-  eviction is safe. Eviction-on-overflow is a deliberate simple
-  bound: true LRU is a later optimization once there is a workload
-  that needs it.
+- **Overflow.** When the atlas cannot fit a new glyph, `flux_glyph_upload`
+  returns `FLUX_ERROR_OUT_OF_MEMORY`. The caller decides what to do next:
+  skip the glyph, re-rasterize at a smaller size, or clear and rebuild.
+  flux does not perform automatic eviction; keeping the atlas stateless
+  and predictable is a deliberate simplicity bound. A true LRU eviction
+  policy is a later optimization once there is a workload that needs it.
 
 ## Descriptor Management
 
@@ -135,22 +154,22 @@ flux uses a **per-frame descriptor pool** strategy:
   eliminates CPU/GPU synchronization stalls.
 
 Per-draw descriptor allocation is mitigated by a **per-frame descriptor
-cache**: each `fx_frame` keeps a small array of `(image_view, sampler) →
+cache**: each `flux_frame` keeps a small array of `(image_view, sampler) →
 VkDescriptorSet` entries. Reusing the same image in a frame hits the
 cache instead of allocating a new set. The cache is cleared at the
 start of each frame when the descriptor pool is reset.
 
 ## Readback
 
-`fx_surface_read_pixels` (offscreen surfaces only) uses a persistent
+`flux_surface_read_pixels` (offscreen surfaces only) uses a persistent
 per-surface staging buffer — host-visible, host-coherent,
 persistently mapped — that grows to fit the largest requested
 `stride × height`. It is created on first call and freed with the
 surface.
 
-Synchronization: `fx_surface_read_pixels` calls
-`fx_surface_wait_idle` before submitting its copy, which waits on
-every in-flight frame fence. `fx_surface_present` itself no longer
+Synchronization: `flux_surface_read_pixels` calls
+`flux_surface_wait_idle` before submitting its copy, which waits on
+every in-flight frame fence. `flux_surface_present` itself no longer
 blocks the caller on the offscreen path — ownership of "wait before
 touching the image" belongs to the consumers (read_pixels,
 subsequent acquire, surface destroy).
@@ -162,21 +181,21 @@ flux runs a two-frame in-flight pipeline:
 - **Frame fences (`in_flight`).** Ensure the CPU does not start
   recording frame N until the GPU has finished executing the previous
   iteration of frame N. On swapchain surfaces these are waited in
-  `fx_surface_acquire`.
+  `flux_surface_acquire`.
 - **Swapchain semaphores.** `image_available` and `render_finished`
   coordinate the swapchain acquire → graphics submit → present
   handoff on windowed surfaces.
-- **Upload fence.** A single `VkFence` on `fx_context` waited
+- **Upload fence.** A single `VkFence` on `flux_context` waited
   synchronously by every GPU upload. See "Upload Subsystem" above.
 - **Offscreen path.** No presentation engine, no swapchain
-  semaphores. `fx_surface_present` submits with the frame fence and
-  returns. Callers synchronize via `fx_surface_read_pixels`,
-  `fx_surface_wait_idle`, or `fx_surface_destroy` before touching
+  semaphores. `flux_surface_present` submits with the frame fence and
+  returns. Callers synchronize via `flux_surface_read_pixels`,
+  `flux_surface_wait_idle`, or `flux_surface_destroy` before touching
   the rendered image.
 
 ## Physical Device Selection
 
-`fx_device_init` scores devices: Discrete > Integrated > Virtual. It
+`flux_device_init` scores devices: Discrete > Integrated > Virtual. It
 requires:
 
 1. `VK_KHR_swapchain` support.
@@ -185,21 +204,21 @@ requires:
 3. `A8_UNORM` and `RGBA8_UNORM` with `SAMPLED_IMAGE` feature support.
 
 The context keeps the selected device's `VkPhysicalDeviceProperties`
-and `VkPhysicalDeviceMemoryProperties` cached on `fx_context` so that
+and `VkPhysicalDeviceMemoryProperties` cached on `flux_context` so that
 later allocators and pipeline builders do not re-query the driver.
 
 ## Destroy Order
 
-When `fx_surface_destroy` runs:
+When `flux_surface_destroy` runs:
 
-1. `fx_surface_wait_idle` waits on every frame fence.
+1. `flux_surface_wait_idle` waits on every frame fence.
 2. `vkDeviceWaitIdle` ensures no queue work remains.
 3. Swapchain-scoped resources tear down
-   (`fx_swapchain_destroy` for swapchain surfaces; an inline block
+   (`flux_swapchain_destroy` for swapchain surfaces; an inline block
    for offscreen surfaces: framebuffer, readback buffer,
    offscreen image, stencil attachment, per-frame sync).
 4. Surface-scoped resources tear down
-   (`fx_surface_destroy_pipelines`: sampler, render pass).
+   (`flux_surface_destroy_pipelines`: sampler, render pass).
 5. `VkSurfaceKHR` (swapchain surfaces only) is destroyed.
 6. The canvas display list is disposed and the surface is freed.
 

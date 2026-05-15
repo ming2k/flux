@@ -64,7 +64,7 @@ All tests run offscreen and do not require a display server.
 ## Validation layers
 
 ```sh
-FX_ENABLE_VALIDATION=1 meson test -C build
+meson test -C build
 ```
 
 This enables `VK_LAYER_KHRONOS_validation` and a debug messenger that
@@ -90,14 +90,14 @@ without it.
 
 ### Verbose logging
 
-`FX_LOGD` and `FX_LOGT` are elided in `NDEBUG` builds. To see debug or
+`FLUX_LOGD` and `FLUX_LOGT` are elided in `NDEBUG` builds. To see debug or
 trace output, build with `--buildtype=debug` (which disables `NDEBUG`)
-and set `min_log_level` to `FX_LOG_DEBUG` or `FX_LOG_TRACE` in
-`fx_context_desc`:
+and set `min_log_level` to `FLUX_LOG_DEBUG` or `FLUX_LOG_TRACE` in
+`flux_context_desc`:
 
 ```c
-fx_context_desc desc = {
-    .min_log_level = FX_LOG_DEBUG,
+flux_context_desc desc = {
+    .min_log_level = FLUX_LOG_DEBUG,
 };
 ```
 
@@ -112,7 +112,7 @@ Both work normally — flux is a standard shared library. Build with
 ```sh
 meson setup build-debug --buildtype=debug
 ninja -C build-debug
-gdb --args build-debug/tests/test_foundation
+gdb --args build-debug/tests/test_version
 ```
 
 ### RenderDoc

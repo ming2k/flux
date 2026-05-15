@@ -35,7 +35,7 @@ int main(void)
     CHECK(flux_canvas_scale(c, 2.0f, 2.0f) == FLUX_OK);
 
     /* present (op count > 0 from clear/etc; just verify no crash) */
-    flux_canvas_clear(c, 0u);
+    (void)flux_canvas_clear(c, 0u);
     CHECK(flux_surface_present(s) == FLUX_OK);
 
     flux_surface_release(s);

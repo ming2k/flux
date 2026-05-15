@@ -29,6 +29,7 @@ typedef struct flux_r_texture  flux_r_texture;
  * transfers them to the backend and issues draw calls. */
 typedef struct { float pos[2];           } flux_solid_vertex;
 typedef struct { float pos[2]; float uv[2]; } flux_image_vertex;
+typedef struct { float pos[2]; float coverage; float _pad; } flux_fringe_vertex;
 
 typedef struct flux_rhi_device flux_rhi_device;
 typedef struct flux_rhi_vtbl flux_rhi_vtbl;
@@ -65,6 +66,8 @@ struct flux_rhi_vtbl {
                                        flux_r_buffer **buf, uint32_t *first);
     flux_image_vertex * (*alloc_image)(flux_rhi_device *r, size_t count,
                                        flux_r_buffer **buf, uint32_t *first);
+    flux_fringe_vertex * (*alloc_fringe)(flux_rhi_device *r, size_t count,
+                                         flux_r_buffer **buf, uint32_t *first);
 
     /* ---- draw commands ---- */
 
@@ -77,7 +80,7 @@ struct flux_rhi_vtbl {
 
     void  (*draw_image)(flux_rhi_device *r, flux_r_buffer *buf,
                         uint32_t first, uint32_t count,
-                        flux_r_texture *tex);
+                        flux_r_texture *tex, flux_color tint);
 
     void  (*draw_text)(flux_rhi_device *r, flux_r_buffer *buf,
                        uint32_t first, uint32_t count, flux_color color);
@@ -110,6 +113,11 @@ struct flux_rhi_vtbl {
     void  (*cover_gradient)(flux_rhi_device *r, flux_r_buffer *buf,
                             uint32_t first, uint32_t count,
                             const flux_gradient *grad);
+
+    /* Fringe draws: per-vertex coverage anti-aliasing for path edges.
+     * Coverage is interpolated across triangles and multiplied with color. */
+    void  (*draw_fringe)(flux_rhi_device *r, flux_r_buffer *buf,
+                         uint32_t first, uint32_t count, flux_color color);
 
     /* ---- blur ---- */
 

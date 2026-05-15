@@ -75,6 +75,50 @@ static bool emit_stencil_tris(flux_rhi_device *r, const flux_point *src, size_t 
     return true;
 }
 
+static bool emit_fringe_tris(flux_rhi_device *r, const flux_point *src, size_t n, flux_color c)
+{
+    if (n < 3) return true;
+
+    /* Compute signed area to determine outward normal direction. */
+    float area = 0.0f;
+    for (size_t i = 0; i < n; i++) {
+        size_t j = (i + 1) % n;
+        area += src[i].x * src[j].y - src[j].x * src[i].y;
+    }
+    float sign = (area > 0.0f) ? 1.0f : -1.0f;
+    float width = 0.5f;
+
+    size_t max_verts = n * 6;
+    flux_r_buffer *buf = NULL;
+    uint32_t first = 0;
+    flux_fringe_vertex *vx = vt(r)->alloc_fringe(r, max_verts, &buf, &first);
+    if (!vx) return false;
+
+    size_t vi = 0;
+    for (size_t i = 0; i < n; i++) {
+        size_t j = (i + 1) % n;
+        float dx = src[j].x - src[i].x;
+        float dy = src[j].y - src[i].y;
+        float len = sqrtf(dx * dx + dy * dy);
+        if (len < 1e-3f) continue;
+
+        float nx = (-dy / len) * sign * width;
+        float ny = ( dx / len) * sign * width;
+
+        flux_fringe_vertex v0 = { { src[i].x,           src[i].y           }, 1.0f };
+        flux_fringe_vertex v1 = { { src[j].x,           src[j].y           }, 1.0f };
+        flux_fringe_vertex v2 = { { src[i].x + nx,      src[i].y + ny      }, 0.0f };
+        flux_fringe_vertex v3 = { { src[j].x + nx,      src[j].y + ny      }, 0.0f };
+
+        vx[vi++] = v0; vx[vi++] = v1; vx[vi++] = v2;
+        vx[vi++] = v1; vx[vi++] = v3; vx[vi++] = v2;
+    }
+
+    if (vi > 0)
+        vt(r)->draw_fringe(r, buf, first, (uint32_t)vi, c);
+    return true;
+}
+
 static bool draw_solid_rect(flux_rhi_device *r, const flux_rect *rc, flux_color c)
 {
     flux_r_buffer *buf = NULL;
@@ -241,6 +285,12 @@ static bool fill_stencil_path(flux_rhi_device *r, flux_arena *arena,
     }
     uint32_t subn = (uint32_t)flux_path_subpath_count(path);
 
+    /* Temporary array to hold flattened subpaths for fringe AA. */
+    typedef struct { flux_point *flat; size_t pc; } flat_entry;
+    flat_entry *flats = (flat_entry *)flux_arena_alloc(arena, subn * sizeof(flat_entry));
+    if (!flats) return false;
+    uint32_t flat_count = 0;
+
     scissor_rect(r, &b, sw, sh);
     stencil_clr(r, &b, sw, sh);
 
@@ -257,6 +307,12 @@ static bool fill_stencil_path(flux_rhi_device *r, flux_arena *arena,
         if (flux_tessellate_simple_polygon(flat, pc, arena, &tris, &tc) != FLUX_OK)
             continue;
         emit_stencil_tris(r, tris, tc, fill_rule);
+
+        if (closed) {
+            flats[flat_count].flat = flat;
+            flats[flat_count].pc = pc;
+            flat_count++;
+        }
     }
 
     /* Cover quad. */
@@ -274,6 +330,14 @@ static bool fill_stencil_path(flux_rhi_device *r, flux_arena *arena,
     vt(r)->stencil_ref(r, 1);
     if (grad) vt(r)->cover_gradient(r, cb, cf, 6, grad);
     else      vt(r)->cover_solid(r, cb, cf, 6, color);
+
+    /* Fringe AA pass (solid color only for now). */
+    if (!grad) {
+        for (uint32_t i = 0; i < flat_count; i++) {
+            emit_fringe_tris(r, flats[i].flat, flats[i].pc, color);
+        }
+    }
+
     return true;
 }
 
@@ -431,7 +495,7 @@ flux_result flux_engine_execute(flux_canvas *canvas, flux_rhi_device *r)
             iv[5] = (flux_image_vertex){ { dst.x,         dst.y + dst.h }, { u0, v1 } };
 
             flux_r_texture *tex = io->image ? io->image->rtex : vt(r)->surface_texture(r);
-            vt(r)->draw_image(r, ib, ifirst, 6, tex);
+            vt(r)->draw_image(r, ib, ifirst, 6, tex, 0xFFFFFFFFu);
             continue;
         }
 
@@ -440,10 +504,64 @@ flux_result flux_engine_execute(flux_canvas *canvas, flux_rhi_device *r)
             vt(r)->blur(r, op->u.apply_blur.sigma);
             continue;
 
-        case FLUX_OP_DRAW_GLYPHS:
-            vt(r)->set_blend_mode(r, op->u.draw_glyphs.paint.blend_mode);
+        case FLUX_OP_DRAW_GLYPHS: {
+            const flux_draw_glyphs_op *go = &op->u.draw_glyphs;
+            const flux_glyph_run *gr = go->run;
+            const flux_paint_state *gp = &go->paint;
+            flux_context *ctx = canvas->owner ? canvas->owner->ctx : NULL;
+            flux_glyph_atlas *a = ctx ? ctx->atlas : NULL;
+            if (!a || !gr || gr->count == 0) continue;
+
+            /* Ensure surface atlas texture is up to date */
+            flux_surface *s = canvas->owner;
+            if (!s->glyph_atlas_tex || s->glyph_atlas_revision != a->revision) {
+                if (s->glyph_atlas_tex)
+                    vt(r)->texture_free(r, s->glyph_atlas_tex);
+                s->glyph_atlas_tex = vt(r)->texture_alloc(r, a->width, a->height,
+                                                           FLUX_FMT_A8_UNORM,
+                                                           a->pixels, a->width);
+                s->glyph_atlas_revision = a->revision;
+            }
+            if (!s->glyph_atlas_tex) continue;
+
             vt(r)->flush_solid(r);
+            vt(r)->set_blend_mode(r, gp->blend_mode);
+
+            float base_x = go->x;
+            float base_y = go->y;
+            float atlas_w = (float)a->width;
+            float atlas_h = (float)a->height;
+
+            for (size_t gi = 0; gi < gr->count; gi++) {
+                const flux_glyph *g = &gr->glyphs[gi];
+                flux_glyph_slot *slot = flux_glyph_atlas_find(a, g->glyph_id);
+                if (!slot) continue;
+
+                float x = base_x + g->x + slot->bearing_x;
+                float y = base_y + g->y + slot->bearing_y;
+                float w = slot->w;
+                float h = slot->h;
+                float u0 = slot->atlas_x / atlas_w;
+                float v0 = slot->atlas_y / atlas_h;
+                float u1 = (slot->atlas_x + slot->w) / atlas_w;
+                float v1 = (slot->atlas_y + slot->h) / atlas_h;
+
+                flux_r_buffer *gb = NULL;
+                uint32_t gfirst = 0;
+                flux_image_vertex *gv = vt(r)->alloc_image(r, 6, &gb, &gfirst);
+                if (!gv) continue;
+
+                gv[0] = (flux_image_vertex){ { x,     y     }, { u0, v0 } };
+                gv[1] = (flux_image_vertex){ { x + w, y     }, { u1, v0 } };
+                gv[2] = (flux_image_vertex){ { x + w, y + h }, { u1, v1 } };
+                gv[3] = (flux_image_vertex){ { x,     y     }, { u0, v0 } };
+                gv[4] = (flux_image_vertex){ { x + w, y + h }, { u1, v1 } };
+                gv[5] = (flux_image_vertex){ { x,     y + h }, { u0, v1 } };
+
+                vt(r)->draw_image(r, gb, gfirst, 6, s->glyph_atlas_tex, gp->color);
+            }
             continue;
+        }
         }
     }
 

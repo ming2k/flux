@@ -74,9 +74,9 @@ Paths in flux are verb/point streams:
 | `CLOSE` | 0 | Close current subpath |
 
 ```c
-fx_path *path = fx_path_create();
-fx_path_move_to(path, 10.0f, 10.0f);
-fx_path_cubic_to(path, 20.0f, 50.0f,  // P1
+flux_path *path = flux_path_create();
+flux_path_move_to(path, 10.0f, 10.0f);
+flux_path_cubic_to(path, 20.0f, 50.0f,  // P1
                         80.0f, 50.0f,  // P2
                         90.0f, 10.0f); // P3
 ```
@@ -114,7 +114,7 @@ For a cubic curve, both inner control points must be within tolerance of the end
 
 ```c
 // In src/geometry/path.c
-if (depth >= FX_FLATTEN_MAX_DEPTH ||
+if (depth >= FLUX_FLATTEN_MAX_DEPTH ||
     (point_line_distance_sq(p1, p0, p3) <= tol_sq &&
      point_line_distance_sq(p2, p0, p3) <= tol_sq)) {
     return append_flat_point(points, count, cap, p3);
@@ -131,7 +131,7 @@ The tolerance is fixed at **0.25 pixels** in device space. This means:
 
 ### Performance
 
-- **CPU cost** — Flattening happens during `fx_surface_present`, not during recording. The canvas stores only the control points.
+- **CPU cost** — Flattening happens during `flux_surface_present`, not during recording. The canvas stores only the control points.
 - **Memory** — Flattened points are written into a per-frame arena allocator. They are discarded after the frame is rendered.
 - **Quality vs speed trade-off** — 0.25px is a conservative default. A smaller tolerance would produce more segments (slower, smoother); a larger tolerance would produce fewer (faster, blockier).
 

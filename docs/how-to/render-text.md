@@ -1,6 +1,6 @@
 # How to Render Text
 
-This guide assumes you already have an `fx_context`, an `fx_surface`, and an active frame. See [Getting Started](../tutorials/01-getting-started.md) and [How to record and present a frame](record-and-present-a-frame.md) if needed.
+This guide assumes you already have an `flux_context`, an `flux_surface`, and an active frame. See [Getting Started](../tutorials/01-getting-started.md) and [How to record and present a frame](record-and-present-a-frame.md) if needed.
 
 ## When to use this
 
@@ -43,7 +43,7 @@ FT_Load_Glyph(face, glyph_id, FT_LOAD_RENDER);
 FT_Bitmap *bm = &face->glyph->bitmap;
 
 /* Upload to flux atlas */
-bool ok = fx_glyph_upload(ctx, glyph_id,
+bool ok = flux_glyph_upload(ctx, glyph_id,
                           bm->buffer,
                           (int)bm->width,
                           (int)bm->rows,
@@ -60,25 +60,25 @@ bool ok = fx_glyph_upload(ctx, glyph_id,
 - `bearing_x, bearing_y` — offset from glyph origin to bitmap left/top edge, in pixels.
 - `advance` — horizontal advance in pixels.
 
-**Upload is idempotent.** Calling `fx_glyph_upload` with the same `glyph_id` twice returns true without duplicating the atlas entry.
+**Upload is idempotent.** Calling `flux_glyph_upload` with the same `glyph_id` twice returns true without duplicating the atlas entry.
 
 ## Draw a Glyph Run
 
 Once glyphs are uploaded, build a run and draw it:
 
 ```c
-fx_glyph_run *run = fx_glyph_run_create(8);
-fx_glyph_run_append(run, 43, 0.0f, 0.0f);   /* glyph id, x, y */
-fx_glyph_run_append(run, 72, 12.0f, 0.0f);
+flux_glyph_run *run = flux_glyph_run_create(8);
+flux_glyph_run_append(run, 43, 0.0f, 0.0f);   /* glyph id, x, y */
+flux_glyph_run_append(run, 72, 12.0f, 0.0f);
 
-fx_canvas *c = fx_surface_acquire(surface);
+flux_canvas *c = flux_surface_acquire(surface);
 
-fx_paint text_paint;
-fx_paint_init(&text_paint, fx_color_rgba(245, 245, 240, 255));
-fx_draw_glyph_run(c, run, 32.0f, 64.0f, &text_paint);
+flux_paint text_paint;
+flux_paint_init(&text_paint, flux_color_rgba(245, 245, 240, 255));
+flux_draw_glyph_run(c, run, 32.0f, 64.0f, &text_paint);
 
-fx_surface_present(surface);
-fx_glyph_run_destroy(run);
+flux_surface_present(surface);
+flux_glyph_run_destroy(run);
 ```
 
 **Important:** A glyph that has not been uploaded is silently skipped during rendering. Always upload before drawing.
@@ -91,7 +91,7 @@ This example uses HarfBuzz for shaping and FreeType for rasterization. Substitut
 #include <harfbuzz/hb.h>
 #include <freetype/freetype.h>
 
-fx_glyph_run *prepare_text(fx_context *ctx, FT_Face face,
+flux_glyph_run *prepare_text(flux_context *ctx, FT_Face face,
                            hb_font_t *hb_font, const char *utf8)
 {
     /* Shape text into glyph IDs and positions */
@@ -109,7 +109,7 @@ fx_glyph_run *prepare_text(fx_context *ctx, FT_Face face,
         uint32_t gid = infos[i].codepoint;
         FT_Load_Glyph(face, gid, FT_LOAD_RENDER);
         FT_Bitmap *bm = &face->glyph->bitmap;
-        fx_glyph_upload(ctx, gid,
+        flux_glyph_upload(ctx, gid,
                         bm->buffer,
                         (int)bm->width,
                         (int)bm->rows,
@@ -119,11 +119,11 @@ fx_glyph_run *prepare_text(fx_context *ctx, FT_Face face,
     }
 
     /* Build glyph run with shaped positions */
-    fx_glyph_run *run = fx_glyph_run_create(count);
+    flux_glyph_run *run = flux_glyph_run_create(count);
     float x = 0.0f;
     float y = 0.0f;
     for (unsigned int i = 0; i < count; ++i) {
-        fx_glyph_run_append(run, infos[i].codepoint,
+        flux_glyph_run_append(run, infos[i].codepoint,
                             x + pos[i].x_offset / 64.0f,
                             y - pos[i].y_offset / 64.0f);
         x += pos[i].x_advance / 64.0f;
@@ -138,26 +138,28 @@ fx_glyph_run *prepare_text(fx_context *ctx, FT_Face face,
 Render:
 
 ```c
-fx_glyph_run *run = prepare_text(ctx, face, hb_font, "Hello flux");
-fx_canvas *c = fx_surface_acquire(surface);
+flux_glyph_run *run = prepare_text(ctx, face, hb_font, "Hello flux");
+flux_canvas *c = flux_surface_acquire(surface);
 
-fx_paint paint;
-fx_paint_init(&paint, fx_color_rgba(255, 255, 255, 255));
-fx_draw_glyph_run(c, run, 40.0f, 80.0f, &paint);
+flux_paint paint;
+flux_paint_init(&paint, flux_color_rgba(255, 255, 255, 255));
+flux_draw_glyph_run(c, run, 40.0f, 80.0f, &paint);
 
-fx_surface_present(surface);
-fx_glyph_run_destroy(run);
+flux_surface_present(surface);
+flux_glyph_run_destroy(run);
 ```
 
-## Atlas Eviction
+## Atlas Overflow
 
-The glyph atlas is a fixed 2048×2048 texture. When it fills, flux evicts every cached glyph and starts fresh. After eviction:
+The glyph atlas is a fixed 2048×2048 texture. When it fills, `flux_glyph_upload` returns `FLUX_ERROR_OUT_OF_MEMORY`. flux does not automatically evict or clear the atlas; the caller must handle the error.
 
-1. flux logs a warning.
-2. Any glyph drawn in subsequent frames must be re-uploaded.
-3. The atlas waits for in-flight GPU frames to finish before clearing.
+Common strategies:
 
-**Best practice:** Upload all glyphs you need at the start of a frame, before recording draw commands. If you upload lazily (per glyph, per frame), eviction will cause frame drops.
+- **Skip the glyph.** Drop the new glyph and continue rendering.
+- **Reduce size.** Re-rasterize the glyph at a smaller pixel size and retry.
+- **Rebuild.** If your application manages its own glyph cache, clear the cache, reset the atlas by creating a new context, and re-upload only the glyphs currently needed.
+
+**Best practice:** Upload all glyphs you need at the start of a frame, before recording draw commands. Batch uploads minimize GPU texture reallocation and prevent unexpected overflow mid-frame.
 
 ## Production Text Layer
 
@@ -177,11 +179,11 @@ After those steps, upload bitmaps and submit final positioned glyph runs to flux
 
 Render a known string into an offscreen or Vulkan surface. If no glyphs appear:
 
-1. Confirm `fx_glyph_upload` returned true for each glyph.
+1. Confirm `flux_glyph_upload` returned true for each glyph.
 2. Confirm the glyph IDs in the run match the uploaded IDs exactly.
 3. Confirm the bitmap data is valid (non-zero alpha for visible pixels).
-4. Confirm the glyph run stays alive until `fx_surface_present`.
-5. Check the log for atlas eviction warnings (evicted glyphs must be re-uploaded).
+4. Confirm the glyph run stays alive until `flux_surface_present`.
+5. Confirm `flux_glyph_upload` did not return `FLUX_ERROR_OUT_OF_MEMORY` for any glyph.
 
 ## See also
 

@@ -27,7 +27,11 @@ void flux_surface_release(flux_surface *s)
 {
     if (!s) return;
     if (flux_ref_release(&s->ref_count) == 0) {
-        if (s->rhi) flux_rhi_vt(s->rhi)->destroy(s->rhi);
+        if (s->rhi) {
+            if (s->glyph_atlas_tex)
+                flux_rhi_vt(s->rhi)->texture_free(s->rhi, s->glyph_atlas_tex);
+            flux_rhi_vt(s->rhi)->destroy(s->rhi);
+        }
         flux_canvas_dispose(&s->canvas);
         flux_context *ctx = s->ctx;
         flux_free(ctx, s);
@@ -46,10 +50,12 @@ static flux_result init_surface(flux_surface *s, flux_context *ctx,
     flux_ref_init(&s->ref_count);
     s->ctx          = flux_context_retain(ctx);
     s->rhi          = rhi;
-    s->is_offscreen = offscreen;
-    s->width        = w;
-    s->height       = h;
-    s->format       = fmt;
+    s->is_offscreen         = offscreen;
+    s->width                = w;
+    s->height               = h;
+    s->format               = fmt;
+    s->glyph_atlas_tex      = NULL;
+    s->glyph_atlas_revision = 0;
 
     flux_canvas_init(&s->canvas, s);
     return FLUX_OK;

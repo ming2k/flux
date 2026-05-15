@@ -4,27 +4,27 @@ flux does not use internal locking. All objects are designed for single-threaded
 
 ## The Golden Rule
 
-**One context, one thread.** A single OS thread must own all API calls targeting a given `fx_context` and its derived surfaces, images, paths, and fonts.
+**One context, one thread.** A single OS thread must own all API calls targeting a given `flux_context` and its derived surfaces, images, paths, and fonts.
 
 ## Object-level guarantees
 
 | Object | Thread safe? | Rule |
 |---|---|---|
-| `fx_context` | **No** | Create, configure, and destroy from one thread only. |
-| `fx_surface` | **No** | Acquire, record, and present from the same thread that owns the context. |
-| `fx_canvas` | **No** | Valid only between `fx_surface_acquire` and `fx_surface_present` on the owning thread. |
-| `fx_image` | **No** | Create, update, and destroy from the context thread. Do not sample from one surface while updating from another. |
-| `fx_path` | **No** | Build and destroy from the context thread. |
-| `fx_glyph_run` | **No** | Append glyphs and draw from the context thread. |
-| `fx_gradient` | **No** | Create and destroy from the context thread. |
+| `flux_context` | **No** | Create, configure, and destroy from one thread only. |
+| `flux_surface` | **No** | Acquire, record, and present from the same thread that owns the context. |
+| `flux_canvas` | **No** | Valid only between `flux_surface_acquire` and `flux_surface_present` on the owning thread. |
+| `flux_image` | **No** | Create, update, and destroy from the context thread. Do not sample from one surface while updating from another. |
+| `flux_path` | **No** | Build and destroy from the context thread. |
+| `flux_glyph_run` | **No** | Append glyphs and draw from the context thread. |
+| `flux_gradient` | **No** | Create and destroy from the context thread. |
 
 ## What you CAN do across threads
 
-1. **Multiple independent contexts.** Each `fx_context` lives on its own thread with its own Vulkan instance and device. There is no shared global mutable state.
+1. **Multiple independent contexts.** Each `flux_context` lives on its own thread with its own Vulkan instance and device. There is no shared global mutable state.
 
 2. **CPU-side preparation.** You may construct pixel buffers, path data, or glyph runs on worker threads, but you must synchronize and hand them off to the context thread before calling any flux API that consumes them.
 
-3. **Read-only inspection.** Calling `fx_path_get_bounds` or `fx_canvas_op_count` from a different thread is safe only if no mutating API call is in flight on the owning thread.
+3. **Read-only inspection.** Calling `flux_path_get_bounds` or `flux_canvas_op_count` from a different thread is safe only if no mutating API call is in flight on the owning thread.
 
 ## Common pitfalls
 
@@ -32,10 +32,10 @@ flux does not use internal locking. All objects are designed for single-threaded
 
 ```c
 /* WRONG: two threads record into the same canvas */
-fx_canvas *c = fx_surface_acquire(s);
+flux_canvas *c = flux_surface_acquire(s);
 thread_A_draw(c);   /* thread A */
 thread_B_draw(c);   /* thread B -- race on op_count and op array */
-fx_surface_present(s);
+flux_surface_present(s);
 ```
 
 **Fix:** Record all ops from one thread, or partition the scene into per-thread command lists and merge on the context thread.
@@ -44,26 +44,26 @@ fx_surface_present(s);
 
 ```c
 /* WRONG: updating an image while a previous frame is still reading it */
-fx_draw_image(c, icon, &src, &dst);   /* frame N references icon */
-fx_surface_present(s);
-fx_image_update(icon, new_pixels, stride); /* may race with GPU sampling */
+flux_draw_image(c, icon, &src, &dst);   /* frame N references icon */
+flux_surface_present(s);
+flux_image_update(icon, new_pixels, stride); /* may race with GPU sampling */
 ```
 
-**Fix:** Wait for the frame to complete, or double-buffer the image resource. `fx_image_update` internally waits on the image's `last_use_fence`, but this only protects against the same context's in-flight frames. External synchronization is still required if you are calling `fx_image_update` from a thread that is not the context thread.
+**Fix:** Wait for the frame to complete, or double-buffer the image resource. `flux_image_update` internally waits on the image's `last_use_fence`, but this only protects against the same context's in-flight frames. External synchronization is still required if you are calling `flux_image_update` from a thread that is not the context thread.
 
 ### Resizing from an event thread
 
 ```c
 /* WRONG: compositor callback resizes surface while the render loop is acquiring */
 void on_configure(int w, int h) {
-    fx_surface_resize(s, w, h);  /* event thread */
+    flux_surface_resize(s, w, h);  /* event thread */
 }
 
 /* render thread */
-fx_canvas *c = fx_surface_acquire(s); /* may race with resize */
+flux_canvas *c = flux_surface_acquire(s); /* may race with resize */
 ```
 
-**Fix:** Queue resize events and process them on the render thread before `fx_surface_acquire`.
+**Fix:** Queue resize events and process them on the render thread before `flux_surface_acquire`.
 
 ## Suggested architecture
 

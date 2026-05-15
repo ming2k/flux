@@ -164,10 +164,10 @@ But for general paths, text, clipping, gradients, images, and batching, triangle
 As an application developer, it is reasonable to think in 2D terms:
 
 ```c
-fx_fill_rect(c, &rect, color);
-fx_fill_path(c, path, &paint);
-fx_draw_image(c, image, &src, &dst);
-fx_draw_glyph_run(c, run, x, y, &paint);
+flux_fill_rect(c, &rect, color);
+flux_fill_path(c, path, &paint);
+flux_draw_image(c, image, &src, &dst);
+flux_draw_glyph_run(c, run, x, y, &paint);
 ```
 
 Those are the right abstractions at the API level.

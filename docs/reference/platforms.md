@@ -13,20 +13,20 @@ flux is developed and tested on Linux. It requires a Vulkan loader and a compati
 Offscreen surfaces work on any system with a Vulkan loader and a compatible ICD, even without a display server.
 
 ```c
-fx_surface *s = fx_surface_create_offscreen(ctx, 800, 600,
-                                            FX_FMT_RGBA8_UNORM,
-                                            FX_CS_SRGB);
+flux_surface *s = flux_surface_create_offscreen(ctx, 800, 600,
+                                            FLUX_FMT_RGBA8_UNORM,
+                                            FLUX_CS_SRGB);
 ```
 
-All automated tests run headless using Mesa lavapipe (`VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json`).
+Automated tests can run headless on Mesa lavapipe (`VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json`) or on the software backend without any Vulkan driver.
 
 ## Windowed rendering
 
-flux does not create platform windows. The caller creates a window using their preferred toolkit (GLFW, SDL, raw platform APIs, etc.) and creates a `VkSurfaceKHR` from it. flux then manages the swapchain and presentation via `fx_surface_create_vulkan`.
+flux does not create platform windows. The caller creates a window using their preferred toolkit (GLFW, SDL, raw platform APIs, etc.) and creates a `VkSurfaceKHR` from it. flux then manages the swapchain and presentation via `flux_surface_create_vulkan`.
 
 ```c
 // Caller creates VkSurfaceKHR from their window
-fx_surface *s = fx_surface_create_vulkan(ctx, vk_surface, width, height, FX_CS_SRGB);
+flux_surface *s = flux_surface_create_vulkan(ctx, vk_surface, width, height, FLUX_CS_SRGB);
 ```
 
 ## GPU vendors
@@ -36,7 +36,7 @@ fx_surface *s = fx_surface_create_vulkan(ctx, vk_surface, width, height, FX_CS_S
 | Intel               | Primary development target. Tested.  |
 | AMD                 | Should work (RADV).                  |
 | NVIDIA              | Should work (proprietary driver).    |
-| Software (lavapipe) | CI target. Slower but complete.      |
+| Software (lavapipe) | Slower but complete.                 |
 
 ## Vulkan version
 

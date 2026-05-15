@@ -11,7 +11,7 @@ Application
     |
     v
 [Record]    <-- CPU, immediate
-    fx_surface_acquire → fx_fill_path/fx_draw_image/etc. → fx_surface_present
+    flux_surface_acquire → flux_fill_path/flux_draw_image/etc. → flux_surface_present
     |
     v
 [Execute]   <-- GPU, deferred
@@ -26,19 +26,19 @@ Pixels
 Recording happens on the calling thread, synchronously, with no GPU work:
 
 ```c
-fx_canvas *c = fx_surface_acquire(surface);
-fx_fill_rect(c, &rect, color);        /* appends one fx_op */
-fx_fill_path(c, path, &paint);        /* appends one fx_op */
-fx_draw_image(c, img, &src, &dst);   /* appends one fx_op */
-fx_draw_glyph_run(c, run, x, y, &paint); /* appends one fx_op */
+flux_canvas *c = flux_surface_acquire(surface);
+flux_fill_rect(c, &rect, color);        /* appends one flux_op */
+flux_fill_path(c, path, &paint);        /* appends one flux_op */
+flux_draw_image(c, img, &src, &dst);   /* appends one flux_op */
+flux_draw_glyph_run(c, run, x, y, &paint); /* appends one flux_op */
 ```
 
 ### What happens during recording
 
 1. **Transform application** — The current matrix is applied to paths and glyph positions on the CPU. Transformed paths may be copied into internal canvas-owned paths.
-2. **Op append** — Each call appends one `fx_op` to the canvas display list. This is an O(1) array append.
+2. **Op append** — Each call appends one `flux_op` to the canvas display list. This is an O(1) array append.
 3. **No validation** — Recording does not check if images are uploaded, glyphs are in the atlas, or paths are valid. Validation happens at present time.
-4. **Resource borrowing** — The canvas stores pointers to `fx_path`, `fx_image`, `fx_glyph_run`. The caller must keep these alive until `fx_surface_present`.
+4. **Resource borrowing** — The canvas stores pointers to `flux_path`, `flux_image`, `flux_glyph_run`. The caller must keep these alive until `flux_surface_present`.
 
 ### Recording performance
 
@@ -48,10 +48,10 @@ fx_draw_glyph_run(c, run, x, y, &paint); /* appends one fx_op */
 
 ## Phase 2: Execution (GPU)
 
-When `fx_surface_present` is called, the recorded ops are converted into GPU commands:
+When `flux_surface_present` is called, the recorded ops are converted into GPU commands:
 
 ```text
-fx_surface_present
+flux_surface_present
     |
     +-- Acquire next frame slot (semaphore + fence)
     |
@@ -120,13 +120,13 @@ Ops: [fill_rect red] [fill_rect red] [fill_path red] [draw_image] [fill_rect blu
 
 ### Vertex layout
 
-All geometry is expressed as `fx_image_vertex` (pos + UV):
+All geometry is expressed as `flux_image_vertex` (pos + UV):
 
 ```c
 typedef struct {
     float pos[2];   /* screen-space position in pixels */
     float uv[2];    /* texture coordinates, or (0,0) for solid */
-} fx_image_vertex;
+} flux_image_vertex;
 ```
 
 - **Solid fills:** UV = (0,0), color from push constants.
@@ -142,8 +142,8 @@ All shaders are compiled from GLSL to SPIR-V at build time and embedded into the
 
 | Pipeline | Vertex Shader | Fragment Shader | Input |
 |---|---|---|---|
-| **Solid** | Passthrough + transform | Solid color | `fx_color` via push constants |
-| **Image** | Passthrough + transform | Texture sample | `fx_image` via descriptor set |
+| **Solid** | Passthrough + transform | Solid color | `flux_color` via push constants |
+| **Image** | Passthrough + transform | Texture sample | `flux_image` via descriptor set |
 | **Text** | Passthrough + transform | Atlas alpha × color | Atlas texture via descriptor set |
 | **Gradient** | Passthrough + transform | Gradient interpolation | Stops + geometry via push constants |
 | **Stencil** | Passthrough | Write stencil ref | (mask only, no color output) |
@@ -158,7 +158,7 @@ typedef struct {
     float surface_size[2];   /* viewport dimensions for pixel-snapping */
     uint32_t mode;           /* 0 = solid, 1 = gradient, etc. */
     float color[4];          /* RGBA premultiplied */
-} fx_solid_color_pc;
+} flux_solid_color_pc;
 ```
 
 Push constants are updated between batches using `vkCmdPushConstants`, which has negligible overhead.
@@ -173,7 +173,7 @@ Frame N-1          Frame N              Frame N+1
    |                  |                     |
    |                  +-- Acquire canvas    +-- Acquire canvas (blocked if N not done)
    |                  |   Record ops         |
-   |                  |   fx_surface_present |
+   |                  |   flux_surface_present |
    |                  |                     |
    +-- Present        +-- Submit cmd buf    +-- Submit cmd buf
    |                  |   Signal fence      |   Signal fence
@@ -184,7 +184,7 @@ Frame N-1          Frame N              Frame N+1
 ```
 
 - **Double buffering:** Two frame slots rotate. While GPU renders frame N, CPU records frame N+1.
-- **Automatic throttling:** `fx_surface_acquire` waits if both frames are in flight (backpressure from GPU).
+- **Automatic throttling:** `flux_surface_acquire` waits if both frames are in flight (backpressure from GPU).
 - **No CPU stall:** Recording never blocks unless the GPU is more than one frame behind.
 
 ## Per-frame memory
@@ -204,9 +204,9 @@ All per-frame memory is reset (not freed) at the start of each frame. No allocat
 
 | Operation | Typical cost | Notes |
 |---|---|---|
-| `fx_fill_rect` | 50 ns | Just struct init + array append |
-| `fx_fill_path` (simple) | 200 ns | Bounds check + struct init |
-| `fx_fill_path` (complex) | 1–5 µs | Matrix transform + path copy |
+| `flux_fill_rect` | 50 ns | Just struct init + array append |
+| `flux_fill_path` (simple) | 200 ns | Bounds check + struct init |
+| `flux_fill_path` (complex) | 1–5 µs | Matrix transform + path copy |
 | Tessellation (simple rect) | 100 ns | 2 triangles |
 | Tessellation (bezier) | 1–5 µs | Flattening + ear-clipping |
 | Stroke expansion | 2–10 µs | Per-vertex geometry generation |

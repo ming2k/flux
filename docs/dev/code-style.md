@@ -19,18 +19,18 @@ every file in the codebase.
 
 | Entity | Convention | Example |
 |---|---|---|
-| Public types | `fx_snake_case` | `fx_canvas`, `fx_color_space` |
-| Public functions | `fx_verb_noun` | `fx_surface_acquire`, `fx_path_line_to` |
-| Public enumerators | `FX_SCREAMING_SNAKE` | `FX_BLEND_SRC_OVER`, `FX_CAP_ROUND` |
-| Public macros | `FX_SCREAMING_SNAKE` | `FX_API`, `FX_MAX_FRAMES_IN_FLIGHT` |
-| Internal functions | `fx_verb_noun` (no `FX_API`) | `fx_swapchain_build` |
-| Internal types | `fx_snake_case` | `fx_sc_image`, `fx_draw_op` |
+| Public types | `flux_snake_case` | `flux_canvas`, `flux_color_space` |
+| Public functions | `flux_verb_noun` | `flux_surface_acquire`, `flux_path_line_to` |
+| Public enumerators | `FLUX_SCREAMING_SNAKE` | `FLUX_BLEND_SRC_OVER`, `FLUX_CAP_ROUND` |
+| Public macros | `FLUX_SCREAMING_SNAKE` | `FLUX_API`, `FLUX_MAX_FRAMES_IN_FLIGHT` |
+| Internal functions | `flux_verb_noun` (no `FLUX_API`) | `flux_swapchain_build` |
+| Internal types | `flux_snake_case` | `flux_sc_image`, `flux_draw_op` |
 | Local variables | `snake_case` | `image_count`, `fr` |
 | Struct members | `snake_case` | `surface_format`, `needs_recreate` |
 
 Abbreviations are acceptable where they are unambiguous in context:
-`fr` for `fx_frame`, `s` for `fx_surface`, `ctx` for `fx_context`,
-`c` for `fx_canvas`, `p` for `fx_paint` or `fx_path` (distinguish by
+`fr` for `flux_frame`, `s` for `flux_surface`, `ctx` for `flux_context`,
+`c` for `flux_canvas`, `p` for `flux_paint` or `flux_path` (distinguish by
 argument position or local alias). Avoid abbreviating names that would
 require a reader to look up the meaning.
 
@@ -44,7 +44,7 @@ require a reader to look up the meaning.
    function takes ownership, it says so. If a pointer is borrowed, the
    caller's docs say "borrowed: must remain alive until X."
 
-3. **Null-safe draw calls.** All `fx_draw_*` and `fx_canvas` state
+3. **Null-safe draw calls.** All `flux_draw_*` and `flux_canvas` state
    setters silently no-op when passed `NULL`. This lets a frame loop
    degrade gracefully when a resource fails to load.
 
@@ -80,10 +80,10 @@ require a reader to look up the meaning.
 
 ```c
 // Creating something: return nullptr, log before returning
-fx_surface *fx_surface_create_offscreen(...) {
+flux_surface *flux_surface_create_offscreen(...) {
     ...
     if (something_failed) {
-        FX_LOGE(ctx, "meaningful message: %d", code);
+        FLUX_LOGE(ctx, "meaningful message: %d", code);
         free(s);
         return nullptr;
     }
@@ -91,7 +91,7 @@ fx_surface *fx_surface_create_offscreen(...) {
 ```
 
 Never use `assert` for input validation on paths reachable from
-user code. Use `if (!x) { FX_LOGE...; return; }`. Reserve `assert`
+user code. Use `if (!x) { FLUX_LOGE...; return; }`. Reserve `assert`
 for internal invariants that should be impossible to violate at
 runtime (loop postconditions, etc.).
 
@@ -100,29 +100,29 @@ runtime (loop postconditions, etc.).
 Five compile-time macros emit log messages, ordered by severity:
 
 ```c
-FX_LOGT(ctx, "format %s", arg);   // trace — very verbose internals
-FX_LOGD(ctx, "format %s", arg);   // debug — per-frame events
-FX_LOGI(ctx, "format %s", arg);   // info — startup events, sizes
-FX_LOGW(ctx, "format %s", arg);   // warning
-FX_LOGE(ctx, "format %s", arg);   // error — always printed
+FLUX_LOGT(ctx, "format %s", arg);   // trace — very verbose internals
+FLUX_LOGD(ctx, "format %s", arg);   // debug — per-frame events
+FLUX_LOGI(ctx, "format %s", arg);   // info — startup events, sizes
+FLUX_LOGW(ctx, "format %s", arg);   // warning
+FLUX_LOGE(ctx, "format %s", arg);   // error — always printed
 ```
 
 ### Compile-time elision
 
-`FX_LOGD` and `FX_LOGT` expand to nothing in `NDEBUG` builds (the default
+`FLUX_LOGD` and `FLUX_LOGT` expand to nothing in `NDEBUG` builds (the default
 for release builds via meson `b_ndebug=if-release`). They incur **zero**
-overhead in shipped binaries. `FX_LOGI/W/E` are never elided.
+overhead in shipped binaries. `FLUX_LOGI/W/E` are never elided.
 
 ### Runtime filtering
 
-`fx_context_desc.min_log_level` controls the lowest severity that is
-actually formatted and emitted. The default is `FX_LOG_INFO`. Setting it
-to `FX_LOG_DEBUG` or `FX_LOG_TRACE` requires a non-`NDEBUG` build.
+`flux_context_desc.min_log_level` controls the lowest severity that is
+actually formatted and emitted. The default is `FLUX_LOG_INFO`. Setting it
+to `FLUX_LOG_DEBUG` or `FLUX_LOG_TRACE` requires a non-`NDEBUG` build.
 
 ### Custom log sink
 
 ```c
-void my_log(fx_log_level level,
+void my_log(flux_log_level level,
             const char *file, int line,
             const char *fmt, const char *msg,
             void *user);
@@ -187,5 +187,5 @@ threading model is extended.
 
 flux follows **semantic versioning**. The `meson.build` version is the
 source of truth. ABI compatibility is maintained within a major version.
-Adding a new `fx_*` symbol is a minor bump; breaking an existing symbol
+Adding a new `flux_*` symbol is a minor bump; breaking an existing symbol
 is a major bump.

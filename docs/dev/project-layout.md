@@ -19,7 +19,7 @@ This document is for contributors who need a quick map of the source tree.
 | `src/shaders/` | GLSL shaders compiled to SPIR-V at build time. |
 | `examples/` | Offscreen example programs (`minimal.c`, `hello_rect.c`). |
 | `tests/` | Unit and integration tests. |
-| `scripts/` | Build and release helper scripts. |
+| `build/` | Meson build output (git-ignored). |
 | `docs/` | User, reference, design, ADR, and contributor documentation. |
 
 ## See also

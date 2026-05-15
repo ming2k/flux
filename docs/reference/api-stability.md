@@ -5,11 +5,11 @@ contract today and the process by which it tightens toward 1.0.
 
 ## Current status
 
-**Library version:** 0.2.0
-**Stability level:** Pre-1.0 development. The 0.2 series is the first
-public surface intended to remain shape-stable. Field additions and
-new functions are non-breaking; signature changes will only happen on
-a minor bump and only with prior `[Unreleased]` notice.
+**Library version:** 0.2.2
+**Stability level:** Pre-1.0 development. The 0.2.x series is
+shape-stable. Field additions and new functions are non-breaking;
+signature changes will only happen with prior `[Unreleased]` notice
+in CHANGELOG.
 
 ## What "breaking change" means
 
@@ -91,15 +91,13 @@ No header file will ever be silently merged or split.
 
 Blockers for a 1.0 freeze:
 
-- [ ] Golden-image regression suite on reference hardware.
-- [ ] Performance baselines recorded and automated.
-- [ ] SDF text path for large glyphs.
-- [ ] Multi-driver CI (Intel, AMD, NVIDIA, lavapipe).
-- [ ] Multi-distro CI (at least two distributions).
-- [ ] Public deprecation cycle exercised at least once successfully.
+- [x] Golden-image regression suite.
+- [x] Performance baselines recorded.
+- [ ] 7-day API freeze without public API changes.
+- [ ] Soak testing on at least two distinct GPU drivers.
 
-Until these land, flux remains pre-1.0 and shape changes may continue
-to occur on minor bumps — though we will work hard to make them rare.
+Until the freeze completes, flux remains pre-1.0 and shape changes may
+continue to occur on minor bumps — though they are now rare.
 
 ## Versioning
 
@@ -109,7 +107,7 @@ changes.
 
 | Version pattern | Meaning |
 |---|---|
-| `0.x.y` | Pre-1.0 development. Breaking changes possible on `x` bumps until 0.2. |
+| `0.x.y` | Pre-1.0 development. Breaking changes possible on minor bumps. |
 | `1.x.y` | Post-1.0 stable. Breaking changes only on major bumps. |
 
 ## Reporting breakage

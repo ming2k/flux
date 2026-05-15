@@ -4,6 +4,127 @@
 #include "vk_internal.h"
 #include <string.h>
 
+static void apply_blend_mode(vk_renderer *vk, VkCommandBuffer cmd)
+{
+    if (!vk->has_dynamic_blend || !vk->pfnCmdSetColorBlendEquationEXT)
+        return;
+
+    VkBlendFactor src_color = VK_BLEND_FACTOR_ONE;
+    VkBlendFactor dst_color = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    VkBlendFactor src_alpha = VK_BLEND_FACTOR_ONE;
+    VkBlendFactor dst_alpha = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    VkBlendOp color_op = VK_BLEND_OP_ADD;
+    VkBlendOp alpha_op = VK_BLEND_OP_ADD;
+
+    switch (vk->current_blend_mode) {
+    case FLUX_BLEND_SRC_OVER:
+        src_color = VK_BLEND_FACTOR_ONE;
+        dst_color = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        src_alpha = VK_BLEND_FACTOR_ONE;
+        dst_alpha = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        break;
+    case FLUX_BLEND_DST_OVER:
+        src_color = VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+        dst_color = VK_BLEND_FACTOR_ONE;
+        src_alpha = VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+        dst_alpha = VK_BLEND_FACTOR_ONE;
+        break;
+    case FLUX_BLEND_SRC_IN:
+        src_color = VK_BLEND_FACTOR_DST_ALPHA;
+        dst_color = VK_BLEND_FACTOR_ZERO;
+        src_alpha = VK_BLEND_FACTOR_DST_ALPHA;
+        dst_alpha = VK_BLEND_FACTOR_ZERO;
+        break;
+    case FLUX_BLEND_DST_IN:
+        src_color = VK_BLEND_FACTOR_ZERO;
+        dst_color = VK_BLEND_FACTOR_SRC_ALPHA;
+        src_alpha = VK_BLEND_FACTOR_ZERO;
+        dst_alpha = VK_BLEND_FACTOR_SRC_ALPHA;
+        break;
+    case FLUX_BLEND_SRC_OUT:
+        src_color = VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+        dst_color = VK_BLEND_FACTOR_ZERO;
+        src_alpha = VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+        dst_alpha = VK_BLEND_FACTOR_ZERO;
+        break;
+    case FLUX_BLEND_DST_OUT:
+        src_color = VK_BLEND_FACTOR_ZERO;
+        dst_color = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        src_alpha = VK_BLEND_FACTOR_ZERO;
+        dst_alpha = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        break;
+    case FLUX_BLEND_SRC_ATOP:
+        src_color = VK_BLEND_FACTOR_DST_ALPHA;
+        dst_color = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        src_alpha = VK_BLEND_FACTOR_DST_ALPHA;
+        dst_alpha = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        break;
+    case FLUX_BLEND_DST_ATOP:
+        src_color = VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+        dst_color = VK_BLEND_FACTOR_SRC_ALPHA;
+        src_alpha = VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+        dst_alpha = VK_BLEND_FACTOR_SRC_ALPHA;
+        break;
+    case FLUX_BLEND_XOR:
+        src_color = VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+        dst_color = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        src_alpha = VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+        dst_alpha = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        break;
+    case FLUX_BLEND_PLUS:
+        src_color = VK_BLEND_FACTOR_ONE;
+        dst_color = VK_BLEND_FACTOR_ONE;
+        src_alpha = VK_BLEND_FACTOR_ONE;
+        dst_alpha = VK_BLEND_FACTOR_ONE;
+        break;
+    case FLUX_BLEND_MULTIPLY:
+        if (vk->has_blend_op_advanced) {
+            color_op = VK_BLEND_OP_MULTIPLY_EXT;
+            alpha_op = VK_BLEND_OP_MULTIPLY_EXT;
+            src_color = VK_BLEND_FACTOR_ONE;
+            dst_color = VK_BLEND_FACTOR_ONE;
+            src_alpha = VK_BLEND_FACTOR_ONE;
+            dst_alpha = VK_BLEND_FACTOR_ONE;
+        }
+        /* else falls back to SRC_OVER */
+        break;
+    case FLUX_BLEND_SCREEN:
+        if (vk->has_blend_op_advanced) {
+            color_op = VK_BLEND_OP_SCREEN_EXT;
+            alpha_op = VK_BLEND_OP_SCREEN_EXT;
+            src_color = VK_BLEND_FACTOR_ONE;
+            dst_color = VK_BLEND_FACTOR_ONE;
+            src_alpha = VK_BLEND_FACTOR_ONE;
+            dst_alpha = VK_BLEND_FACTOR_ONE;
+        }
+        /* else falls back to SRC_OVER */
+        break;
+    case FLUX_BLEND_OVERLAY:
+        if (vk->has_blend_op_advanced) {
+            color_op = VK_BLEND_OP_OVERLAY_EXT;
+            alpha_op = VK_BLEND_OP_OVERLAY_EXT;
+            src_color = VK_BLEND_FACTOR_ONE;
+            dst_color = VK_BLEND_FACTOR_ONE;
+            src_alpha = VK_BLEND_FACTOR_ONE;
+            dst_alpha = VK_BLEND_FACTOR_ONE;
+        }
+        /* else falls back to SRC_OVER */
+        break;
+    default:
+        break;
+    }
+
+    VkColorBlendEquationEXT eq = {
+        .srcColorBlendFactor = src_color,
+        .dstColorBlendFactor = dst_color,
+        .colorBlendOp = color_op,
+        .srcAlphaBlendFactor = src_alpha,
+        .dstAlphaBlendFactor = dst_alpha,
+        .alphaBlendOp = alpha_op,
+    };
+    vk->pfnCmdSetColorBlendEquationEXT(cmd, 0, 1, &eq);
+}
+
 bool ensure_vbuf(vk_renderer *vk, vk_frame *f, size_t need)
 {
     if (f->vbuf_size >= need) return true;
@@ -100,6 +221,38 @@ void vk_draw_solid(flux_rhi_device *r, flux_r_buffer *buf,
     VkCommandBuffer cmd = vk->frames[vk->frame_idx].cmd;
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->solid_pipeline);
+    apply_blend_mode(vk, cmd);
+
+    VkBuffer vbuf = vk->frames[vk->frame_idx].vbuf;
+    VkDeviceSize off = 0;
+    vkCmdBindVertexBuffers(cmd, 0, 1, &vbuf, &off);
+
+    flux_solid_color_pc pc = {
+        .surface_size = { (float)vk->sc_extent.width, (float)vk->sc_extent.height },
+        .pad = {0,0},
+        .color = {
+            ((c >> 16) & 0xFF) / 255.0f,
+            ((c >> 8)  & 0xFF) / 255.0f,
+            (c & 0xFF) / 255.0f,
+            ((c >> 24) & 0xFF) / 255.0f,
+        },
+    };
+    vkCmdPushConstants(cmd, vk->solid_layout,
+                       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                       0, sizeof(pc), &pc);
+    vkCmdDraw(cmd, n, 1, first, 0);
+}
+
+void vk_draw_fringe(flux_rhi_device *r, flux_r_buffer *buf,
+                    uint32_t first, uint32_t n, flux_color c)
+{
+    (void)buf;
+    vk_renderer *vk = VKR(r);
+    if (!vk->pass_began) return;
+    VkCommandBuffer cmd = vk->frames[vk->frame_idx].cmd;
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->fringe_pipeline);
+    apply_blend_mode(vk, cmd);
 
     VkBuffer vbuf = vk->frames[vk->frame_idx].vbuf;
     VkDeviceSize off = 0;
@@ -127,8 +280,9 @@ void vk_flush_solid(flux_rhi_device *r)
 }
 
 void vk_draw_image(flux_rhi_device *r, flux_r_buffer *buf,
-                   uint32_t first, uint32_t n, flux_r_texture *tex)
+                   uint32_t first, uint32_t n, flux_r_texture *tex, flux_color tint)
 {
+    (void)tint;
     (void)buf;
     vk_renderer *vk = VKR(r);
     if (!vk->pass_began || !tex) return;
@@ -139,6 +293,7 @@ void vk_draw_image(flux_rhi_device *r, flux_r_buffer *buf,
     VkCommandBuffer cmd = vk->frames[vk->frame_idx].cmd;
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->image_pipeline);
+    apply_blend_mode(vk, cmd);
 
     VkBuffer vbuf = vk->frames[vk->frame_idx].vbuf;
     VkDeviceSize off = 0;
@@ -168,6 +323,7 @@ void vk_draw_text(flux_rhi_device *r, flux_r_buffer *buf,
     VkCommandBuffer cmd = vk->frames[vk->frame_idx].cmd;
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->text_pipeline);
+    apply_blend_mode(vk, cmd);
 
     VkBuffer vbuf = vk->frames[vk->frame_idx].vbuf;
     VkDeviceSize off = 0;
@@ -204,6 +360,7 @@ void vk_draw_gradient(flux_rhi_device *r, flux_r_buffer *buf,
     VkCommandBuffer cmd = vk->frames[vk->frame_idx].cmd;
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->gradient_pipeline);
+    apply_blend_mode(vk, cmd);
 
     VkBuffer vbuf = vk->frames[vk->frame_idx].vbuf;
     VkDeviceSize off = 0;
@@ -289,6 +446,7 @@ void vk_cover_solid(flux_rhi_device *r, flux_r_buffer *buf,
     VkCommandBuffer cmd = vk->frames[vk->frame_idx].cmd;
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->solid_cover_pipeline);
+    apply_blend_mode(vk, cmd);
 
     VkBuffer vbuf = vk->frames[vk->frame_idx].vbuf;
     VkDeviceSize off = 0;
@@ -319,6 +477,7 @@ void vk_cover_gradient(flux_rhi_device *r, flux_r_buffer *buf,
     VkCommandBuffer cmd = vk->frames[vk->frame_idx].cmd;
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->gradient_cover_pipeline);
+    apply_blend_mode(vk, cmd);
 
     VkBuffer vbuf = vk->frames[vk->frame_idx].vbuf;
     VkDeviceSize off = 0;
@@ -438,6 +597,7 @@ void vk_blur(flux_rhi_device *r, float sigma)
     v[5] = (flux_image_vertex){ { 0.0f, (float)h }, { 0.0f, 1.0f } };
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->blur_pipeline);
+    apply_blend_mode(vk, cmd);
     VkBuffer vb = f->vbuf;
     VkDeviceSize off = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &vb, &off);

@@ -19,6 +19,8 @@
 #include "gradient_frag_spv.inc"
 #include "stencil_frag_spv.inc"
 #include "blur_frag_spv.inc"
+#include "fringe_vert_spv.inc"
+#include "fringe_frag_spv.inc"
 
 /* ------------------------------------------------------------------ */
 /*  Shader modules                                                    */
@@ -102,8 +104,15 @@ bool make_pipeline_core(
         .srcAlphaBlendFactor = src_alpha, .dstAlphaBlendFactor = dst_alpha, .alphaBlendOp = VK_BLEND_OP_ADD,
         .colorWriteMask      = color_write_mask,
     };
+    VkPipelineColorBlendAdvancedStateCreateInfoEXT blend_advanced = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT,
+        .srcPremultiplied = VK_FALSE,
+        .dstPremultiplied = VK_FALSE,
+        .blendOverlap = VK_BLEND_OVERLAP_UNCORRELATED_EXT,
+    };
     VkPipelineColorBlendStateCreateInfo cb = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .pNext = &blend_advanced,
         .attachmentCount = 1, .pAttachments = &blend_att,
     };
     VkPipelineDepthStencilStateCreateInfo ds = {
@@ -122,10 +131,11 @@ bool make_pipeline_core(
     };
     VkDynamicState dyn_states[] = {
         VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_STENCIL_REFERENCE,
+        VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT,
     };
     VkPipelineDynamicStateCreateInfo dyn = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        .dynamicStateCount = 3, .pDynamicStates = dyn_states,
+        .dynamicStateCount = 4, .pDynamicStates = dyn_states,
     };
 
     VkGraphicsPipelineCreateInfo pci = {
@@ -188,6 +198,7 @@ bool make_image_dsl(vk_renderer *vk)
 void destroy_pipelines(vk_renderer *vk)
 {
     VkDevice dev = vk->device.device;
+    if (vk->fringe_pipeline)         vkDestroyPipeline(dev, vk->fringe_pipeline, nullptr);
     if (vk->blur_pipeline)           vkDestroyPipeline(dev, vk->blur_pipeline, nullptr);
     if (vk->blur_layout)             vkDestroyPipelineLayout(dev, vk->blur_layout, nullptr);
     if (vk->gradient_cover_pipeline) vkDestroyPipeline(dev, vk->gradient_cover_pipeline, nullptr);
@@ -205,6 +216,7 @@ void destroy_pipelines(vk_renderer *vk)
     if (vk->solid_layout)            vkDestroyPipelineLayout(dev, vk->solid_layout, nullptr);
     if (vk->image_dsl)               vkDestroyDescriptorSetLayout(dev, vk->image_dsl, nullptr);
 
+    vk->fringe_pipeline = VK_NULL_HANDLE;
     vk->blur_pipeline = VK_NULL_HANDLE;
     vk->blur_layout = VK_NULL_HANDLE;
     vk->gradient_cover_pipeline = VK_NULL_HANDLE;
@@ -462,6 +474,36 @@ bool ensure_pipelines(vk_renderer *vk)
                                 0xF,
                                 VK_STENCIL_OP_KEEP, VK_COMPARE_OP_EQUAL, 0x00, 0,
                                 &vk->blur_pipeline)) return false;
+    }
+
+    /* fringe (path edge AA) */
+    {
+        VkPushConstantRange push = {
+            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+            .offset = 0, .size = sizeof(flux_solid_color_pc),
+        };
+        VkPipelineLayoutCreateInfo ci = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .pushConstantRangeCount = 1, .pPushConstantRanges = &push,
+        };
+        VkResult res = vkCreatePipelineLayout(dev, &ci, nullptr, &vk->solid_layout);
+        /* Re-use solid_layout if already created, else it was just created above. */
+        (void)res;
+
+        VkVertexInputAttributeDescription attrs[2] = {
+            { .location = 0, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(flux_fringe_vertex, pos) },
+            { .location = 1, .binding = 0, .format = VK_FORMAT_R32_SFLOAT, .offset = offsetof(flux_fringe_vertex, coverage) },
+        };
+        if (!make_pipeline_core(vk, vk->solid_layout, vk->render_pass,
+                                flux_fringe_vert_spv, sizeof(flux_fringe_vert_spv),
+                                flux_fringe_frag_spv, sizeof(flux_fringe_frag_spv),
+                                sizeof(flux_fringe_vertex), attrs, 2,
+                                VK_TRUE,
+                                VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                                VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                                0xF,
+                                VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS, 0xFF, 0,
+                                &vk->fringe_pipeline)) return false;
     }
 
     vk->pipelines_ready = true;

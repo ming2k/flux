@@ -7,6 +7,19 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 Dates are ISO 8601. Pre-1.0 minor releases may introduce breaking
 changes; the breaking commit is called out explicitly.
 
+## [0.2.2] — 2026-05-15
+
+### Added
+
+- **Public API header completeness audit.** `include/flux/flux.h` now documents
+  every enum value, struct field, and function parameter. Removed unused
+  `flux_size` type. Added missing `FLUX_NODISCARD` on fallible operations.
+
+### Fixed
+
+- All examples and tests updated to explicitly handle or `(void)`-cast
+  `FLUX_NODISCARD` return values.
+
 ## [0.2.1] — 2026-05-15
 
 ### Added
@@ -27,6 +40,17 @@ changes; the breaking commit is called out explicitly.
 - **Vulkan: persistent pipeline cache.** `VkPipelineCache` is loaded from
   `~/.cache/flux/pipeline_cache.bin` at startup and saved at shutdown.
   Swapchain resize no longer recompiles SPIR-V from scratch.
+- **Vulkan: full blend-mode support via `VK_EXT_extended_dynamic_state3`.**
+  All 13 `flux_blend_mode` values are now respected by the Vulkan backend.
+  Porter-Duff modes map to standard `VkBlendFactor` pairs; `MULTIPLY`,
+  `SCREEN`, and `OVERLAY` use `VK_EXT_blend_operation_advanced` when
+  available and fall back to `SRC_OVER` otherwise. The convenience device
+  helper `flux_vulkan_device_create` now auto-enables both extensions.
+- **Path fringe anti-aliasing (both backends).** After stencil-then-cover,
+  the engine generates extra triangles that expand each path edge outward
+  by 0.5 px. Per-vertex coverage is interpolated and multiplied with the
+  draw colour, giving smooth silhouette edges without MSAA. Solid-colour
+  fills are supported now; gradient fringe AA will follow in a later release.
 
 ### Fixed
 
@@ -78,8 +102,9 @@ clipping, fence-tracked image updates, VMA integration. Superseded.
 
 First tagged development preview.
 
-[0.2.1]: https://github.com/anthropics/flux/releases/tag/v0.2.1
-[0.2.0]: https://github.com/anthropics/flux/releases/tag/v0.2.0
-[0.1.0]: https://github.com/anthropics/flux/compare/v0.0.2...v0.1.0
-[0.0.2]: https://github.com/anthropics/flux/compare/v0.0.1...v0.0.2
-[0.0.1]: https://github.com/anthropics/flux/releases/tag/v0.0.1
+[0.2.2]: https://github.com/ming2k/flux/releases/tag/v0.2.2
+[0.2.1]: https://github.com/ming2k/flux/releases/tag/v0.2.1
+[0.2.0]: https://github.com/ming2k/flux/releases/tag/v0.2.0
+[0.1.0]: https://github.com/ming2k/flux/compare/v0.0.2...v0.1.0
+[0.0.2]: https://github.com/ming2k/flux/compare/v0.0.1...v0.0.2
+[0.0.1]: https://github.com/ming2k/flux/releases/tag/v0.0.1

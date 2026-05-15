@@ -156,6 +156,7 @@ typedef struct {
     VkPipeline       gradient_cover_pipeline;
     VkPipelineLayout blur_layout;
     VkPipeline       blur_pipeline;
+    VkPipeline       fringe_pipeline;
     VkDescriptorSetLayout image_dsl;
     bool pipelines_ready;
 
@@ -177,6 +178,11 @@ typedef struct {
     bool             transfer_pending;
 
     VkPipelineCache  pipeline_cache;
+
+    flux_blend_mode current_blend_mode;
+    bool            has_dynamic_blend;
+    bool            has_blend_op_advanced;
+    PFN_vkCmdSetColorBlendEquationEXT pfnCmdSetColorBlendEquationEXT;
 } vk_renderer;
 
 #define VKR(r) ((vk_renderer *)(r))
@@ -295,8 +301,12 @@ extern VkDescriptorSet get_descriptor_set(vk_renderer *vk, vk_frame *f,
 extern void vk_draw_solid(flux_rhi_device *r, flux_r_buffer *buf,
                           uint32_t first, uint32_t n, flux_color c);
 extern void vk_flush_solid(flux_rhi_device *r);
+extern flux_fringe_vertex *vk_alloc_fringe(flux_rhi_device *r, size_t n,
+                                           flux_r_buffer **buf, uint32_t *first);
+extern void vk_draw_fringe(flux_rhi_device *r, flux_r_buffer *buf,
+                           uint32_t first, uint32_t n, flux_color c);
 extern void vk_draw_image(flux_rhi_device *r, flux_r_buffer *buf,
-                          uint32_t first, uint32_t n, flux_r_texture *tex);
+                          uint32_t first, uint32_t n, flux_r_texture *tex, flux_color tint);
 extern void vk_draw_text(flux_rhi_device *r, flux_r_buffer *buf,
                          uint32_t first, uint32_t n, flux_color c);
 extern void vk_draw_gradient(flux_rhi_device *r, flux_r_buffer *buf,

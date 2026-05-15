@@ -514,10 +514,27 @@ flux_image_vertex *vk_alloc_image(flux_rhi_device *r, size_t n,
     return ptr;
 }
 
+flux_fringe_vertex *vk_alloc_fringe(flux_rhi_device *r, size_t n,
+                                    flux_r_buffer **buf, uint32_t *first)
+{
+    vk_renderer *vk = VKR(r);
+    vk_frame *f = &vk->frames[vk->frame_idx];
+    size_t aligned = align_up(f->vbuf_cursor, 16);
+    size_t need = aligned + n * sizeof(flux_fringe_vertex);
+    if (!ensure_vbuf(vk, f, need)) {
+        *buf = nullptr; *first = 0; return nullptr;
+    }
+    flux_fringe_vertex *ptr = (flux_fringe_vertex *)((uint8_t *)f->vbuf_map + aligned);
+    *first = (uint32_t)(aligned / sizeof(flux_fringe_vertex));
+    *buf = (flux_r_buffer *)(uintptr_t)1;
+    f->vbuf_cursor = aligned + n * sizeof(flux_fringe_vertex);
+    return ptr;
+}
+
 static void vk_blend_mode(flux_rhi_device *r, flux_blend_mode mode)
 {
-    (void)r;
-    (void)mode;
+    vk_renderer *vk = VKR(r);
+    vk->current_blend_mode = mode;
 }
 
 static const flux_rhi_vtbl vk_vtbl = {
@@ -531,6 +548,7 @@ static const flux_rhi_vtbl vk_vtbl = {
     .resize          = vk_resize,
     .alloc_solid     = vk_alloc_solid,
     .alloc_image     = vk_alloc_image,
+    .alloc_fringe    = vk_alloc_fringe,
     .draw_solid      = vk_draw_solid,
     .flush_solid     = vk_flush_solid,
     .draw_image      = vk_draw_image,
@@ -542,6 +560,7 @@ static const flux_rhi_vtbl vk_vtbl = {
     .stencil_ref     = vk_stencil_ref,
     .cover_solid     = vk_cover_solid,
     .cover_gradient  = vk_cover_gradient,
+    .draw_fringe     = vk_draw_fringe,
     .blur            = vk_blur,
     .set_blend_mode  = vk_blend_mode,
     .texture_alloc   = vk_texture_alloc,
@@ -566,6 +585,29 @@ flux_rhi_device *flux_rhi_create_vulkan(const flux_vulkan_device *device,
     vk->vtbl = &vk_vtbl;
 
     VkDevice dev = vk->device.device;
+
+    /* Detect blend-related extensions */
+    uint32_t ext_count = 0;
+    vkEnumerateDeviceExtensionProperties(vk->device.physical_device, nullptr, &ext_count, nullptr);
+    VkExtensionProperties *exts = calloc(ext_count, sizeof(VkExtensionProperties));
+    if (exts) {
+        vkEnumerateDeviceExtensionProperties(vk->device.physical_device, nullptr, &ext_count, exts);
+        for (uint32_t i = 0; i < ext_count; i++) {
+            if (strcmp(exts[i].extensionName, VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME) == 0) {
+                vk->has_dynamic_blend = true;
+            }
+            if (strcmp(exts[i].extensionName, VK_EXT_BLEND_OPERATION_ADVANCED_EXTENSION_NAME) == 0) {
+                vk->has_blend_op_advanced = true;
+            }
+        }
+        free(exts);
+    }
+    if (vk->has_dynamic_blend) {
+        vk->pfnCmdSetColorBlendEquationEXT = (PFN_vkCmdSetColorBlendEquationEXT)
+            vkGetDeviceProcAddr(dev, "vkCmdSetColorBlendEquationEXT");
+        if (!vk->pfnCmdSetColorBlendEquationEXT)
+            vk->has_dynamic_blend = false;
+    }
 
     if (!create_swapchain(vk) || !create_render_pass(vk) ||
         !create_stencil_and_framebuffers(vk) || !create_blur_src(vk)) {

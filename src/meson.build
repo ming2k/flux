@@ -72,12 +72,29 @@ blur_frag_spv = custom_target('blur_frag_spv',
             '@INPUT@', '-o', '@OUTPUT@'],
 )
 
+fringe_vert_spv = custom_target('fringe_vert_spv',
+  input  : 'shaders/fringe.vert',
+  output : 'fringe_vert_spv.inc',
+  command: [glslang, '-V', '--target-env', 'vulkan1.2',
+            '--quiet', '--vn', 'flux_fringe_vert_spv',
+            '@INPUT@', '-o', '@OUTPUT@'],
+)
+
+fringe_frag_spv = custom_target('fringe_frag_spv',
+  input  : 'shaders/fringe.frag',
+  output : 'fringe_frag_spv.inc',
+  command: [glslang, '-V', '--target-env', 'vulkan1.2',
+            '--quiet', '--vn', 'flux_fringe_frag_spv',
+            '@INPUT@', '-o', '@OUTPUT@'],
+)
+
 spv_targets = [
   solid_color_vert_spv, solid_color_frag_spv,
   image_vert_spv,       image_frag_spv,
   text_frag_spv,
   gradient_vert_spv,    gradient_frag_spv,
   stencil_frag_spv,     blur_frag_spv,
+  fringe_vert_spv,      fringe_frag_spv,
 ]
 
 # ---- New layered architecture sources ----

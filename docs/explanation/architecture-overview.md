@@ -42,19 +42,19 @@ Exports through `geometry/geometry.h`.
 
 ### State layer (`src/state/`)
 
-The recording half of the two-phase architecture. Builds a display list of ops and manages the transform stack during `fx_surface_acquire`:
+The recording half of the two-phase architecture. Builds a display list of ops and manages the transform stack during `flux_surface_acquire`:
 
 | Module | Contents |
 |---|---|
 | `canvas.c` | Op recording: fill rect, fill path, stroke path, draw image, draw glyphs, clip ops |
-| `state.h` | `fx_op`, `fx_op_kind`, and canvas helpers |
+| `state.h` | `flux_op`, `flux_op_kind`, and canvas helpers |
 
 ### RHI layer (`src/rhi/`)
 
-**This is the architectural keystone.** The `fx_rhi_device` vtable abstracts all backend-specific rendering behind a single interface:
+**This is the architectural keystone.** The `flux_rhi_device` vtable abstracts all backend-specific rendering behind a single interface:
 
 ```
-fx_rhi_vtbl {
+flux_rhi_vtbl {
     begin_frame, begin_pass, end_pass, submit
     alloc_solid, alloc_image
     draw_solid, flush_solid, draw_image, draw_text, draw_gradient
@@ -93,19 +93,19 @@ Lifecycle-managed objects: context, images, glyph runs.
 ```
 Phase 1 — Recording (CPU, immediate)
 =====================================
-fx_surface_acquire() → fx_canvas*
+flux_surface_acquire() → flux_canvas*
     │
-    ├── fx_fill_rect()        → append FX_OP_FILL_RECT
-    ├── fx_fill_path()        → append FX_OP_FILL_PATH
-    ├── fx_stroke_path()      → append FX_OP_STROKE_PATH
-    ├── fx_draw_image()       → append FX_OP_DRAW_IMAGE
-    ├── fx_draw_glyph_run()   → append FX_OP_DRAW_GLYPHS
-    ├── fx_clip_rect()        → append FX_OP_CLIP_RECT
-    └── fx_clip_path()        → append FX_OP_CLIP_PATH
+    ├── flux_fill_rect()        → append FLUX_OP_FILL_RECT
+    ├── flux_fill_path()        → append FLUX_OP_FILL_PATH
+    ├── flux_stroke_path()      → append FLUX_OP_STROKE_PATH
+    ├── flux_draw_image()       → append FLUX_OP_DRAW_IMAGE
+    ├── flux_draw_glyph_run()   → append FLUX_OP_DRAW_GLYPHS
+    ├── flux_clip_rect()        → append FLUX_OP_CLIP_RECT
+    └── flux_clip_path()        → append FLUX_OP_CLIP_PATH
 
-Phase 2 — Execute (at fx_surface_present)
+Phase 2 — Execute (at flux_surface_present)
 ==========================================
-fx_engine_execute(canvas, rhi)
+flux_engine_execute(canvas, rhi)
     │
     ├── For each op:
     │   ├── Tessellate / flatten paths (geometry layer)
@@ -118,9 +118,9 @@ fx_engine_execute(canvas, rhi)
 
 ## Key design decisions
 
-1. **Vtable at the RHI boundary** — the execution engine never calls a graphics API directly. Every pixel-related operation goes through `fx_rhi_vt`. This is the separation that enables multiple backends.
+1. **Vtable at the RHI boundary** — the execution engine never calls a graphics API directly. Every pixel-related operation goes through `flux_rhi_vt`. This is the separation that enables multiple backends.
 
-2. **Opaque resource handles** — `fx_r_buffer` and `fx_r_texture` are interpreted only by the RHI. The engine allocates vertices through the RHI without knowing if they live in a Vulkan VkBuffer or a malloc'd array.
+2. **Opaque resource handles** — `flux_r_buffer` and `flux_r_texture` are interpreted only by the RHI. The engine allocates vertices through the RHI without knowing if they live in a Vulkan VkBuffer or a malloc'd array.
 
 3. **Batching lives in the RHI** — consecutive same-color solid draws are batched by the RHI internally. The engine just issues `draw_solid()` calls; the RHI decides when to flush.
 

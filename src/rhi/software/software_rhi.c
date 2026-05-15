@@ -92,9 +92,11 @@ static bool  sw_read_pixels(flux_rhi_device *r, void *data, size_t stride);
 static bool  sw_resize(flux_rhi_device *r, uint32_t w, uint32_t h);
 static flux_solid_vertex *sw_alloc_solid(flux_rhi_device *r, size_t count, flux_r_buffer **buf, uint32_t *first);
 static flux_image_vertex *sw_alloc_image(flux_rhi_device *r, size_t count, flux_r_buffer **buf, uint32_t *first);
+static flux_fringe_vertex *sw_alloc_fringe(flux_rhi_device *r, size_t count, flux_r_buffer **buf, uint32_t *first);
 static void  sw_draw_solid(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, flux_color color);
+static void  sw_draw_fringe(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, flux_color color);
 static void  sw_flush_solid(flux_rhi_device *r);
-static void  sw_draw_image(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, flux_r_texture *tex);
+static void  sw_draw_image(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, flux_r_texture *tex, flux_color tint);
 static void  sw_draw_text(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, flux_color color);
 static void  sw_draw_gradient(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, const flux_gradient *grad);
 static void  sw_scissor(flux_rhi_device *r, int32_t x, int32_t y, uint32_t w, uint32_t h);
@@ -356,6 +358,74 @@ static void raster_solid(sw_renderer *sw,
     }
 }
 
+static void raster_fringe(sw_renderer *sw,
+                          const flux_fringe_vertex *v0,
+                          const flux_fringe_vertex *v1,
+                          const flux_fringe_vertex *v2,
+                          uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+{
+    float fx0 = v0->pos[0], fy0 = v0->pos[1];
+    float fx1 = v1->pos[0], fy1 = v1->pos[1];
+    float fx2 = v2->pos[0], fy2 = v2->pos[1];
+
+    int32_t x0 = (int32_t)fx0, y0 = (int32_t)fy0;
+    int32_t x1 = (int32_t)fx1, y1 = (int32_t)fy1;
+    int32_t x2 = (int32_t)fx2, y2 = (int32_t)fy2;
+
+    int32_t minx = max_i(sw->scissor_x, min_i(min_i(x0, x1), x2));
+    int32_t maxx = min_i(sw->scissor_x + (int32_t)sw->scissor_w - 1,
+                         max_i(max_i(x0, x1), x2));
+    int32_t miny = max_i(sw->scissor_y, min_i(min_i(y0, y1), y2));
+    int32_t maxy = min_i(sw->scissor_y + (int32_t)sw->scissor_h - 1,
+                         max_i(max_i(y0, y1), y2));
+
+    if (minx > maxx || miny > maxy) return;
+
+    int32_t area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+    if (area == 0) return;
+
+    int32_t A01 = y0 - y1, B01 = x1 - x0;
+    int32_t A12 = y1 - y2, B12 = x2 - x1;
+    int32_t A20 = y2 - y0, B20 = x0 - x2;
+
+    int32_t bias0 = (A01 > 0 || (A01 == 0 && B01 > 0)) ? 0 : -1;
+    int32_t bias1 = (A12 > 0 || (A12 == 0 && B12 > 0)) ? 0 : -1;
+    int32_t bias2 = (A20 > 0 || (A20 == 0 && B20 > 0)) ? 0 : -1;
+
+    int32_t w0_row = A01 * minx + B01 * miny + (x0 * y1 - y0 * x1) + bias0;
+    int32_t w1_row = A12 * minx + B12 * miny + (x1 * y2 - y1 * x2) + bias1;
+    int32_t w2_row = A20 * minx + B20 * miny + (x2 * y0 - y2 * x0) + bias2;
+
+    float c0 = v0->coverage, c1 = v1->coverage, c2 = v2->coverage;
+    float inv_area = 1.0f / (float)area;
+
+    uint8_t *row = sw->target.pixels + (size_t)miny * sw->target.stride + (size_t)minx * 4;
+
+    for (int32_t y = miny; y <= maxy; y++) {
+        int32_t w0 = w0_row, w1 = w1_row, w2 = w2_row;
+        uint8_t *p = row;
+
+        for (int32_t x = minx; x <= maxx; x++) {
+            if ((w0 | w1 | w2) >= 0) {
+                float lambda0 = (float)w0 * inv_area;
+                float lambda1 = (float)w1 * inv_area;
+                float lambda2 = (float)w2 * inv_area;
+                float cov = lambda0 * c0 + lambda1 * c1 + lambda2 * c2;
+                if (cov > 0.0f) {
+                    uint8_t alpha = (uint8_t)(a * cov + 0.5f);
+                    if (alpha > 0)
+                        blend_pixel(p, r, g, b, alpha, sw->blend_mode);
+                }
+            }
+            w0 += A01; w1 += A12; w2 += A20;
+            p += 4;
+        }
+
+        w0_row += B01; w1_row += B12; w2_row += B20;
+        row += sw->target.stride;
+    }
+}
+
 /* ---- gradient evaluation ---- */
 
 static void eval_gradient(const flux_gradient *grad, float t, uint8_t col[4])
@@ -495,7 +565,7 @@ static void raster_image(sw_renderer *sw,
 
     if (minx > maxx || miny > maxy) return;
 
-    float denom = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+    float denom = (x2 - x0) * (y1 - y0) - (x1 - x0) * (y2 - y0);
     if (fabsf(denom) < 0.0001f) return;
     float inv_denom = 1.0f / denom;
 
@@ -594,7 +664,9 @@ static const flux_rhi_vtbl *sw_vtable_init(sw_renderer *sw)
         .resize           = sw_resize,
         .alloc_solid      = sw_alloc_solid,
         .alloc_image      = sw_alloc_image,
+        .alloc_fringe     = sw_alloc_fringe,
         .draw_solid       = sw_draw_solid,
+        .draw_fringe      = sw_draw_fringe,
         .flush_solid      = sw_flush_solid,
         .draw_image       = sw_draw_image,
         .draw_text        = sw_draw_text,
@@ -808,6 +880,20 @@ static flux_image_vertex *sw_alloc_image(flux_rhi_device *r, size_t count, flux_
     return ptr;
 }
 
+static flux_fringe_vertex *sw_alloc_fringe(flux_rhi_device *r, size_t count, flux_r_buffer **buf, uint32_t *first)
+{
+    sw_renderer *sw = self(r);
+    if (!ensure_buf_cap(sw)) return nullptr;
+    uint32_t idx = sw->buf_count++;
+    size_t size = count * sizeof(flux_fringe_vertex);
+    void *ptr = sw_pool_alloc(sw, size);
+    if (!ptr) { sw->buf_count--; return nullptr; }
+    sw->buffers[idx] = (sw_buffer){ .offset = (size_t)((uint8_t *)ptr - sw->pool.base), .count = count };
+    *buf = (flux_r_buffer *)(uintptr_t)(idx + 1);
+    *first = 0;
+    return ptr;
+}
+
 static sw_buffer *resolve_buf(sw_renderer *sw, flux_r_buffer *buf)
 {
     uint32_t idx = (uint32_t)(uintptr_t)buf - 1;
@@ -870,7 +956,26 @@ static void sw_flush_solid(flux_rhi_device *r)
     sw->batch.active = false;
 }
 
-static void sw_draw_image(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, flux_r_texture *tex)
+static void sw_draw_fringe(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, flux_color color)
+{
+    sw_renderer *sw = self(r);
+    sw_flush_solid(r);
+    sw_buffer *b = resolve_buf(sw, buf);
+    if (!b) return;
+    flux_fringe_vertex *fringe = (flux_fringe_vertex *)(sw->pool.base + b->offset);
+    if (!fringe) return;
+
+    uint8_t cr = (color >> 16) & 0xFF;
+    uint8_t cg = (color >> 8) & 0xFF;
+    uint8_t cb = color & 0xFF;
+    uint8_t ca = (color >> 24) & 0xFF;
+
+    for (uint32_t i = first; i + 2 < first + count; i += 3) {
+        raster_fringe(sw, &fringe[i], &fringe[i + 1], &fringe[i + 2], cr, cg, cb, ca);
+    }
+}
+
+static void sw_draw_image(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, flux_r_texture *tex, flux_color tint)
 {
     sw_renderer *sw = self(r);
     sw_flush_solid(r);
@@ -881,9 +986,11 @@ static void sw_draw_image(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first
     sw_texture *t = (sw_texture *)tex;
     if (!t) return;
 
+    uint8_t tr = (tint >> 16) & 0xFF, tg = (tint >> 8) & 0xFF;
+    uint8_t tb = tint & 0xFF, ta = (tint >> 24) & 0xFF;
     for (uint32_t i = 0; i + 2 < count; i += 3) {
         raster_image(sw, &img[first + i], &img[first + i + 1], &img[first + i + 2],
-                     t, 255, 255, 255, 255);
+                     t, tr, tg, tb, ta);
     }
 }
 
@@ -1116,9 +1223,20 @@ static flux_r_texture *sw_texture_alloc(flux_rhi_device *r, uint32_t w, uint32_t
 
 static void sw_texture_free(flux_rhi_device *r, flux_r_texture *tex)
 {
-    (void)r;
+    sw_renderer *sw = self(r);
     sw_texture *t = (sw_texture *)tex;
     if (!t) return;
+
+    /* Unlink from sw->textures list */
+    sw_texture **pp = &sw->textures;
+    while (*pp) {
+        if (*pp == t) {
+            *pp = t->next;
+            break;
+        }
+        pp = &(*pp)->next;
+    }
+
     free(t->pixels);
     free(t);
 }

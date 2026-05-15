@@ -8,7 +8,7 @@ flux is a rendering substrate. The application owns scene objects, layout, input
 |---|---|---|
 | **Surfaces** | Implemented | Offscreen CPU-readable, caller-provided `VkSurfaceKHR` |
 | **Frame lifecycle** | Implemented | Acquire canvas, record commands, present |
-| **Command recording** | Implemented | `fx_canvas`: clear, fill, stroke, clip, transform, images, glyph runs |
+| **Command recording** | Implemented | `flux_canvas`: clear, fill, stroke, clip, transform, images, glyph runs |
 | **Paths** | Implemented | Move, line, quad, cubic, arc, close, rect, bounds |
 | **Path transforms** | Implemented | 2D affine matrix applied during recording |
 | **Fill** | Implemented | Solid color and gradients; even-odd and non-zero fill rules |
@@ -19,8 +19,8 @@ flux is a rendering substrate. The application owns scene objects, layout, input
 | **Text** | Implemented | Caller-uploaded glyph bitmaps, dynamic GPU atlas, positioned glyph run rendering |
 | **Glyph rasterization** | Not implemented | Caller rasterizes with FreeType/stb_truetype; flux accepts bitmaps |
 | **Anti-aliasing** | Partial | Text AA via caller-provided coverage masks; path AA via high-precision flattening, fringe AA planned |
-| **Blur** | Implemented | Separable Gaussian via `fx_mask_blur`; software backend fully functional, Vulkan pipeline compiled |
-| **Render-to-texture** | Implemented | `fx_image_create_from_surface`: zero-copy offscreen→image in software backend |
+| **Blur** | Implemented | Separable Gaussian via `flux_mask_blur`; software backend fully functional, Vulkan pipeline compiled |
+| **Render-to-texture** | Implemented | `flux_image_create_from_surface`: zero-copy offscreen→image in software backend |
 | **Layers** | Partial | Offscreen surfaces + render-to-texture enable manual layer composition |
 | **Compute** | Not implemented | No compute shaders |
 
@@ -32,10 +32,10 @@ app/toolkit state → layout/shaping/assets → explicit flux draw calls → GPU
 
 | Upstream output | flux input |
 |---|---|
-| Pixel buffer / decoded image | `fx_image` + `fx_draw_image` |
-| Vector outlines | `fx_path` + `fx_fill_path` / `fx_stroke_path` |
-| Rasterized glyph bitmaps | `fx_glyph_upload` + `fx_glyph_run` + `fx_draw_glyph_run` |
-| Gradient stops and geometry | `fx_gradient` + `fx_paint` |
+| Pixel buffer / decoded image | `flux_image` + `flux_draw_image` |
+| Vector outlines | `flux_path` + `flux_fill_path` / `flux_stroke_path` |
+| Rasterized glyph bitmaps | `flux_glyph_upload` + `flux_glyph_run` + `flux_draw_glyph_run` |
+| Gradient stops and geometry | `flux_gradient` + `flux_paint` |
 
 ## What stays above flux
 

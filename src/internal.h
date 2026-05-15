@@ -101,6 +101,37 @@ extern flux_context *const FLUX_DEFAULT_CTX;
 /*  flux_context                                                      */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/*  Glyph atlas (internal to context)                                 */
+/* ------------------------------------------------------------------ */
+
+typedef struct flux_glyph_slot {
+    uint32_t glyph_id;
+    uint16_t atlas_x, atlas_y;
+    uint16_t w, h;
+    int16_t  bearing_x, bearing_y;
+    uint16_t advance;
+} flux_glyph_slot;
+
+typedef struct flux_glyph_atlas {
+    uint8_t  *pixels;      /* A8, owned by context allocator */
+    uint32_t  width;
+    uint32_t  height;
+    uint32_t  row_y;       /* current shelf y */
+    uint32_t  row_h;       /* current shelf height */
+    uint32_t  row_x;       /* current x in shelf */
+    flux_glyph_slot *slots;
+    size_t    slot_count;
+    size_t    slot_cap;
+    uint64_t  revision;    /* incremented on every upload */
+} flux_glyph_atlas;
+
+flux_glyph_slot *flux_glyph_atlas_find(flux_glyph_atlas *a, uint32_t glyph_id);
+
+/* ------------------------------------------------------------------ */
+/*  flux_context                                                      */
+/* ------------------------------------------------------------------ */
+
 struct flux_context {
     atomic_int      ref_count;
 #ifndef NDEBUG
@@ -110,6 +141,7 @@ struct flux_context {
     flux_log_fn     log;
     void           *log_user;
     flux_log_level  min_log_level;
+    flux_glyph_atlas *atlas;          /* NULL until first upload */
 };
 
 /* ------------------------------------------------------------------ */
@@ -186,6 +218,8 @@ struct flux_surface {
     bool              needs_recreate;
     int32_t           width, height;
     flux_pixel_format format;
+    flux_r_texture   *glyph_atlas_tex;      /* lazy-created per surface */
+    uint64_t          glyph_atlas_revision; /* last uploaded revision */
 };
 
 /* ------------------------------------------------------------------ */

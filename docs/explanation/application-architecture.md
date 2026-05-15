@@ -16,7 +16,7 @@ app state
 - The app owns long-lived scene objects and decides what changed.
 - The app or toolkit computes rectangles, transforms, text lines, and z-order.
 - Asset loaders decode PNG/JPEG/SVG/font choices into pixels, paths, or glyph runs.
-- flux resources are cached near the renderer: `fx_image` for decoded pixels, reusable `fx_path` for vector shapes, and `fx_glyph_run` for positioned text.
+- flux resources are cached near the renderer: `flux_image` for decoded pixels, reusable `flux_path` for vector shapes, and `flux_glyph_run` for positioned text.
 - Each frame, the renderer acquires a canvas, emits explicit drawing commands in z-order, then presents.
 
 ## Recommended Flow

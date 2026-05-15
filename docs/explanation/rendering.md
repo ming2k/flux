@@ -26,7 +26,7 @@ Strokes are expanded CPU-side into fill polygons by the stroker (`src/geometry/s
 Text is rendered as textured quads from a dynamic glyph atlas:
 
 1. **Caller rasterization:** The caller rasterizes glyph outlines into 8-bit alpha masks using FreeType, stb_truetype, or any rasterizer.
-2. **Upload:** `fx_glyph_upload` copies the bitmap into a 2048×2048 `A8_UNORM` GPU atlas texture.
+2. **Upload:** `flux_glyph_upload` copies the bitmap into a 2048×2048 `A8_UNORM` GPU atlas texture.
 3. **Cache hit:** Subsequent draws of the same glyph ID reuse the atlas entry.
 4. **Execution:** Each glyph in a run is drawn as a textured quad. The fragment shader multiplies the paint color by the atlas alpha channel.
 
@@ -36,14 +36,14 @@ See [Text rendering pipeline](text-rendering-pipeline.md) for the full stack.
 
 ### Per-Frame Ring Buffers
 
-flux uses a per-frame linear allocator (`fx_vbuf_pool`) for vertex data.
+flux uses a per-frame linear allocator (`flux_vbuf_pool`) for vertex data.
 - **No Static Limits:** The buffer grows dynamically by doubling its size if the current frame complexity exceeds its capacity.
 - **Zero Stall:** Two frames are kept in flight; while the GPU is rendering frame N, the CPU can begin command recording for frame N+1.
 
 ### Automatic Batching
 
 Sequential operations are grouped into the minimum possible number of Vulkan draw calls.
-- **Grouping Criteria:** Sequential ops that share the same `fx_paint` color and pipeline type (e.g., multiple `fill_path` calls with the same color).
+- **Grouping Criteria:** Sequential ops that share the same `flux_paint` color and pipeline type (e.g., multiple `fill_path` calls with the same color).
 - **Flushing:** A batch is flushed when a pipeline state change is required (e.g., switching from Path to Image) or when the paint properties change.
 
 ## Pipelines and Shaders
@@ -51,9 +51,11 @@ Sequential operations are grouped into the minimum possible number of Vulkan dra
 | Pipeline | Purpose | Blend Mode |
 |---|---|---|
 | **Solid** | Standard path fills and strokes. | SRC_OVER |
-| **Image** | Textured quads for `fx_image`. | SRC_OVER |
+| **Image** | Textured quads for `flux_image`. | SRC_OVER |
 | **Text** | Alpha-blended glyph quads. | SRC_OVER |
 | **Gradient** | Linear and radial gradients. | SRC_OVER |
+
+> **Backend note:** The table above reflects the Vulkan pipelines, which are all hard-coded to `SRC_OVER`. The software backend supports the full set of [blend modes](blend-modes.md).
 
 Shaders are written in GLSL and compiled to SPIR-V at build time. No runtime compilation is required.
 
@@ -64,7 +66,14 @@ Shaders are written in GLSL and compiled to SPIR-V at build time. No runtime com
 
 ## Status
 
-As of **v0.1.0**, the solid-color, image, text, gradient, and stencil pipelines are compiled. Solid, image, text, and gradient are wired into the recorder. Path flattening, stroking, and simple polygon triangulation are performed on the CPU, with the resulting meshes batched and submitted to the GPU. Clipping is scissor-bound; stencil-based exact path clip is compiled but not yet dispatched.
+As of **v0.2.1**, all major pipelines are implemented and wired into both the software and Vulkan backends:
+
+- Solid colour, image, text, gradient, and stencil pipelines are complete.
+- Path flattening, stroking, and polygon triangulation run on the CPU.
+- Stencil-based path fill (even-odd rule) is dispatched for holes and complex shapes.
+- 13 blend modes are supported in the software backend; Vulkan currently uses `SRC_OVER` for all pipelines.
+- Golden-image regression tests verify pixel correctness on the software backend.
+- Performance benchmarks run on every CI build to detect rendering regressions.
 
 ## See also
 

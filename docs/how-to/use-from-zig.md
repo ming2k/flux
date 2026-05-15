@@ -120,74 +120,72 @@ const flux = @cImport({
 
 pub fn main() !void {
     // Initialize flux context
-    const desc = flux.fx_context_desc{
-        .app_name = "my-flux-app",
-        .enable_validation = true,
-        .min_log_level = flux.FX_LOG_INFO,
+    const desc = flux.flux_context_desc{
+        .min_log_level = flux.FLUX_LOG_INFO,
         .log = null,
         .log_user = null,
     };
 
-    const ctx = flux.fx_context_create(&desc);
+    const ctx = flux.flux_context_create(&desc);
     if (ctx == null) {
         std.log.err("Failed to create flux context", .{});
         return error.FluxContextCreationFailed;
     }
-    defer flux.fx_context_destroy(ctx);
+    defer flux.flux_context_destroy(ctx);
 
     // Query device capabilities
-    var caps: flux.fx_device_caps = undefined;
-    _ = flux.fx_context_get_device_caps(ctx, &caps);
+    var caps: flux.flux_device_caps = undefined;
+    _ = flux.flux_context_get_device_caps(ctx, &caps);
     std.log.info("Vulkan API version: {d}", .{caps.api_version});
 
     // Create offscreen surface
-    const surface = flux.fx_surface_create_offscreen(
+    const surface = flux.flux_surface_create_offscreen(
         ctx,
         800,
         600,
-        flux.FX_FMT_BGRA8_UNORM,
-        flux.FX_CS_SRGB,
+        flux.FLUX_FMT_BGRA8_UNORM,
+        flux.FLUX_CS_SRGB,
     );
     if (surface == null) {
         std.log.err("Failed to create surface", .{});
         return error.FluxSurfaceCreationFailed;
     }
-    defer flux.fx_surface_destroy(surface);
+    defer flux.flux_surface_destroy(surface);
 
     // Acquire canvas and draw
-    const canvas = flux.fx_surface_acquire(surface);
+    const canvas = flux.flux_surface_acquire(surface);
     
     // Clear background
-    flux.fx_clear(canvas, flux.fx_color_rgba(40, 40, 40, 255));
+    flux.flux_clear(canvas, flux.flux_color_rgba(40, 40, 40, 255));
 
     // Draw a rectangle
-    const rect = flux.fx_rect{
+    const rect = flux.flux_rect{
         .x = 100.0,
         .y = 100.0,
         .w = 200.0,
         .h = 150.0,
     };
-    flux.fx_fill_rect(canvas, &rect, flux.fx_color_rgba(90, 180, 255, 255));
+    flux.flux_fill_rect(canvas, &rect, flux.flux_color_rgba(90, 180, 255, 255));
 
     // Draw a circle using path
-    const path = flux.fx_path_create();
-    defer flux.fx_path_destroy(path);
+    const path = flux.flux_path_create();
+    defer flux.flux_path_destroy(path);
     
     const cx: f32 = 400.0;
     const cy: f32 = 300.0;
     const r: f32 = 50.0;
     
-    _ = flux.fx_path_move_to(path, cx + r, cy);
-    _ = flux.fx_path_arc_to(path, r, r, 0.0, false, true, cx - r, cy);
-    _ = flux.fx_path_arc_to(path, r, r, 0.0, false, true, cx + r, cy);
-    _ = flux.fx_path_close(path);
+    _ = flux.flux_path_move_to(path, cx + r, cy);
+    _ = flux.flux_path_arc_to(path, r, r, 0.0, false, true, cx - r, cy);
+    _ = flux.flux_path_arc_to(path, r, r, 0.0, false, true, cx + r, cy);
+    _ = flux.flux_path_close(path);
 
-    var paint: flux.fx_paint = undefined;
-    flux.fx_paint_init(&paint, flux.fx_color_rgba(255, 120, 80, 255));
-    _ = flux.fx_fill_path(canvas, path, &paint);
+    var paint: flux.flux_paint = undefined;
+    flux.flux_paint_init(&paint, flux.flux_color_rgba(255, 120, 80, 255));
+    _ = flux.flux_fill_path(canvas, path, &paint);
 
     // Present frame
-    flux.fx_surface_present(surface);
+    flux.flux_surface_present(surface);
 
     // Read pixels (for offscreen surface)
     const width: usize = 800;
@@ -202,7 +200,7 @@ pub fn main() !void {
     const pixels = try allocator.alloc(u8, buffer_size);
     defer allocator.free(pixels);
     
-    if (flux.fx_surface_read_pixels(surface, pixels.ptr, stride)) {
+    if (flux.flux_surface_read_pixels(surface, pixels.ptr, stride)) {
         std.log.info("Read {d} bytes of pixel data", .{buffer_size});
         // Save to file or process further...
     } else {
@@ -222,7 +220,7 @@ zig build
 
 ### Memory Management
 
-- flux uses raw pointers (`*fx_context`, `*fx_surface`, etc.). In Zig, these translate to optional pointers (`?*flux.fx_context`).
+- flux uses raw pointers (`*flux_context`, `*flux_surface`, etc.). In Zig, these translate to optional pointers (`?*flux.flux_context`).
 - Always check for null after creation functions.
 - Use `defer` to ensure cleanup happens even if errors occur.
 
@@ -231,7 +229,7 @@ zig build
 flux C functions that return `bool` indicate success/failure. Always check the return value:
 
 ```zig
-if (!flux.fx_path_move_to(path, x, y)) {
+if (!flux.flux_path_move_to(path, x, y)) {
     std.log.err("Failed to move path", .{});
 }
 ```
@@ -241,17 +239,17 @@ if (!flux.fx_path_move_to(path, x, y)) {
 Zig imports C enums as regular enums. Access them with the enum name:
 
 ```zig
-flux.FX_CAP_ROUND
-flux.FX_JOIN_MITER
-flux.FX_FMT_BGRA8_UNORM
+flux.FLUX_CAP_ROUND
+flux.FLUX_JOIN_MITER
+flux.FLUX_FMT_BGRA8_UNORM
 ```
 
 ### Color Helper
 
-The `fx_color_rgba` inline function is available as a regular function in Zig:
+The `flux_color_rgba` inline function is available as a regular function in Zig:
 
 ```zig
-const color = flux.fx_color_rgba(255, 128, 0, 255);
+const color = flux.flux_color_rgba(255, 128, 0, 255);
 ```
 
 ### Vulkan and Vulkan Surfaces
@@ -260,13 +258,13 @@ For windowed applications, use the appropriate surface creation function:
 
 ```zig
 // Vulkan surface (you create VkSurfaceKHR externally)
-const surface = flux.fx_surface_create_vulkan(ctx, vk_surface, width, height, flux.FX_CS_SRGB);
+const surface = flux.flux_surface_create_vulkan(ctx, vk_surface, width, height, flux.FLUX_CS_SRGB);
 
 // Vulkan surface (Linux)
-const surface = flux.fx_surface_create_Vulkan(ctx, display, wl_surface, width, height, flux.FX_CS_SRGB);
+const surface = flux.flux_surface_create_Vulkan(ctx, display, wl_surface, width, height, flux.FLUX_CS_SRGB);
 ```
 
-Note: For `fx_surface_create_vulkan`, include `flux/flux_vulkan.h` and link against the Vulkan loader.
+Note: For `flux_surface_create_vulkan`, include `flux/flux_vulkan.h` and link against the Vulkan loader.
 
 ## Advanced: Wrapping the C API
 
@@ -274,38 +272,38 @@ For a more idiomatic Zig API, you can create a wrapper:
 
 ```zig
 pub const Context = struct {
-    ptr: *flux.fx_context,
+    ptr: *flux.flux_context,
 
-    pub fn init(desc: *const flux.fx_context_desc) !Context {
-        const ptr = flux.fx_context_create(desc) orelse return error.ContextCreationFailed;
+    pub fn init(desc: *const flux.flux_context_desc) !Context {
+        const ptr = flux.flux_context_create(desc) orelse return error.ContextCreationFailed;
         return .{ .ptr = ptr };
     }
 
     pub fn deinit(self: *Context) void {
-        flux.fx_context_destroy(self.ptr);
+        flux.flux_context_destroy(self.ptr);
     }
 
     pub fn createOffscreenSurface(self: *Context, width: i32, height: i32) !Surface {
-        const ptr = flux.fx_surface_create_offscreen(
-            self.ptr, width, height, flux.FX_FMT_BGRA8_UNORM, flux.FX_CS_SRGB,
+        const ptr = flux.flux_surface_create_offscreen(
+            self.ptr, width, height, flux.FLUX_FMT_BGRA8_UNORM, flux.FLUX_CS_SRGB,
         ) orelse return error.SurfaceCreationFailed;
         return .{ .ptr = ptr };
     }
 };
 
 pub const Surface = struct {
-    ptr: *flux.fx_surface,
+    ptr: *flux.flux_surface,
 
     pub fn deinit(self: *Surface) void {
-        flux.fx_surface_destroy(self.ptr);
+        flux.flux_surface_destroy(self.ptr);
     }
 
-    pub fn acquire(self: *Surface) *flux.fx_canvas {
-        return flux.fx_surface_acquire(self.ptr).?;
+    pub fn acquire(self: *Surface) *flux.flux_canvas {
+        return flux.flux_surface_acquire(self.ptr).?;
     }
 
     pub fn present(self: *Surface) void {
-        flux.fx_surface_present(self.ptr);
+        flux.flux_surface_present(self.ptr);
     }
 };
 ```
@@ -346,7 +344,7 @@ On some systems, the pkg-config names may differ (e.g., `freetype2` vs `freetype
 
 ### Validation errors
 
-If you see Vulkan validation errors, make sure `enable_validation` is set to `true` in the context descriptor when debugging.
+If you see Vulkan validation errors, make sure the library was compiled with validation support (`-Dvalidation=enabled`).
 
 ## Verification
 

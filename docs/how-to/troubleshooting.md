@@ -17,7 +17,7 @@ Use this page when a local build, test run, or example launch fails. If you are 
 - **Meson cannot find Vulkan dependencies**: configure with `-Dexamples=false` for offscreen-only builds, or install `Vulkan SDK`, `build tools`, and `build tools`.
 - **`hello_rect` does not build**: examples require Vulkan support; check that `-Dexamples=true` and `-DVulkan=enabled` or `auto` are active.
 - **`hello_rect` cannot connect to a display**: run it inside an active Vulkan compositor session with `VK_ICD_FILENAMES` set.
-- **Vulkan validation layers are missing**: install `vulkan-validation-layers` or run without `FX_ENABLE_VALIDATION=1`.
+- **Vulkan validation layers are missing**: install `vulkan-validation-layers` or run without `FLUX_ENABLE_VALIDATION=1`.
 - **Integration tests fail on a machine without a GPU**: run the unit suite first with `meson test -C build --suite unit`, or configure CI with a software Vulkan ICD such as lavapipe.
 
 ## Verification

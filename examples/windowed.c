@@ -84,10 +84,10 @@ int main(void)
 
         int w, h;
         glfwGetFramebufferSize(win, &w, &h);
-        if (w > 0 && h > 0) flux_surface_resize(surface, w, h);
+        if (w > 0 && h > 0) (void)flux_surface_resize(surface, w, h);
 
         flux_canvas *c = flux_surface_acquire(surface);
-        flux_canvas_clear(c, flux_color_rgba(30, 30, 30, 255));
+        (void)flux_canvas_clear(c, flux_color_rgba(30, 30, 30, 255));
 
         float t = (float)glfwGetTime();
         float cx = 400.0f + sinf(t)        * 200.0f;
@@ -110,7 +110,7 @@ int main(void)
         flux_path_add_circle(circle, cx + 100.0f, cy, 40.0f);
         (void)flux_canvas_fill_path(c, circle, circle_paint);
 
-        flux_surface_present(surface);
+        (void)flux_surface_present(surface);
 
         flux_path_release(box);
         flux_path_release(circle);

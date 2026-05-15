@@ -33,8 +33,8 @@ int main(void)
     if (r != FLUX_OK) { flux_context_release(ctx); return die("surface_create", r); }
 
     flux_canvas *c = flux_surface_acquire(surface);
-    flux_canvas_clear(c, flux_color_rgba(0, 100, 200, 255));
-    flux_surface_present(surface);
+    (void)flux_canvas_clear(c, flux_color_rgba(0, 100, 200, 255));
+    (void)flux_surface_present(surface);
 
     static uint8_t pixels[256 * 256 * 4];
     if ((r = flux_surface_read_pixels(surface, pixels, 0)) != FLUX_OK) {

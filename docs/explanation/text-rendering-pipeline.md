@@ -19,7 +19,7 @@ UTF-8 text string
 [Rasterization]         <-- FreeType / stb_truetype / caller's rasterizer
       |  Glyph outlines → 8-bit alpha masks
       v
-[Glyph upload]          <-- fx_glyph_upload (boundary)
+[Glyph upload]          <-- flux_glyph_upload (boundary)
 
 flux layer
 ----------
@@ -60,10 +60,10 @@ Once the caller has rasterized a glyph to a bitmap, flux takes over:
 
 The glyph atlas is the key to fast text rendering:
 
-1. **Upload** — When a glyph is needed, the caller rasterizes it and uploads via `fx_glyph_upload`. The bitmap is copied into the atlas texture and uploaded to the GPU.
+1. **Upload** — When a glyph is needed, the caller rasterizes it and uploads via `flux_glyph_upload`. The bitmap is copied into the atlas texture and uploaded to the GPU.
 2. **Cache hit** — Subsequent draws of the same glyph ID reuse the atlas entry. No CPU rasterization, no GPU upload.
-3. **Eviction** — When the atlas fills, flux logs a warning, waits for in-flight frames to finish, clears every entry, and starts fresh. The next frame must re-upload any glyphs that are still needed.
-4. **Rejection** — Glyphs larger than 2046 pixels are rejected upfront. This prevents a single giant glyph from evicting the entire atlas.
+3. **Atlas full** — When the atlas cannot fit a new glyph, `flux_glyph_upload` returns `FLUX_ERROR_OUT_OF_MEMORY`. The caller decides what to do next: skip the glyph, rasterize at a smaller size, or clear and rebuild its own glyph cache.
+4. **Rejection** — Glyphs larger than 2046 pixels are rejected upfront because they exceed the fixed atlas dimensions.
 
 The atlas is shared across all surfaces in a context. Two surfaces drawing the same glyph ID share one atlas entry.
 
@@ -79,13 +79,13 @@ Application layer:
   4. Layout engine positions the run at (24.0, 40.0)
 
 Boundary:
-  5. Toolkit uploads each glyph bitmap via fx_glyph_upload(ctx, glyph_id, ...)
-  6. Toolkit creates fx_glyph_run with the four positioned glyphs
+  5. Toolkit uploads each glyph bitmap via flux_glyph_upload(ctx, glyph_id, ...)
+  6. Toolkit creates flux_glyph_run with the four positioned glyphs
 
 flux layer:
-  7. fx_draw_glyph_run(c, run, 24.0f, 40.0f, &paint)
+  7. flux_draw_glyph_run(c, run, 24.0f, 40.0f, &paint)
   8. Canvas records the draw op (no GPU work yet)
-  9. fx_surface_present triggers execution:
+  9. flux_surface_present triggers execution:
      a. Check atlas for glyph IDs 55, 68, 83, 72
      b. Emit four textured quads (one per glyph)
      c. GPU blends the text color with atlas alpha
@@ -106,7 +106,7 @@ The practical contract is: **rasterize above, pack and render below**. The calle
 ## Performance notes
 
 - **Atlas warm-up** — The first frame that uses a new glyph pays the upload cost. Subsequent frames are cache hits.
-- **Batching** — Consecutive `fx_draw_glyph_run` calls with the same paint color are batched into a single Vulkan draw call.
+- **Batching** — Consecutive `flux_draw_glyph_run` calls with the same paint color are batched into a single Vulkan draw call.
 - **Memory** — The atlas texture is 4 MB (2048 × 2048 × 1 byte). One atlas per context, shared across all surfaces.
 - **Glyph ID space** — The caller owns the glyph ID namespace. Different fonts/sizes should use distinct ID ranges.
 

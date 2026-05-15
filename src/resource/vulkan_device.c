@@ -232,14 +232,51 @@ static bool create_device(VkPhysicalDevice phys, VkSurfaceKHR surface,
         n_qci = 2;
     }
 
-    const char *exts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+    /* Query device extensions */
+    uint32_t ext_count = 0;
+    vkEnumerateDeviceExtensionProperties(phys, nullptr, &ext_count, nullptr);
+    VkExtensionProperties *avail_exts = calloc(ext_count, sizeof(*avail_exts));
+    if (ext_count) vkEnumerateDeviceExtensionProperties(phys, nullptr, &ext_count, avail_exts);
+
+    const char *exts[4];
+    uint32_t n_exts = 0;
+    exts[n_exts++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+
+    bool has_eds3 = has_ext(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME, avail_exts, ext_count);
+    bool has_blend_advanced = has_ext(VK_EXT_BLEND_OPERATION_ADVANCED_EXTENSION_NAME, avail_exts, ext_count);
+    free(avail_exts);
+
+    VkPhysicalDeviceExtendedDynamicState3FeaturesEXT eds3_feats = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT,
+    };
+    VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT blend_advanced_feats = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_FEATURES_EXT,
+    };
+
+    void *p_next = nullptr;
+    if (has_eds3) {
+        exts[n_exts++] = VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME;
+        eds3_feats.extendedDynamicState3ColorBlendEquation = VK_TRUE;
+        p_next = &eds3_feats;
+    }
+    if (has_blend_advanced) {
+        exts[n_exts++] = VK_EXT_BLEND_OPERATION_ADVANCED_EXTENSION_NAME;
+        blend_advanced_feats.advancedBlendCoherentOperations = VK_TRUE;
+        if (has_eds3) {
+            eds3_feats.pNext = &blend_advanced_feats;
+        } else {
+            p_next = &blend_advanced_feats;
+        }
+    }
+
     VkPhysicalDeviceFeatures feats = {0};
 
     VkDeviceCreateInfo dci = {
         .sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pNext                   = p_next,
         .queueCreateInfoCount    = n_qci,
         .pQueueCreateInfos       = qci,
-        .enabledExtensionCount   = 1,
+        .enabledExtensionCount   = n_exts,
         .ppEnabledExtensionNames = exts,
         .pEnabledFeatures        = &feats,
     };

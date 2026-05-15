@@ -34,12 +34,12 @@ int main(void)
     }
 
     flux_canvas *c = flux_surface_acquire(s);
-    flux_canvas_clear(c, flux_color_rgba(245, 245, 250, 255));
+    (void)flux_canvas_clear(c, flux_color_rgba(245, 245, 250, 255));
 
     /* Rounded-rect filled with a linear gradient. */
     flux_path *path = NULL;
-    flux_path_create(ctx, &path);
-    flux_path_add_round_rect(path, &(flux_rect){ 50, 50, 300, 200 }, 20.0f);
+    (void)flux_path_create(ctx, &path);
+    (void)flux_path_add_round_rect(path, &(flux_rect){ 50, 50, 300, 200 }, 20.0f);
 
     flux_color   grad_colors[2] = { 0xFFFF0000u, 0xFF0000FFu };
     float        grad_stops [2] = { 0.0f, 1.0f };
@@ -52,25 +52,25 @@ int main(void)
         .stop_count = 2,
     };
     flux_gradient *grad = NULL;
-    flux_gradient_create_linear(ctx, &gdesc, &grad);
+    (void)flux_gradient_create_linear(ctx, &gdesc, &grad);
 
     flux_paint *paint = NULL;
-    flux_paint_create(ctx, &paint);
-    flux_paint_set_color   (paint, flux_color_rgba(255, 255, 255, 255));
-    flux_paint_set_gradient(paint, grad);
+    (void)flux_paint_create(ctx, &paint);
+    (void)flux_paint_set_color   (paint, flux_color_rgba(255, 255, 255, 255));
+    (void)flux_paint_set_gradient(paint, grad);
     (void)flux_canvas_fill_path(c, path, paint);
 
     /* Clipped overlay. */
-    flux_canvas_clip_rect(c, &(flux_rect){ 150, 100, 100, 100 });
+    (void)flux_canvas_clip_rect(c, &(flux_rect){ 150, 100, 100, 100 });
     (void)flux_canvas_fill_rect(c,
         &(flux_rect){ 100, 75, 200, 150 },
         flux_color_rgba(0, 255, 0, 128));
 
-    flux_surface_present(s);
+    (void)flux_surface_present(s);
 
     uint8_t *pixels = malloc((size_t)w * h * 4);
     if (pixels) {
-        flux_surface_read_pixels(s, pixels, 0);
+        (void)flux_surface_read_pixels(s, pixels, 0);
         FILE *f = fopen("hello_rect.ppm", "wb");
         if (f) {
             fprintf(f, "P6\n%d %d\n255\n", w, h);

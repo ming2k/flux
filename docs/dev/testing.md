@@ -1,212 +1,121 @@
 # Testing
 
-## Overview
+## Test structure
 
-| Suite | Location | Status |
+flux uses Meson for both tests and benchmarks. Everything lives in `tests/`:
+
+| File | Suite | Purpose |
 |---|---|---|
-| Foundation unit tests | `tests/test_foundation.c` | **Shipped** |
-| Unit tests | `tests/test_*.c` | **Shipped** |
-| Integration (headless/offscreen) | `tests/test_offscreen.c`, `test_gradient.c`, `test_clip.c`, `test_multi_subpath.c`, `test_missing_apis.c` | **Shipped** |
-| Golden-image tests | `tests/test_render_golden.c` | Future |
-| Performance benchmark | `bench/bench_ui.c` | Future |
-
-The current automated gate is the unit suite plus headless/offscreen Vulkan
-integration tests. Golden-image tests and performance benchmarks are
-future release-hardening work.
+| `test_*.c` (13 files) | `unit` | Component tests: math, colour, path, paint, gradient, image, glyph runs, canvas transforms, allocator, offscreen, null safety, API surface, version. |
+| `test_golden.c` | `golden` | Pixel-level regression tests against checked-in reference images. |
+| `test_vulkan_smoke.c` | `integration` | Verifies Vulkan device creation on the current driver. |
+| `bench_render.c` | `benchmark` | Performance regression test; reports fps and mpix/sec. |
 
 ## Running tests
 
 ```sh
-meson setup build -Dtests=true
+meson setup build
 ninja -C build
+
+# All tests
 meson test -C build
-```
 
-Individual suites:
-
-```sh
+# Individual suites
 meson test -C build --suite unit
+meson test -C build --suite golden
 meson test -C build --suite integration
+
+# Serial execution (recommended for software Vulkan drivers)
+meson test -C build --suite unit --suite golden --suite integration --num-processes 1
 ```
-
-For release checks, prefer serial execution so software Vulkan drivers do not
-share device state across test processes:
-
-```sh
-meson test -C build --suite unit --suite integration --num-processes 1
-```
-
-Tests can run with `FX_ENABLE_VALIDATION=1`. A validation error at
-`VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT` level causes the test
-to fail regardless of the rendered output.
-
-## Foundation unit tests (shipped)
-
-### `test_foundation.c`
-
-Tests the CPU-only low-level object model and recorder state.
-
-Assertions:
-- `fx_path` records verbs/points correctly and tracks bounds.
-- `fx_image` applies default stride/usage rules and retains a private
-  pixel copy.
-- `fx_glyph_run` preserves explicit metadata and glyph
-  placement.
-- `fx_canvas` records fill/stroke/image/glyph ops in order and resets
-  cleanly between frames.
-
-This suite does not create a presentation surface and does not require a
-display server.
 
 ## Unit tests
 
-### `test_stroker.c`
+Unit tests exercise one component at a time and do not require a GPU. They run in milliseconds.
 
-Tests the CPU-side stroke-to-fill expander in isolation. Does not
-require Vulkan.
+| Test | Coverage |
+|---|---|
+| `test_version` | Version string and number macros |
+| `test_matrix` | Affine transforms, inversion, identity |
+| `test_color` | RGBA packing and unpacking |
+| `test_path` | Verb recording, bounds, transforms |
+| `test_paint` | Property getters and setters |
+| `test_gradient` | Linear and radial gradient creation, validation |
+| `test_image` | CPU image creation, update, sub-region upload |
+| `test_glyph_run` | Run creation, append, retain/release |
+| `test_canvas_transform` | Save/restore, matrix stack |
+| `test_offscreen` | Software surface creation, clear, fill_rect, read_pixels |
+| `test_allocator` | Context allocator hooks and peak tracking |
+| `test_null_safety` | NULL input handling on every public entry point |
+| `test_api_surface` | Link-time verification of all exported symbols |
 
-Inputs: synthetic polylines (line segments, L-shapes, star).
-Assertions:
-- Triangle count matches the analytic expectation for the cap/join
-  combination.
-- All output triangles are non-degenerate (positive area).
-- Bounding box of the output geometry matches stroke width + cap
-  extension.
+## Golden-image regression tests
 
-### `test_tess.c`
+`test_golden.c` renders five reference scenes to 128×128 offscreen surfaces and compares every pixel against checked-in PPM files in `tests/golden/`.
 
-Tests the polygon tessellator in isolation. Does not require Vulkan.
+| Scene | What it exercises |
+|---|---|
+| `solid_rect` | Solid colour fill_rect |
+| `gradient` | Linear gradient fill |
+| `clip` | Rectangular clip + fill |
+| `glyph` | Glyph upload, atlas binding, draw_image tinting |
+| `transform` | Rotate + translate matrix |
 
-Inputs: convex polygon, concave polygon, polygon with a hole,
-degenerate (zero-area) input.
-Assertions:
-- Triangle count matches the expected ear-clipping count.
-- Sum of triangle areas matches the analytically known polygon area
-  to within floating-point tolerance.
-- No degenerate triangles in output.
+Pass criterion: every RGB channel must match within `±1` of the reference. The software renderer is deterministic, so exact match is expected; the small tolerance accounts for build-to-build floating-point rounding differences.
 
-### `test_path.c`
-
-Tests the path flattener (curves → polylines).
-
-Inputs: quadratic and cubic Béziers at various tolerances.
-Assertions:
-- Segment count is within `[lo, hi]` for the given `device_scale`.
-- End points of the polyline are exactly the stated endpoints of the
-  curve (no drift).
-- Maximum deviation of any midpoint from the true curve is ≤
-  `tolerance` pixels.
-
-### `test_shape_cache.c`
-
-Tests that identical paths hashed into the glyph/shape cache return
-the same tessellation buffer without re-tessellating. Asserts cache hit
-rate ≥ 99% for a repeated-draw workload.
-
-## Golden-image tests
-
-`tests/test_render_golden.c` renders a fixed set of scenes to an
-offscreen `fx_surface` created with `fx_surface_create_offscreen`,
-reads pixels back with `fx_surface_read_pixels`, and compares against
-reference PNGs stored under `tests/golden/`.
-
-### Pass/fail criterion
-
-A golden test passes when, for every pixel:
-
-    channels_above_threshold = sum(|actual[c] - expected[c]| > 4
-                               for c in {R, G, B})
-    if channels_above_threshold >= 3: fail
-
-Put plainly: at most 2 colour channels may differ by more than 4
-out of 255 at any single pixel, and even then it must not affect all
-three simultaneously. Alpha differences are not measured (blend mode
-coverage around antialiased edges may vary across driver versions).
-
-### Updating goldens
-
-When a rendering change is intentional (new AA algorithm, fixed
-tessellation bug):
+**Updating references after an intentional visual change:**
 
 ```sh
-FX_UPDATE_GOLDENS=1 meson test -C build --suite golden
+FLUX_GOLDEN_UPDATE=1 meson test -C build --suite golden
 ```
 
-Review the diffs with an image diff tool before committing. Never
-update a golden to hide a regression — golden diffs should always
-be reviewed by eye.
-
-### Current golden scenes
-
-| Scene | Covers |
-|---|---|
-| `solid_rect` | axis-aligned fill, solid color |
-| `stroke_line` | line stroke, butt caps |
-| `stroke_round` | round caps and joins |
-| `rrect` | rounded rectangle fill |
-| `circle` | circle fill |
-| `linear_gradient` | linear gradient, horizontal |
-| `radial_gradient` | radial gradient |
-| `image_blit` | image upload and draw |
-| `text_run` | shaped text, 16px |
-| `text_large` | SDF path, 80px |
-| `clip_rect` | rect clip |
-| `blend_modes` | side-by-side all 7 blend modes |
-| `blur_shadow` | drop shadow and blur |
-
-## Integration tests
-
-The shipped integration tests create offscreen surfaces and read pixels back
-without a display server. CI forces Mesa lavapipe with `VK_ICD_FILENAMES` so the
-tests can run on hosted runners without a physical GPU.
-
-Example programs are not part of the automated release gate.
+Review the regenerated PPM files in `tests/golden/` before committing.
 
 ## Performance benchmark
 
-`bench/bench_ui.c` replays a synthetic UI scene:
-
-- 1 panel fill (full-screen rect)
-- 8 card rects with rounded corners
-- 4 text labels of 60–120 glyphs
-- 12 icon images (32×32 px)
-- Total: ~200 draw ops per frame
-
-The benchmark replays 10 000 frames and reports:
+`bench_render.c` renders a stress-test scene for 120 frames and reports throughput:
 
 ```
-p50:  X.XX ms
-p95:  X.XX ms
-p99:  X.XX ms
-peak: X.XX ms
+frames:       120
+elapsed_ms:   925
+ms_per_frame: 7.71
+fps:          129.7
+mpix/sec:     34.0
 ```
 
-Pass criteria (§1.3 of the design brief):
+The scene contains 20 fill rects, a rounded-rect path with a gradient, and 64 textured glyphs.
 
-| GPU | Full-screen 4K ~200 ops | Text run 1000 glyphs |
-|---|---|---|
-| Intel Iris Xe (integrated) | < 4 ms GPU | < 2 ms record + submit |
-
-The benchmark is excluded from `meson test`; run it explicitly:
+Run benchmarks explicitly (they are not part of `meson test`):
 
 ```sh
-./build/bench/bench_ui
+meson test --benchmark -C build --verbose
 ```
 
-## Validation in tests
+Benchmarks are used for regression detection in CI. A significant slowdown (e.g. >10% fps drop) should block a PR until it is understood.
 
-Validation-layer runs should set `FX_ENABLE_VALIDATION=1`. Tests that install a
-custom `fx_log_fn` record every log message. After the test body runs, the
-harness asserts:
+## Integration tests
 
-```c
-assert(error_count == 0);
-```
+`test_vulkan_smoke.c` attempts to create a Vulkan device through flux's convenience helper. It may **skip** (exit code 77) if:
 
-where `error_count` is the number of `FX_LOG_ERROR` messages. A
-single validation error fails the test, even if the rendered output
-matches the golden.
+- flux was compiled without Vulkan support (`FLUX_NO_VULKAN=1`)
+- No Vulkan driver is installed on the machine
 
-The `fx_log_fn` callback receives source `file` and `line` in addition to
-the formatted message, so tests can optionally assert that errors originate
-from expected locations.
+This makes the test safe to run on diverse CI runners without hard-failing on missing GPU hardware.
+
+## Writing a new unit test
+
+1. Create `tests/test_my_feature.c`.
+2. Include `<flux/flux.h>` and `"test_helpers.h"`.
+3. Use the `CHECK(cond)` macro for assertions; it prints file/line and returns 1 on failure.
+4. Add the file to `tests/meson.build`:
+   ```meson
+   test('my_feature', executable('test_my_feature', 'test_my_feature.c',
+        dependencies : [flux_dep]), suite : 'unit')
+   ```
+5. Run `meson test -C build --suite unit` to verify.
+
+Tests should not require a display server, physical GPU, or user interaction. If a test needs Vulkan, place it in the `integration` suite and make it skip gracefully when Vulkan is unavailable.
+
+## See also
+
+- [How to run from source](../how-to/run-from-source.md) — local build instructions.

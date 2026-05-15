@@ -230,6 +230,11 @@ void flux_context_release(flux_context *ctx)
 {
     if (!ctx) return;
     if (flux_ref_release(&ctx->ref_count) == 0) {
+        if (ctx->atlas) {
+            flux_free(ctx, ctx->atlas->pixels);
+            flux_free(ctx, ctx->atlas->slots);
+            flux_free(ctx, ctx->atlas);
+        }
         flux_allocator a = ctx->allocator;
         a.free(ctx, a.user);
     }

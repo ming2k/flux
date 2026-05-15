@@ -58,7 +58,7 @@ flux_result flux_paint_snapshot(const flux_paint *src, flux_paint_state *out)
     out->dash_array = NULL;
     out->dash_count = 0;
 
-    if (src->state.gradient) flux_gradient_retain(src->state.gradient);
+    if (src->state.gradient) (void)flux_gradient_retain(src->state.gradient);
 
     if (src->state.dash_array && src->state.dash_count > 0) {
         size_t bytes = src->state.dash_count * sizeof(float);
@@ -112,7 +112,7 @@ flux_result flux_paint_set_gradient(flux_paint *paint, flux_gradient *grad)
 {
     if (!paint) return FLUX_ERROR_INVALID_ARGUMENT;
     if (paint->state.gradient == grad) return FLUX_OK;
-    if (grad) flux_gradient_retain(grad);
+    if (grad) (void)flux_gradient_retain(grad);
     if (paint->state.gradient) flux_gradient_release(paint->state.gradient);
     paint->state.gradient = grad;
     return FLUX_OK;

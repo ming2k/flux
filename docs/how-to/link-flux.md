@@ -62,4 +62,4 @@ or shared from the top-level `default_library` option.
 
 ## Verification
 
-Compile a small application that includes `flux/flux.h` and creates an `fx_context`. The compile and link step should complete without unresolved `fx_*` symbols.
+Compile a small application that includes `flux/flux.h` and creates an `flux_context`. The compile and link step should complete without unresolved `flux_*` symbols.

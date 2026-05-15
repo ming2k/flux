@@ -1,7 +1,7 @@
 /*
  * flux — 2D graphics foundation library.
  *
- * Public API v0.3.0.
+ * Public API v0.2.2.
  *
  * This is a clean break from prior 0.x versions. Every symbol uses the
  * `flux_*` prefix; every fallible call returns `flux_result`; every
@@ -82,7 +82,7 @@ extern "C" {
 
 #define FLUX_VERSION_MAJOR 0
 #define FLUX_VERSION_MINOR 2
-#define FLUX_VERSION_PATCH 1
+#define FLUX_VERSION_PATCH 2
 
 /* Encoded as 0xMMmmpp00 (24-bit semantic version, low 8 bits reserved). */
 #define FLUX_VERSION_NUMBER \
@@ -100,7 +100,7 @@ FLUX_API bool flux_version_check(int major, int minor, int patch);
 /* ------------------------------------------------------------------ */
 
 typedef enum flux_result {
-    FLUX_OK                       = 0,
+    FLUX_OK                       = 0,  /* Success. */
     FLUX_ERROR_INVALID_ARGUMENT   = 1,  /* NULL pointer, bad enum, etc. */
     FLUX_ERROR_OUT_OF_MEMORY      = 2,
     FLUX_ERROR_OUT_OF_RANGE       = 3,  /* Index or value past valid bound. */
@@ -173,7 +173,7 @@ typedef void (*flux_log_fn)(flux_log_level level,
 /* ------------------------------------------------------------------ */
 
 typedef struct flux_capabilities {
-    uint32_t size;                  /* Set to sizeof(flux_capabilities). */
+    uint32_t size;                  /* Must be set to sizeof(flux_capabilities). */
     bool     has_vulkan;
     bool     has_software;
     bool     has_stencil;
@@ -206,7 +206,6 @@ typedef struct flux_glyph_run flux_glyph_run;
 typedef uint32_t flux_color;
 
 typedef struct flux_point  { float x, y;       } flux_point;
-typedef struct flux_size   { float w, h;       } flux_size;
 typedef struct flux_rect   { float x, y, w, h; } flux_rect;
 
 /* 2D affine transform stored column-major:
@@ -225,43 +224,43 @@ typedef struct flux_matrix { float m[6]; } flux_matrix;
 /* ------------------------------------------------------------------ */
 
 typedef enum flux_line_cap {
-    FLUX_CAP_BUTT   = 0,
-    FLUX_CAP_ROUND  = 1,
-    FLUX_CAP_SQUARE = 2,
+    FLUX_CAP_BUTT   = 0,  /* Flat edge, stops at the end point. */
+    FLUX_CAP_ROUND  = 1,  /* Semicircular cap centred on the end point. */
+    FLUX_CAP_SQUARE = 2,  /* Square cap extending by half stroke width. */
 } flux_line_cap;
 
 typedef enum flux_line_join {
-    FLUX_JOIN_MITER = 0,
-    FLUX_JOIN_ROUND = 1,
-    FLUX_JOIN_BEVEL = 2,
+    FLUX_JOIN_MITER = 0,  /* Sharp corner, clipped by miter limit. */
+    FLUX_JOIN_ROUND = 1,  /* Rounded join. */
+    FLUX_JOIN_BEVEL = 2,  /* Bevelled (flat) join. */
 } flux_line_join;
 
 typedef enum flux_fill_rule {
-    FLUX_FILL_EVEN_ODD = 0,
-    FLUX_FILL_NON_ZERO = 1,
+    FLUX_FILL_EVEN_ODD = 0,  /* Standard SVG even-odd rule. */
+    FLUX_FILL_NON_ZERO = 1,  /* Standard SVG non-zero winding rule. */
 } flux_fill_rule;
 
 /* Porter-Duff and selected separable blend modes. Backends that do not
  * support a mode return FLUX_ERROR_UNSUPPORTED at record time. */
 typedef enum flux_blend_mode {
-    FLUX_BLEND_SRC_OVER = 0,
-    FLUX_BLEND_DST_OVER = 1,
-    FLUX_BLEND_SRC_IN   = 2,
-    FLUX_BLEND_DST_IN   = 3,
-    FLUX_BLEND_SRC_OUT  = 4,
-    FLUX_BLEND_DST_OUT  = 5,
-    FLUX_BLEND_SRC_ATOP = 6,
-    FLUX_BLEND_DST_ATOP = 7,
-    FLUX_BLEND_XOR      = 8,
-    FLUX_BLEND_PLUS     = 9,
-    FLUX_BLEND_MULTIPLY = 10,
-    FLUX_BLEND_SCREEN   = 11,
-    FLUX_BLEND_OVERLAY  = 12,
+    FLUX_BLEND_SRC_OVER = 0,  /* s + d * (1 - s.a)   — default. */
+    FLUX_BLEND_DST_OVER = 1,  /* d + s * (1 - d.a) */
+    FLUX_BLEND_SRC_IN   = 2,  /* s * d.a */
+    FLUX_BLEND_DST_IN   = 3,  /* d * s.a */
+    FLUX_BLEND_SRC_OUT  = 4,  /* s * (1 - d.a) */
+    FLUX_BLEND_DST_OUT  = 5,  /* d * (1 - s.a) */
+    FLUX_BLEND_SRC_ATOP = 6,  /* s * d.a + d * (1 - s.a) */
+    FLUX_BLEND_DST_ATOP = 7,  /* d * s.a + s * (1 - d.a) */
+    FLUX_BLEND_XOR      = 8,  /* s * (1 - d.a) + d * (1 - s.a) */
+    FLUX_BLEND_PLUS     = 9,  /* s + d   (clamped) */
+    FLUX_BLEND_MULTIPLY = 10, /* s.rgb * d.rgb   (separable) */
+    FLUX_BLEND_SCREEN   = 11, /* 1 - (1-s.rgb)*(1-d.rgb)   (separable) */
+    FLUX_BLEND_OVERLAY  = 12, /* Overlay of s over d   (separable) */
 } flux_blend_mode;
 
 typedef enum flux_color_space {
-    FLUX_CS_SRGB        = 0,
-    FLUX_CS_SRGB_LINEAR = 1,
+    FLUX_CS_SRGB        = 0,  /* Standard sRGB with gamma. */
+    FLUX_CS_SRGB_LINEAR = 1,  /* Linear (no gamma) — rare, mainly for compute. */
 } flux_color_space;
 
 typedef enum flux_pixel_format {
@@ -271,17 +270,17 @@ typedef enum flux_pixel_format {
 } flux_pixel_format;
 
 typedef enum flux_image_usage_bits {
-    FLUX_IMAGE_USAGE_SAMPLED          = 1u << 0,
-    FLUX_IMAGE_USAGE_STORAGE          = 1u << 1,
-    FLUX_IMAGE_USAGE_COLOR_ATTACHMENT = 1u << 2,
-    FLUX_IMAGE_USAGE_TRANSFER_SRC     = 1u << 3,
-    FLUX_IMAGE_USAGE_TRANSFER_DST     = 1u << 4,
+    FLUX_IMAGE_USAGE_SAMPLED          = 1u << 0,  /* Usable as a texture. */
+    FLUX_IMAGE_USAGE_STORAGE          = 1u << 1,  /* Usable as a compute storage image. */
+    FLUX_IMAGE_USAGE_COLOR_ATTACHMENT = 1u << 2,  /* Usable as a framebuffer target. */
+    FLUX_IMAGE_USAGE_TRANSFER_SRC     = 1u << 3,  /* Usable as a blit/copy source. */
+    FLUX_IMAGE_USAGE_TRANSFER_DST     = 1u << 4,  /* Usable as a blit/copy destination. */
 } flux_image_usage_bits;
 
 typedef enum flux_gradient_extend {
-    FLUX_EXTEND_PAD     = 0,   /* Hold edge color past the last stop. */
-    FLUX_EXTEND_REPEAT  = 1,
-    FLUX_EXTEND_REFLECT = 2,
+    FLUX_EXTEND_PAD     = 0,  /* Hold edge color past the last stop. */
+    FLUX_EXTEND_REPEAT  = 1,  /* Repeat the gradient pattern. */
+    FLUX_EXTEND_REFLECT = 2,  /* Repeat with mirroring at boundaries. */
 } flux_gradient_extend;
 
 /* ------------------------------------------------------------------ */
@@ -289,7 +288,7 @@ typedef enum flux_gradient_extend {
 /* ------------------------------------------------------------------ */
 
 typedef struct flux_context_desc {
-    uint32_t        size;          /* sizeof(flux_context_desc) */
+    uint32_t        size;          /* Must be set to sizeof(flux_context_desc). */
     flux_allocator  allocator;     /* Zero-init = libc malloc. */
     flux_log_fn     log;           /* NULL = silent. */
     void           *log_user;
@@ -297,7 +296,7 @@ typedef struct flux_context_desc {
 } flux_context_desc;
 
 typedef struct flux_image_desc {
-    uint32_t          size;        /* sizeof(flux_image_desc) */
+    uint32_t          size;        /* Must be set to sizeof(flux_image_desc). */
     uint32_t          width, height;
     flux_pixel_format format;
     uint32_t          usage;       /* Bitfield of flux_image_usage_bits. */
@@ -306,7 +305,7 @@ typedef struct flux_image_desc {
 } flux_image_desc;
 
 typedef struct flux_linear_gradient_desc {
-    uint32_t              size;    /* sizeof(flux_linear_gradient_desc) */
+    uint32_t              size;    /* Must be set to sizeof(flux_linear_gradient_desc). */
     flux_point            start, end;
     const flux_color     *colors;  /* Length = stop_count. */
     const float          *stops;   /* Length = stop_count, monotonic in [0,1]. */
@@ -315,7 +314,7 @@ typedef struct flux_linear_gradient_desc {
 } flux_linear_gradient_desc;
 
 typedef struct flux_radial_gradient_desc {
-    uint32_t              size;    /* sizeof(flux_radial_gradient_desc) */
+    uint32_t              size;    /* Must be set to sizeof(flux_radial_gradient_desc). */
     flux_point            center;
     float                 radius;
     const flux_color     *colors;
@@ -324,6 +323,8 @@ typedef struct flux_radial_gradient_desc {
     flux_gradient_extend  extend;
 } flux_radial_gradient_desc;
 
+/* Position of a single glyph inside a run. (x, y) are relative to the
+ * run origin and use the same coordinate space as the canvas. */
 typedef struct flux_glyph {
     uint32_t glyph_id;
     float    x, y;
@@ -376,7 +377,7 @@ FLUX_API void flux_matrix_multiply(flux_matrix *out,
 /* Returns false if `m` is singular (determinant == 0); `out` unchanged. */
 FLUX_NODISCARD FLUX_API bool flux_matrix_invert(const flux_matrix *m, flux_matrix *out);
 
-FLUX_API bool flux_matrix_is_identity(const flux_matrix *m);
+FLUX_NODISCARD FLUX_API bool flux_matrix_is_identity(const flux_matrix *m);
 
 FLUX_API void flux_matrix_transform_point(const flux_matrix *m, float *x, float *y);
 
@@ -422,13 +423,13 @@ FLUX_NODISCARD FLUX_API flux_result flux_surface_create_offscreen(
 FLUX_NODISCARD FLUX_API flux_surface *flux_surface_retain(flux_surface *s);
 FLUX_API               void           flux_surface_release(flux_surface *s);
 
-FLUX_API flux_result flux_surface_resize(flux_surface *s, int32_t w, int32_t h);
+FLUX_NODISCARD FLUX_API flux_result flux_surface_resize(flux_surface *s, int32_t w, int32_t h);
 
 FLUX_API flux_result flux_surface_get_size(const flux_surface *s,
                                            int32_t *out_w, int32_t *out_h);
 FLUX_API flux_pixel_format flux_surface_get_format(const flux_surface *s);
 
-FLUX_API flux_result flux_surface_set_dpr(flux_surface *s, float dpr);
+FLUX_NODISCARD FLUX_API flux_result flux_surface_set_dpr(flux_surface *s, float dpr);
 FLUX_API float       flux_surface_get_dpr(const flux_surface *s);
 
 /* Begin a frame. The returned canvas is borrowed and valid only until
@@ -436,7 +437,7 @@ FLUX_API float       flux_surface_get_dpr(const flux_surface *s);
 FLUX_NODISCARD FLUX_API flux_canvas *flux_surface_acquire(flux_surface *s);
 
 /* Execute the recorded display list and present. */
-FLUX_API flux_result flux_surface_present(flux_surface *s);
+FLUX_NODISCARD FLUX_API flux_result flux_surface_present(flux_surface *s);
 
 /* Read back the most recently presented frame. Stride 0 = packed.
  * Only available for offscreen / software surfaces. */
@@ -447,12 +448,12 @@ FLUX_NODISCARD FLUX_API flux_result flux_surface_read_pixels(
 /*  Canvas (recording)                                                */
 /* ------------------------------------------------------------------ */
 
-FLUX_API flux_result flux_canvas_clear(flux_canvas *c, flux_color color);
+FLUX_NODISCARD FLUX_API flux_result flux_canvas_clear(flux_canvas *c, flux_color color);
 FLUX_API size_t      flux_canvas_op_count(const flux_canvas *c);
 
 /* Transform stack. */
 FLUX_API flux_result flux_canvas_save(flux_canvas *c);
-FLUX_API flux_result flux_canvas_restore(flux_canvas *c);
+FLUX_NODISCARD FLUX_API flux_result flux_canvas_restore(flux_canvas *c);
 FLUX_API flux_result flux_canvas_translate(flux_canvas *c, float dx, float dy);
 FLUX_API flux_result flux_canvas_scale(flux_canvas *c, float sx, float sy);
 FLUX_API flux_result flux_canvas_rotate(flux_canvas *c, float radians);
@@ -496,7 +497,7 @@ FLUX_NODISCARD FLUX_API flux_result flux_paint_create(
 FLUX_NODISCARD FLUX_API flux_paint *flux_paint_retain(flux_paint *paint);
 FLUX_API               void         flux_paint_release(flux_paint *paint);
 
-/* Setters. */
+/* Setters. All may return FLUX_ERROR_INVALID_ARGUMENT on out-of-range values. */
 FLUX_API flux_result flux_paint_set_color       (flux_paint *p, flux_color c);
 FLUX_API flux_result flux_paint_set_stroke_width(flux_paint *p, float w);
 FLUX_API flux_result flux_paint_set_miter_limit (flux_paint *p, float limit);
@@ -536,7 +537,7 @@ FLUX_API               void        flux_path_release(flux_path *path);
 /* Clear all verbs and points without freeing the path object. */
 FLUX_API void flux_path_clear(flux_path *path);
 
-/* Verb construction. */
+/* Verb construction. All may return FLUX_ERROR_OUT_OF_MEMORY. */
 FLUX_API flux_result flux_path_move_to (flux_path *p, float x, float y);
 FLUX_API flux_result flux_path_line_to (flux_path *p, float x, float y);
 FLUX_API flux_result flux_path_quad_to (flux_path *p, float cx, float cy,
@@ -606,6 +607,9 @@ FLUX_NODISCARD FLUX_API flux_result flux_image_update(
 
 /* Update a sub-region. (x, y) is the top-left in image space; the source
  * data is `w` * `h` pixels at the given stride. */
+/* Update a sub-region. (x, y) is the top-left in image space; the source
+ * data is `w` * `h` pixels at the given stride. `stride == 0` means packed
+ * (w * bytes-per-pixel). */
 FLUX_NODISCARD FLUX_API flux_result flux_image_update_region(
     flux_image *image, uint32_t x, uint32_t y, uint32_t w, uint32_t h,
     const void *data, size_t stride);
@@ -615,7 +619,10 @@ FLUX_API flux_result flux_image_get_size(const flux_image *image,
 FLUX_API flux_pixel_format flux_image_get_format(const flux_image *image);
 
 /* CPU-side pixel pointer if the image keeps one (for offscreen / readback).
- * Returns NULL otherwise. */
+ * Returns NULL otherwise.
+ *
+ * `out_size` receives the total byte size of the buffer.
+ * `out_stride` receives the bytes per row. */
 FLUX_API const void *flux_image_data(const flux_image *image,
                                      size_t *out_size, size_t *out_stride);
 
@@ -623,11 +630,16 @@ FLUX_API const void *flux_image_data(const flux_image *image,
 /*  Glyph run                                                         */
 /* ------------------------------------------------------------------ */
 
+/* Upload a glyph bitmap to the context-global atlas.
+ *
+ * `bearing_x`, `bearing_y` are the glyph's origin offset from the left/top
+ * of the bitmap. `advance` is the horizontal advance in pixels. */
 FLUX_NODISCARD FLUX_API flux_result flux_glyph_upload(
     flux_context *ctx, uint32_t glyph_id,
     const uint8_t *bitmap, int w, int h,
     int bearing_x, int bearing_y, int advance);
 
+/* `reserve` is the initial capacity in glyph count (not bytes). */
 FLUX_NODISCARD FLUX_API flux_result flux_glyph_run_create(
     flux_context *ctx, size_t reserve, flux_glyph_run **out_run);
 

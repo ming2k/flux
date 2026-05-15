@@ -1,19 +1,116 @@
 /*
  * Glyph run: a small array of (glyph_id, x, y). The actual glyph atlas
- * is owned by the backend; flux_glyph_upload is the seam where bitmaps
- * are pushed into the atlas. Both are stubs at this layer; real
- * rasterisation happens in the RHI.
+ * is owned by the context; flux_glyph_upload packs bitmaps into a CPU-side
+ * A8 atlas. Surfaces lazy-create a backend texture from this atlas.
  */
 #include "internal.h"
+
+#include <string.h>
+
+#define ATLAS_W 2048
+#define ATLAS_H 2048
+#define ATLAS_PAD 2
+
+static flux_glyph_atlas *ensure_atlas(flux_context *ctx)
+{
+    if (ctx->atlas) return ctx->atlas;
+    flux_glyph_atlas *a = flux_calloc(ctx, 1, sizeof(*a));
+    if (!a) return NULL;
+    a->width  = ATLAS_W;
+    a->height = ATLAS_H;
+    a->pixels = flux_calloc(ctx, (size_t)ATLAS_W * ATLAS_H, 1);
+    if (!a->pixels) {
+        flux_free(ctx, a);
+        return NULL;
+    }
+    a->row_y = ATLAS_PAD;
+    a->row_x = ATLAS_PAD;
+    a->row_h = 0;
+    a->slot_cap = 256;
+    a->slots = flux_calloc(ctx, a->slot_cap, sizeof(flux_glyph_slot));
+    if (!a->slots) {
+        flux_free(ctx, a->pixels);
+        flux_free(ctx, a);
+        return NULL;
+    }
+    ctx->atlas = a;
+    return a;
+}
+
+flux_glyph_slot *flux_glyph_atlas_find(flux_glyph_atlas *a, uint32_t glyph_id)
+{
+    for (size_t i = 0; i < a->slot_count; i++) {
+        if (a->slots[i].glyph_id == glyph_id)
+            return &a->slots[i];
+    }
+    return NULL;
+}
+
+static bool alloc_atlas_rect(flux_glyph_atlas *a, uint16_t w, uint16_t h,
+                             uint16_t *out_x, uint16_t *out_y)
+{
+    uint16_t pw = w + ATLAS_PAD;
+    uint16_t ph = h + ATLAS_PAD;
+    if (a->row_x + pw > a->width) {
+        /* New shelf */
+        a->row_y += a->row_h + ATLAS_PAD;
+        a->row_x = ATLAS_PAD;
+        a->row_h = 0;
+    }
+    if (a->row_y + ph > a->height) {
+        return false; /* atlas full */
+    }
+    *out_x = (uint16_t)a->row_x;
+    *out_y = (uint16_t)a->row_y;
+    a->row_x += pw;
+    if (ph > a->row_h) a->row_h = ph;
+    return true;
+}
 
 flux_result flux_glyph_upload(flux_context *ctx, uint32_t glyph_id,
                               const uint8_t *bitmap, int w, int h,
                               int bearing_x, int bearing_y, int advance)
 {
-    (void)glyph_id; (void)bitmap;
-    (void)bearing_x; (void)bearing_y; (void)advance;
-    if (!ctx) return FLUX_ERROR_INVALID_ARGUMENT;
+    if (!ctx || !bitmap) return FLUX_ERROR_INVALID_ARGUMENT;
     if (w <= 0 || h <= 0) return FLUX_ERROR_INVALID_ARGUMENT;
+
+    flux_glyph_atlas *a = ensure_atlas(ctx);
+    if (!a) return FLUX_ERROR_OUT_OF_MEMORY;
+
+    if (flux_glyph_atlas_find(a, glyph_id)) return FLUX_OK; /* already uploaded */
+
+    uint16_t ax = 0, ay = 0;
+    if (!alloc_atlas_rect(a, (uint16_t)w, (uint16_t)h, &ax, &ay))
+        return FLUX_ERROR_OUT_OF_MEMORY; /* atlas full */
+
+    /* Copy bitmap into atlas */
+    for (int row = 0; row < h; row++) {
+        uint8_t *dst = a->pixels + (size_t)(ay + row) * a->width + ax;
+        const uint8_t *src = bitmap + (size_t)row * w;
+        memcpy(dst, src, (size_t)w);
+    }
+
+    if (a->slot_count >= a->slot_cap) {
+        size_t nc = a->slot_cap * 2;
+        flux_glyph_slot *ns = flux_realloc(ctx, a->slots,
+                                           a->slot_cap * sizeof(flux_glyph_slot),
+                                           nc * sizeof(flux_glyph_slot));
+        if (!ns) return FLUX_ERROR_OUT_OF_MEMORY;
+        a->slots = ns;
+        a->slot_cap = nc;
+    }
+
+    a->slots[a->slot_count++] = (flux_glyph_slot){
+        .glyph_id   = glyph_id,
+        .atlas_x    = ax,
+        .atlas_y    = ay,
+        .w          = (uint16_t)w,
+        .h          = (uint16_t)h,
+        .bearing_x  = (int16_t)bearing_x,
+        .bearing_y  = (int16_t)bearing_y,
+        .advance    = (uint16_t)advance,
+    };
+    a->revision++;
     return FLUX_OK;
 }
 
