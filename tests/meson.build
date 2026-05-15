@@ -12,6 +12,7 @@ unit_tests = [
   'test_allocator',
   'test_null_safety',
   'test_api_surface',
+  'test_log_helper',
 ]
 
 foreach name : unit_tests

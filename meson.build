@@ -1,5 +1,5 @@
 project('flux', ['c', 'cpp'],
-  version : '0.2.2',
+  version : '0.2.3',
   license : 'GPL-3.0',
   default_options : [
     'c_std=c23',

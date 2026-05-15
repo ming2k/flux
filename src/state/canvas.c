@@ -2,9 +2,10 @@
  * Canvas: records draw operations into a display list.
  *
  * Recording deep-copies paint state and dash arrays into each op so the
- * caller may mutate or release their flux_paint immediately. Path /
- * image / glyph_run handles are *borrowed* — they must outlive the
- * frame.
+ * caller may mutate or release their flux_paint immediately. Paths are
+ * *borrowed* — they must outlive the frame. Images and glyph runs are
+ * retained by the canvas and released automatically when the op list is
+ * cleared.
  */
 #include "internal.h"
 #include <math.h>
@@ -65,7 +66,11 @@ static void dispose_op(flux_op *op, flux_context *ctx)
             flux_path_release((flux_path *)op->u.clip_path.path);
         break;
     case FLUX_OP_DRAW_GLYPHS:
+        flux_glyph_run_release((flux_glyph_run *)op->u.draw_glyphs.run);
         flux_paint_state_dispose(&op->u.draw_glyphs.paint, ctx);
+        break;
+    case FLUX_OP_DRAW_IMAGE:
+        flux_image_release((flux_image *)op->u.draw_image.image);
         break;
     default: break;
     }
@@ -350,7 +355,9 @@ flux_result flux_canvas_draw_image(flux_canvas *c, const flux_image *image,
         .kind = FLUX_OP_DRAW_IMAGE,
         .u.draw_image = { .image = image, .src = src_rect, .dst = scaled_dst },
     };
-    return flux_canvas_push_op(c, &op) ? FLUX_OK : FLUX_ERROR_OUT_OF_MEMORY;
+    if (!flux_canvas_push_op(c, &op)) return FLUX_ERROR_OUT_OF_MEMORY;
+    (void)flux_image_retain((flux_image *)image);
+    return FLUX_OK;
 }
 
 flux_result flux_canvas_draw_glyph_run(flux_canvas *c, const flux_glyph_run *run,
@@ -375,6 +382,7 @@ flux_result flux_canvas_draw_glyph_run(flux_canvas *c, const flux_glyph_run *run
         flux_paint_state_dispose(&snap, c->owner->ctx);
         return FLUX_ERROR_OUT_OF_MEMORY;
     }
+    (void)flux_glyph_run_retain((flux_glyph_run *)run);
     return FLUX_OK;
 }
 

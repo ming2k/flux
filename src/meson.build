@@ -120,6 +120,7 @@ flux_layered_sources = files(
 
   'resource/context.c',
   'resource/image.c',
+  'resource/log_helper.c',
   'resource/text.c',
 
   'rhi/software/software_rhi.c',
@@ -164,5 +165,6 @@ flux_dep = declare_dependency(
   dependencies        : flux_deps,
 )
 
-install_headers('../include/flux/flux.h',         subdir : 'flux')
-install_headers('../include/flux/flux_vulkan.h',  subdir : 'flux')
+install_headers('../include/flux/flux.h',            subdir : 'flux')
+install_headers('../include/flux/flux_vulkan.h',     subdir : 'flux')
+install_headers('../include/flux/flux_log_helper.h', subdir : 'flux')

@@ -18,6 +18,7 @@ Task-oriented recipes for readers who already know the basics.
 
 - [How to optimize performance](optimize-performance.md) — Batching, memory management, and frame-time optimization.
 - [How to manage memory](manage-memory.md) — Ownership rules, cleanup order, and avoiding leaks.
+- [How to configure logging](how-to-configure-logging.md) — Custom callbacks, filtering, and styled console output.
 - [How to debug GPU issues](debug-gpu-issues.md) — Validation layers, RenderDoc, and common rendering bugs.
 - [How to troubleshoot common issues](troubleshooting.md) — Diagnose common build, test, and runtime problems.
 

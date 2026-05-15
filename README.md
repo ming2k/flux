@@ -5,7 +5,7 @@ Vulkan backends. The public API is opaque-handle, refcounted, sized-
 descriptor, allocator-pluggable, with first-class matrix/color/path
 helpers and an immediate-mode canvas.
 
-> **Status:** v0.2.2 — pre-1.0 development. API is stabilising toward v1.0.0;
+> **Status:** v0.2.3 — pre-1.0 development. API is stabilising toward v1.0.0;
 > minor bumps may still introduce breaking changes, but only with
 > notice. See [API stability](docs/reference/api-stability.md).
 

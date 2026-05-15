@@ -315,11 +315,15 @@ void vk_draw_image(flux_rhi_device *r, flux_r_buffer *buf,
 }
 
 void vk_draw_text(flux_rhi_device *r, flux_r_buffer *buf,
-                  uint32_t first, uint32_t n, flux_color c)
+                  uint32_t first, uint32_t n, flux_r_texture *tex, flux_color c)
 {
     (void)buf;
     vk_renderer *vk = VKR(r);
-    if (!vk->pass_began) return;
+    if (!vk->pass_began || !tex) return;
+    vk_texture *t = (vk_texture *)tex;
+#ifndef NDEBUG
+    t->last_use_fence = vk->frames[vk->frame_idx].fence;
+#endif
     VkCommandBuffer cmd = vk->frames[vk->frame_idx].cmd;
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->text_pipeline);
@@ -329,7 +333,7 @@ void vk_draw_text(flux_rhi_device *r, flux_r_buffer *buf,
     VkDeviceSize off = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &vbuf, &off);
 
-    VkDescriptorSet set = get_descriptor_set(vk, &vk->frames[vk->frame_idx], vk->atlas_view, vk->sampler);
+    VkDescriptorSet set = get_descriptor_set(vk, &vk->frames[vk->frame_idx], t->view, vk->sampler);
     if (set) {
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->text_layout,
                                 0, 1, &set, 0, nullptr);

@@ -69,7 +69,6 @@ typedef struct sw_renderer {
     sw_buffer_pool pool;
 
     sw_texture *textures;
-    sw_texture *atlas;     /* glyph atlas texture */
 
     sw_batch    batch;
 
@@ -97,7 +96,7 @@ static void  sw_draw_solid(flux_rhi_device *r, flux_r_buffer *buf, uint32_t firs
 static void  sw_draw_fringe(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, flux_color color);
 static void  sw_flush_solid(flux_rhi_device *r);
 static void  sw_draw_image(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, flux_r_texture *tex, flux_color tint);
-static void  sw_draw_text(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, flux_color color);
+static void  sw_draw_text(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, flux_r_texture *tex, flux_color color);
 static void  sw_draw_gradient(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, const flux_gradient *grad);
 static void  sw_scissor(flux_rhi_device *r, int32_t x, int32_t y, uint32_t w, uint32_t h);
 static void  sw_stencil_clear(flux_rhi_device *r, int32_t x, int32_t y, uint32_t w, uint32_t h);
@@ -994,7 +993,7 @@ static void sw_draw_image(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first
     }
 }
 
-static void sw_draw_text(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, flux_color color)
+static void sw_draw_text(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first, uint32_t count, flux_r_texture *tex, flux_color color)
 {
     sw_renderer *sw = self(r);
     sw_flush_solid(r);
@@ -1002,14 +1001,15 @@ static void sw_draw_text(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first,
     if (!b) return;
     flux_image_vertex *img = buf_image(sw, b);
     if (!img) return;
-    if (!sw->atlas) return;
+    sw_texture *t = (sw_texture *)tex;
+    if (!t) return;
 
     uint8_t cr = (color >> 16) & 0xFF, cg = (color >> 8) & 0xFF;
     uint8_t cb = color & 0xFF, ca = (color >> 24) & 0xFF;
 
     for (uint32_t i = 0; i + 2 < count; i += 3) {
         raster_image(sw, &img[first + i], &img[first + i + 1], &img[first + i + 2],
-                     sw->atlas, cr, cg, cb, ca);
+                     t, cr, cg, cb, ca);
     }
 }
 

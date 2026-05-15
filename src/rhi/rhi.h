@@ -83,7 +83,8 @@ struct flux_rhi_vtbl {
                         flux_r_texture *tex, flux_color tint);
 
     void  (*draw_text)(flux_rhi_device *r, flux_r_buffer *buf,
-                       uint32_t first, uint32_t count, flux_color color);
+                       uint32_t first, uint32_t count,
+                       flux_r_texture *tex, flux_color color);
 
     void  (*draw_gradient)(flux_rhi_device *r, flux_r_buffer *buf,
                            uint32_t first, uint32_t count,

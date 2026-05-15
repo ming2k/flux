@@ -7,6 +7,15 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 Dates are ISO 8601. Pre-1.0 minor releases may introduce breaking
 changes; the breaking commit is called out explicitly.
 
+## [Unreleased]
+
+## [0.2.3] — 2026-05-15
+
+### Added
+
+- **Optional styled console logger.**  `<flux/flux_log_helper.h>` provides `flux_default_console_logger`, a drop-in `flux_log_fn` that prints colourised, aligned messages to stderr with ANSI escape codes.  Windows terminals automatically enable virtual-terminal processing.
+- **Logging documentation.**  New ADR-0004, reference page, and how-to guide covering callback signatures, level filtering, thread-safety contracts, and custom sink examples.
+
 ## [0.2.2] — 2026-05-15
 
 ### Added
@@ -102,6 +111,7 @@ clipping, fence-tracked image updates, VMA integration. Superseded.
 
 First tagged development preview.
 
+[0.2.3]: https://github.com/ming2k/flux/releases/tag/v0.2.3
 [0.2.2]: https://github.com/ming2k/flux/releases/tag/v0.2.2
 [0.2.1]: https://github.com/ming2k/flux/releases/tag/v0.2.1
 [0.2.0]: https://github.com/ming2k/flux/releases/tag/v0.2.0

@@ -265,6 +265,11 @@ static bool stroke_rect_aa(flux_rhi_device *r, const flux_rect *rc, float width,
 
 /* ---- stencil-buffer path fill ---- */
 
+/* Convention: any op handler that mutates `scissor` or `stencil_ref`
+ * must restore them to the defaults (full-surface scissor, stencil_ref=0)
+ * before returning, unless `has_clip` is true — in which case the active
+ * clip path owns the state and handlers must leave it alone. */
+
 static bool fill_stencil_path(flux_rhi_device *r, flux_arena *arena,
                               const flux_path *path, flux_color color,
                               const flux_gradient *grad,
@@ -336,6 +341,17 @@ static bool fill_stencil_path(flux_rhi_device *r, flux_arena *arena,
         for (uint32_t i = 0; i < flat_count; i++) {
             emit_fringe_tris(r, flats[i].flat, flats[i].pc, color);
         }
+    }
+
+    /* Restore default scissor + stencil ref so the next op (FILL_RECT,
+     * DRAW_GLYPHS, etc.) sees clean state. The stencil pipeline tests
+     * EQUAL against the cleared stencil buffer (0); leaving ref=1 here
+     * silently discards every following fragment outside this path's
+     * bounds. When a clip is active the engine's op handlers own the
+     * scissor/stencil state, so we leave it alone in that case. */
+    if (!has_clip) {
+        vt(r)->scissor(r, 0, 0, sw, sh);
+        vt(r)->stencil_ref(r, 0);
     }
 
     return true;
@@ -512,7 +528,6 @@ flux_result flux_engine_execute(flux_canvas *canvas, flux_rhi_device *r)
             flux_glyph_atlas *a = ctx ? ctx->atlas : NULL;
             if (!a || !gr || gr->count == 0) continue;
 
-            /* Ensure surface atlas texture is up to date */
             flux_surface *s = canvas->owner;
             if (!s->glyph_atlas_tex || s->glyph_atlas_revision != a->revision) {
                 if (s->glyph_atlas_tex)
@@ -538,7 +553,7 @@ flux_result flux_engine_execute(flux_canvas *canvas, flux_rhi_device *r)
                 if (!slot) continue;
 
                 float x = base_x + g->x + slot->bearing_x;
-                float y = base_y + g->y + slot->bearing_y;
+                float y = base_y + g->y - slot->bearing_y;
                 float w = slot->w;
                 float h = slot->h;
                 float u0 = slot->atlas_x / atlas_w;
@@ -558,7 +573,7 @@ flux_result flux_engine_execute(flux_canvas *canvas, flux_rhi_device *r)
                 gv[4] = (flux_image_vertex){ { x + w, y + h }, { u1, v1 } };
                 gv[5] = (flux_image_vertex){ { x,     y + h }, { u0, v1 } };
 
-                vt(r)->draw_image(r, gb, gfirst, 6, s->glyph_atlas_tex, gp->color);
+                vt(r)->draw_text(r, gb, gfirst, 6, s->glyph_atlas_tex, gp->color);
             }
             continue;
         }

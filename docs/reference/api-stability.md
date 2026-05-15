@@ -5,7 +5,7 @@ contract today and the process by which it tightens toward 1.0.
 
 ## Current status
 
-**Library version:** 0.2.2
+**Library version:** 0.2.3
 **Stability level:** Pre-1.0 development. The 0.2.x series is
 shape-stable. Field additions and new functions are non-breaking;
 signature changes will only happen with prior `[Unreleased]` notice

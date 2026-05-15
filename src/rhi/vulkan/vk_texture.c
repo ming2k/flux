@@ -15,62 +15,6 @@ VkFormat vk_pixel_format_to_vk(flux_pixel_format fmt)
     return VK_FORMAT_UNDEFINED;
 }
 
-bool ensure_atlas(vk_renderer *vk)
-{
-    if (vk->atlas_image) return true;
-    VkDevice dev = vk->device.device;
-    VkImageCreateInfo ici = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .imageType = VK_IMAGE_TYPE_2D,
-        .format = VK_FORMAT_R8_UNORM,
-        .extent = { 2048, 2048, 1 },
-        .mipLevels = 1,
-        .arrayLayers = 1,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-    };
-    VkResult res = vkCreateImage(dev, &ici, nullptr, &vk->atlas_image);
-    FLUX_VK_CHECK(res);
-    if (res != VK_SUCCESS) return false;
-
-    VkMemoryRequirements req;
-    vkGetImageMemoryRequirements(dev, vk->atlas_image, &req);
-    VkMemoryAllocateInfo ai = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = req.size,
-        .memoryTypeIndex = find_memory_type(vk->device.physical_device, req.memoryTypeBits,
-                                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
-    };
-    res = vkAllocateMemory(dev, &ai, nullptr, &vk->atlas_mem);
-    FLUX_VK_CHECK(res);
-    if (res != VK_SUCCESS) {
-        vkDestroyImage(dev, vk->atlas_image, nullptr);
-        vk->atlas_image = VK_NULL_HANDLE;
-        return false;
-    }
-    FLUX_VK_CHECK(vkBindImageMemory(dev, vk->atlas_image, vk->atlas_mem, 0));
-
-    VkImageViewCreateInfo vci = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .image = vk->atlas_image,
-        .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = VK_FORMAT_R8_UNORM,
-        .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
-    };
-    res = vkCreateImageView(dev, &vci, nullptr, &vk->atlas_view);
-    FLUX_VK_CHECK(res);
-    if (res != VK_SUCCESS) {
-        vkFreeMemory(dev, vk->atlas_mem, nullptr);
-        vkDestroyImage(dev, vk->atlas_image, nullptr);
-        vk->atlas_image = VK_NULL_HANDLE;
-        return false;
-    }
-    return true;
-}
-
 /* ------------------------------------------------------------------ */
 /*  Staging buffer pool                                               */
 /* ------------------------------------------------------------------ */
@@ -244,10 +188,13 @@ bool upload_texture_data(vk_renderer *vk, vk_texture *t,
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .commandBufferCount = 1,
         .pCommandBuffers = &vk->transfer_cmd,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &vk->transfer_sem,
     };
     FLUX_VK_CHECK(vkQueueSubmit(vk->device.graphics_queue, 1, &si, vk->transfer_fence));
     sb->in_use = true;
     vk->transfer_pending = true;
+    vk->transfer_sem_signaled = true;
     return true;
 }
 

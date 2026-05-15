@@ -115,8 +115,8 @@ static uint8_t *render_glyph(flux_context *ctx)
     if (flux_glyph_run_create(ctx, 4, &run) != FLUX_OK) { flux_paint_release(paint); flux_surface_release(s); return NULL; }
     if (flux_glyph_run_append(run, 65, 8.0f, 8.0f) != FLUX_OK) { flux_glyph_run_release(run); flux_paint_release(paint); flux_surface_release(s); return NULL; }
     if (flux_canvas_draw_glyph_run(c, run, 0, 0, paint) != FLUX_OK) { flux_glyph_run_release(run); flux_paint_release(paint); flux_surface_release(s); return NULL; }
-    if (flux_surface_present(s) != FLUX_OK) { flux_glyph_run_release(run); flux_paint_release(paint); flux_surface_release(s); return NULL; }
-    flux_glyph_run_release(run);
+    flux_glyph_run_release(run); /* canvas retains the run; caller may release immediately */
+    if (flux_surface_present(s) != FLUX_OK) { flux_paint_release(paint); flux_surface_release(s); return NULL; }
     flux_paint_release(paint);
 
     uint8_t *pixels = xmalloc((size_t)W * H * 4);

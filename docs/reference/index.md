@@ -4,6 +4,7 @@ Lookup-oriented documentation for APIs, build options, and constants.
 
 - [API reference](api.md) — Public objects, functions, ownership rules, and examples.
 - [Configuration reference](configuration.md) — Meson options and runtime environment variables.
+- [Logging](logging.md) — Log levels, callback signature, built-in sinks, and thread-safety contract.
 - [Thread safety](thread-safety.md) — Concurrency rules and common pitfalls.
 - [Platform support](platforms.md) — Supported operating systems and GPUs.
 - [API stability and deprecation](api-stability.md) — Versioning policy and breaking-change process.

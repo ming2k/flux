@@ -1,7 +1,7 @@
 /*
  * flux — 2D graphics foundation library.
  *
- * Public API v0.2.2.
+ * Public API v0.2.3.
  *
  * This is a clean break from prior 0.x versions. Every symbol uses the
  * `flux_*` prefix; every fallible call returns `flux_result`; every
@@ -28,10 +28,11 @@
  *     `flux_canvas*` valid until the matching `flux_surface_present(s)`.
  *     Do not retain it; do not pass it to another thread.
  *
- *   - Borrowed resources in ops. Recorded ops borrow their `flux_path`,
- *     `flux_image`, `flux_glyph_run`. Keep these alive until present.
- *     `flux_paint`, `flux_gradient`, dash arrays are deep-copied at
- *     record time.
+ *   - Borrowed resources in ops. Recorded ops borrow their `flux_path`.
+ *     Keep paths alive until present. `flux_image` and `flux_glyph_run`
+ *     are retained by the canvas and may be released immediately after
+ *     recording. `flux_paint`, `flux_gradient`, dash arrays are deep-copied
+ *     at record time.
  *
  *   - Thread model. One context per thread. Resources may not be shared
  *     between contexts. Refcount operations are atomic, so cross-thread
@@ -202,7 +203,8 @@ typedef struct flux_glyph_run flux_glyph_run;
 /*  Value types                                                       */
 /* ------------------------------------------------------------------ */
 
-/* 0xAARRGGBB premultiplied. Build with `flux_color_rgba` or `_rgba_premul`. */
+/* 0xAARRGGBB premultiplied alpha. Use `flux_color_rgba()` to premultiply;
+ * use `flux_color_rgba_premul()` if your inputs are already premultiplied. */
 typedef uint32_t flux_color;
 
 typedef struct flux_point  { float x, y;       } flux_point;
@@ -480,6 +482,9 @@ FLUX_NODISCARD FLUX_API flux_result flux_canvas_draw_image(
     flux_canvas *c, const flux_image *image,
     const flux_rect *src /* NULL = full image */, const flux_rect *dst);
 
+/* `y` is the baseline of the first glyph in surface space (post-DPR).
+ * Callers that think in "line top" coordinates should add the font's
+ * ascent before calling. */
 FLUX_NODISCARD FLUX_API flux_result flux_canvas_draw_glyph_run(
     flux_canvas *c, const flux_glyph_run *run,
     float x, float y, const flux_paint *paint);
@@ -497,7 +502,8 @@ FLUX_NODISCARD FLUX_API flux_result flux_paint_create(
 FLUX_NODISCARD FLUX_API flux_paint *flux_paint_retain(flux_paint *paint);
 FLUX_API               void         flux_paint_release(flux_paint *paint);
 
-/* Setters. All may return FLUX_ERROR_INVALID_ARGUMENT on out-of-range values. */
+/* Setters. All may return FLUX_ERROR_INVALID_ARGUMENT on out-of-range values.
+ * `flux_paint_set_color` expects premultiplied alpha (see `flux_color`). */
 FLUX_API flux_result flux_paint_set_color       (flux_paint *p, flux_color c);
 FLUX_API flux_result flux_paint_set_stroke_width(flux_paint *p, float w);
 FLUX_API flux_result flux_paint_set_miter_limit (flux_paint *p, float limit);
@@ -648,6 +654,8 @@ FLUX_API               void             flux_glyph_run_release(flux_glyph_run *r
 
 FLUX_API void flux_glyph_run_clear(flux_glyph_run *run);
 
+/* `glyph_id` is opaque to flux; callers may encode multiple typefaces'
+ * glyph indices into the 32-bit value. */
 FLUX_API flux_result flux_glyph_run_append(
     flux_glyph_run *run, uint32_t glyph_id, float x, float y);
 

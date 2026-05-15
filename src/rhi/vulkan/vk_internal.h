@@ -162,10 +162,6 @@ typedef struct {
 
     VkSampler sampler;
 
-    VkImage        atlas_image;
-    VkDeviceMemory atlas_mem;
-    VkImageView    atlas_view;
-
     vk_texture *textures;
 
     uint32_t w, h;
@@ -175,7 +171,9 @@ typedef struct {
     VkCommandPool    transfer_cmd_pool;
     VkCommandBuffer  transfer_cmd;
     VkFence          transfer_fence;
+    VkSemaphore      transfer_sem;
     bool             transfer_pending;
+    bool             transfer_sem_signaled;
 
     VkPipelineCache  pipeline_cache;
 
@@ -276,7 +274,6 @@ extern bool ensure_pipelines(vk_renderer *vk);
 /* ------------------------------------------------------------------ */
 
 extern VkFormat vk_pixel_format_to_vk(flux_pixel_format fmt);
-extern bool     ensure_atlas(vk_renderer *vk);
 extern bool     upload_texture_data(vk_renderer *vk, vk_texture *t,
                                      const void *data,
                                      uint32_t x, uint32_t y,
@@ -308,7 +305,7 @@ extern void vk_draw_fringe(flux_rhi_device *r, flux_r_buffer *buf,
 extern void vk_draw_image(flux_rhi_device *r, flux_r_buffer *buf,
                           uint32_t first, uint32_t n, flux_r_texture *tex, flux_color tint);
 extern void vk_draw_text(flux_rhi_device *r, flux_r_buffer *buf,
-                         uint32_t first, uint32_t n, flux_color c);
+                         uint32_t first, uint32_t n, flux_r_texture *tex, flux_color c);
 extern void vk_draw_gradient(flux_rhi_device *r, flux_r_buffer *buf,
                              uint32_t first, uint32_t n, const flux_gradient *g);
 extern void vk_scissor(flux_rhi_device *r, int32_t x, int32_t y, uint32_t w, uint32_t h);

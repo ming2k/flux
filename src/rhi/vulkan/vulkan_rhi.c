@@ -120,10 +120,6 @@ void vk_destroy(flux_rhi_device *r)
 
     if (vk->sampler) vkDestroySampler(dev, vk->sampler, nullptr);
 
-    if (vk->atlas_view)  vkDestroyImageView(dev, vk->atlas_view, nullptr);
-    if (vk->atlas_image) { vkDestroyImage(dev, vk->atlas_image, nullptr); vk->atlas_image = VK_NULL_HANDLE; }
-    if (vk->atlas_mem)   { vkFreeMemory(dev, vk->atlas_mem, nullptr); vk->atlas_mem = VK_NULL_HANDLE; }
-
     vk_texture *tex = vk->textures;
     while (tex) {
         vk_texture *n = tex->next;
@@ -150,6 +146,7 @@ void vk_destroy(flux_rhi_device *r)
     }
 
     staging_pool_destroy(vk);
+    if (vk->transfer_sem) vkDestroySemaphore(dev, vk->transfer_sem, nullptr);
     if (vk->transfer_fence) vkDestroyFence(dev, vk->transfer_fence, nullptr);
     if (vk->transfer_cmd) vkFreeCommandBuffers(dev, vk->transfer_cmd_pool, 1, &vk->transfer_cmd);
     if (vk->transfer_cmd_pool) vkDestroyCommandPool(dev, vk->transfer_cmd_pool, nullptr);
@@ -236,7 +233,6 @@ void vk_begin_pass(flux_rhi_device *r, flux_color clear)
     if (!vk->frame_began || vk->pass_began) return;
 
     if (!ensure_pipelines(vk)) return;
-    ensure_atlas(vk);
 
     VkCommandBuffer cmd = vk->frames[vk->frame_idx].cmd;
 
@@ -291,12 +287,26 @@ void vk_submit(flux_rhi_device *r)
 
     FLUX_VK_CHECK(vkEndCommandBuffer(vk->frames[vk->frame_idx].cmd));
 
-    VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSemaphore wait_sems[2];
+    VkPipelineStageFlags wait_stages[2];
+    uint32_t wait_count = 0;
+
+    wait_sems[wait_count]   = vk->frames[vk->frame_idx].sem_image_avail;
+    wait_stages[wait_count] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    wait_count++;
+
+    if (vk->transfer_sem_signaled) {
+        wait_sems[wait_count]   = vk->transfer_sem;
+        wait_stages[wait_count] = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        wait_count++;
+        vk->transfer_sem_signaled = false;
+    }
+
     VkSubmitInfo si = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .waitSemaphoreCount   = 1,
-        .pWaitSemaphores      = &vk->frames[vk->frame_idx].sem_image_avail,
-        .pWaitDstStageMask    = &wait_stage,
+        .waitSemaphoreCount   = wait_count,
+        .pWaitSemaphores      = wait_sems,
+        .pWaitDstStageMask    = wait_stages,
         .commandBufferCount   = 1,
         .pCommandBuffers      = &vk->frames[vk->frame_idx].cmd,
         .signalSemaphoreCount = 1,
@@ -688,6 +698,14 @@ flux_rhi_device *flux_rhi_create_vulkan(const flux_vulkan_device *device,
 
     VkFenceCreateInfo transfer_fci = { .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
     res = vkCreateFence(dev, &transfer_fci, nullptr, &vk->transfer_fence);
+    FLUX_VK_CHECK(res);
+    if (res != VK_SUCCESS) {
+        vk_destroy((flux_rhi_device *)vk);
+        return nullptr;
+    }
+
+    VkSemaphoreCreateInfo transfer_sci = { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+    res = vkCreateSemaphore(dev, &transfer_sci, nullptr, &vk->transfer_sem);
     FLUX_VK_CHECK(res);
     if (res != VK_SUCCESS) {
         vk_destroy((flux_rhi_device *)vk);
