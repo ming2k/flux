@@ -180,7 +180,7 @@ flux_result flux_stroke_polyline(const flux_point *points, size_t count, bool cl
             float angle_start = atan2f(v_start.y, v_start.x);
             flux_point prev = { p0.x + v_start.x, p0.y + v_start.y };
             for (int k = 1; k <= steps; ++k) {
-                float a = angle_start + (float)k / (float)steps * M_PI;
+                float a = angle_start + (float)k / (float)steps * (float)M_PI;
                 flux_point next = { p0.x + cosf(a) * half_w, p0.y + sinf(a) * half_w };
                 append_triangle(tris, &tri_count, p0, prev, next);
                 prev = next;
@@ -206,7 +206,7 @@ flux_result flux_stroke_polyline(const flux_point *points, size_t count, bool cl
             float angle_start = atan2f(v_start.y, v_start.x);
             flux_point prev = { pl.x + v_start.x, pl.y + v_start.y };
             for (int k = 1; k <= steps; ++k) {
-                float a = angle_start + (float)k / (float)steps * M_PI;
+                float a = angle_start + (float)k / (float)steps * (float)M_PI;
                 flux_point next = { pl.x + cosf(a) * half_w, pl.y + sinf(a) * half_w };
                 append_triangle(tris, &tri_count, pl, prev, next);
                 prev = next;
