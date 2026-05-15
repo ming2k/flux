@@ -28,14 +28,14 @@ static bool load_pipeline_cache(vk_renderer *vk)
     if (!f) goto create_empty;
 
     fseek(f, 0, SEEK_END);
-    long size = ftell(f);
+    long fsize = ftell(f);
     fseek(f, 0, SEEK_SET);
-    if (size <= 0) { fclose(f); goto create_empty; }
+    if (fsize <= 0) { fclose(f); goto create_empty; }
 
-    void *data = malloc(size);
+    void *data = malloc((size_t)fsize);
     if (!data) { fclose(f); goto create_empty; }
 
-    if (fread(data, 1, size, f) != (size_t)size) {
+    if (fread(data, 1, (size_t)fsize, f) != (size_t)fsize) {
         free(data);
         fclose(f);
         goto create_empty;
@@ -44,7 +44,7 @@ static bool load_pipeline_cache(vk_renderer *vk)
 
     VkPipelineCacheCreateInfo ci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
-        .initialDataSize = size,
+        .initialDataSize = (size_t)fsize,
         .pInitialData = data,
     };
     VkResult res = vkCreatePipelineCache(dev, &ci, nullptr, &vk->pipeline_cache);
@@ -54,12 +54,12 @@ static bool load_pipeline_cache(vk_renderer *vk)
 
 create_empty:
     {
-        VkPipelineCacheCreateInfo ci = {
+        VkPipelineCacheCreateInfo ci_empty = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
         };
-        VkResult res = vkCreatePipelineCache(dev, &ci, nullptr, &vk->pipeline_cache);
-        FLUX_VK_CHECK(res);
-        return res == VK_SUCCESS;
+        VkResult res_empty = vkCreatePipelineCache(dev, &ci_empty, nullptr, &vk->pipeline_cache);
+        FLUX_VK_CHECK(res_empty);
+        return res_empty == VK_SUCCESS;
     }
 }
 
@@ -237,10 +237,10 @@ void vk_begin_pass(flux_rhi_device *r, flux_color clear)
     VkCommandBuffer cmd = vk->frames[vk->frame_idx].cmd;
 
     VkClearValue clear_vals[2];
-    clear_vals[0].color.float32[0] = ((clear >> 16) & 0xFF) / 255.0f;
-    clear_vals[0].color.float32[1] = ((clear >> 8)  & 0xFF) / 255.0f;
-    clear_vals[0].color.float32[2] = (clear & 0xFF) / 255.0f;
-    clear_vals[0].color.float32[3] = ((clear >> 24) & 0xFF) / 255.0f;
+    clear_vals[0].color.float32[0] = (float)((clear >> 16) & 0xFFu) / 255.0f;
+    clear_vals[0].color.float32[1] = (float)((clear >> 8)  & 0xFFu) / 255.0f;
+    clear_vals[0].color.float32[2] = (float)(clear & 0xFFu) / 255.0f;
+    clear_vals[0].color.float32[3] = (float)((clear >> 24) & 0xFFu) / 255.0f;
     clear_vals[1].depthStencil = (VkClearDepthStencilValue){ 0, 0 };
 
     VkRenderPassBeginInfo rpbi = {

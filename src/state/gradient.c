@@ -9,10 +9,10 @@
 
 static void color_to_floats(flux_color c, float out[4])
 {
-    out[0] = ((c >> 16) & 0xFFu) * (1.0f / 255.0f);
-    out[1] = ((c >>  8) & 0xFFu) * (1.0f / 255.0f);
-    out[2] = ((c      ) & 0xFFu) * (1.0f / 255.0f);
-    out[3] = ((c >> 24) & 0xFFu) * (1.0f / 255.0f);
+    out[0] = (float)((c >> 16) & 0xFFu) * (1.0f / 255.0f);
+    out[1] = (float)((c >>  8) & 0xFFu) * (1.0f / 255.0f);
+    out[2] = (float)((c      ) & 0xFFu) * (1.0f / 255.0f);
+    out[3] = (float)((c >> 24) & 0xFFu) * (1.0f / 255.0f);
 }
 
 static flux_result validate_stops(const flux_color *colors, const float *stops,

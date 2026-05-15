@@ -401,10 +401,10 @@ flux_result flux_path_arc_to(flux_path *path, float rx, float ry, float phi,
     float theta1 = atan2f(uy, ux);
     float delta_theta = atan2f(vy, vx) - atan2f(uy, ux);
 
-    if (!sweep && delta_theta > 0.0f) delta_theta -= 2.0f * M_PI;
-    if ( sweep && delta_theta < 0.0f) delta_theta += 2.0f * M_PI;
+    if (!sweep && delta_theta > 0.0f) delta_theta -= 2.0f * (float)M_PI;
+    if ( sweep && delta_theta < 0.0f) delta_theta += 2.0f * (float)M_PI;
 
-    int n_segments = (int)ceilf(fabsf(delta_theta) / (M_PI * 0.5f));
+    int n_segments = (int)ceilf(fabsf(delta_theta) / ((float)M_PI * 0.5f));
     if (n_segments < 1) n_segments = 1;
     float seg_delta = delta_theta / (float)n_segments;
 

@@ -86,7 +86,7 @@ flux_result flux_glyph_upload(flux_context *ctx, uint32_t glyph_id,
     /* Copy bitmap into atlas */
     for (int row = 0; row < h; row++) {
         uint8_t *dst = a->pixels + (size_t)(ay + row) * a->width + ax;
-        const uint8_t *src = bitmap + (size_t)row * w;
+        const uint8_t *src = bitmap + (size_t)row * (size_t)w;
         memcpy(dst, src, (size_t)w);
     }
 

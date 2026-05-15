@@ -20,7 +20,7 @@ void flux_arena_destroy(flux_arena *arena)
 
 void *flux_arena_alloc(flux_arena *arena, size_t size)
 {
-    size = (size + 7) & ~7;
+    size = (size + 7) & ~(size_t)7;
 
     if (arena->head && (arena->head->used + size <= arena->head->size)) {
         void *ptr = arena->head->data + arena->head->used;

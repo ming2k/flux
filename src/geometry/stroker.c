@@ -80,11 +80,11 @@ static bool append_join(flux_point *tris, size_t *count,
         
         float diff = a2 - a1;
         if (left) {
-            while (diff > 0) diff -= 2.0f * M_PI;
-            while (diff < -2.0f * M_PI) diff += 2.0f * M_PI;
+            while (diff > 0) diff -= 2.0f * (float)M_PI;
+            while (diff < -2.0f * (float)M_PI) diff += 2.0f * (float)M_PI;
         } else {
-            while (diff < 0) diff += 2.0f * M_PI;
-            while (diff > 2.0f * M_PI) diff -= 2.0f * M_PI;
+            while (diff < 0) diff += 2.0f * (float)M_PI;
+            while (diff > 2.0f * (float)M_PI) diff -= 2.0f * (float)M_PI;
         }
 
         flux_point prev = { p.x + v1.x, p.y + v1.y };
@@ -122,8 +122,8 @@ flux_result flux_stroke_polyline(const flux_point *points, size_t count, bool cl
     
     /* Estimate max triangle count */
     size_t max_tris = (count + 1) * 2; /* segments */
-    max_tris += count * steps; /* joins */
-    max_tris += 2 * steps; /* caps */
+    max_tris += (size_t)count * (size_t)steps; /* joins */
+    max_tris += 2u * (size_t)steps; /* caps */
     
     flux_point *tris = flux_arena_alloc(arena, max_tris * 3 * sizeof(flux_point));
     if (!tris) return FLUX_ERROR_OUT_OF_MEMORY;

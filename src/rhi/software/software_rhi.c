@@ -262,7 +262,7 @@ static inline int32_t clampi(int32_t v, int32_t lo, int32_t hi) {
 
 static void *sw_pool_alloc(sw_renderer *sw, size_t size)
 {
-    size_t aligned = (size + 15) & ~15;  /* 16-byte align */
+    size_t aligned = (size + 15) & ~(size_t)15;  /* 16-byte align */
     if (sw->pool.used + aligned > sw->pool.cap)
         return nullptr;
     void *ptr = sw->pool.base + sw->pool.used;
@@ -557,10 +557,10 @@ static void raster_image(sw_renderer *sw,
     float x1 = v1->pos[0], y1 = v1->pos[1], u1 = v1->uv[0], vv1 = v1->uv[1];
     float x2 = v2->pos[0], y2 = v2->pos[1], u2 = v2->uv[0], vv2 = v2->uv[1];
 
-    int32_t minx = max_i(sw->scissor_x, (int32_t)floorf(min_i(min_i(x0, x1), x2)));
-    int32_t maxx = min_i(sw->scissor_x + (int32_t)sw->scissor_w - 1, (int32_t)ceilf(max_i(max_i(x0, x1), x2)));
-    int32_t miny = max_i(sw->scissor_y, (int32_t)floorf(min_i(min_i(y0, y1), y2)));
-    int32_t maxy = min_i(sw->scissor_y + (int32_t)sw->scissor_h - 1, (int32_t)ceilf(max_i(max_i(y0, y1), y2)));
+    int32_t minx = max_i(sw->scissor_x, (int32_t)floorf(fminf(fminf(x0, x1), x2)));
+    int32_t maxx = min_i(sw->scissor_x + (int32_t)sw->scissor_w - 1, (int32_t)ceilf(fmaxf(fmaxf(x0, x1), x2)));
+    int32_t miny = max_i(sw->scissor_y, (int32_t)floorf(fminf(fminf(y0, y1), y2)));
+    int32_t maxy = min_i(sw->scissor_y + (int32_t)sw->scissor_h - 1, (int32_t)ceilf(fmaxf(fmaxf(y0, y1), y2)));
 
     if (minx > maxx || miny > maxy) return;
 
@@ -769,8 +769,8 @@ static void sw_begin_pass(flux_rhi_device *r, flux_color clear)
     sw_renderer *sw = self(r);
     sw->blend_mode = FLUX_BLEND_SRC_OVER;
     if (clear) {
-        uint8_t cr = (clear >> 16) & 0xFF, cg = (clear >> 8) & 0xFF;
-        uint8_t cb = clear & 0xFF, ca = (clear >> 24) & 0xFF;
+        uint8_t cr = (uint8_t)((clear >> 16) & 0xFF), cg = (uint8_t)((clear >> 8) & 0xFF);
+        uint8_t cb = (uint8_t)(clear & 0xFF), ca = (uint8_t)((clear >> 24) & 0xFF);
         uint8_t *p = sw->fb.pixels;
         for (uint32_t y = 0; y < sw->fb.h; y++) {
             for (uint32_t x = 0; x < sw->fb.w; x++) {
@@ -931,10 +931,10 @@ static void sw_flush_solid(flux_rhi_device *r)
     sw_renderer *sw = self(r);
     if (!sw->batch.active) return;
 
-    uint8_t cr = (sw->batch.color >> 16) & 0xFF;
-    uint8_t cg = (sw->batch.color >> 8) & 0xFF;
-    uint8_t cb = sw->batch.color & 0xFF;
-    uint8_t ca = (sw->batch.color >> 24) & 0xFF;
+    uint8_t cr = (uint8_t)((sw->batch.color >> 16) & 0xFF);
+    uint8_t cg = (uint8_t)((sw->batch.color >> 8) & 0xFF);
+    uint8_t cb = (uint8_t)(sw->batch.color & 0xFF);
+    uint8_t ca = (uint8_t)((sw->batch.color >> 24) & 0xFF);
 
     /* Draw triangles from the batch buffer, starting at batch.first */
     sw_buffer *b = &sw->buffers[sw->batch.buf_index];
@@ -964,10 +964,10 @@ static void sw_draw_fringe(flux_rhi_device *r, flux_r_buffer *buf, uint32_t firs
     flux_fringe_vertex *fringe = (flux_fringe_vertex *)(sw->pool.base + b->offset);
     if (!fringe) return;
 
-    uint8_t cr = (color >> 16) & 0xFF;
-    uint8_t cg = (color >> 8) & 0xFF;
-    uint8_t cb = color & 0xFF;
-    uint8_t ca = (color >> 24) & 0xFF;
+    uint8_t cr = (uint8_t)((color >> 16) & 0xFF);
+    uint8_t cg = (uint8_t)((color >> 8) & 0xFF);
+    uint8_t cb = (uint8_t)(color & 0xFF);
+    uint8_t ca = (uint8_t)((color >> 24) & 0xFF);
 
     for (uint32_t i = first; i + 2 < first + count; i += 3) {
         raster_fringe(sw, &fringe[i], &fringe[i + 1], &fringe[i + 2], cr, cg, cb, ca);
@@ -986,7 +986,7 @@ static void sw_draw_image(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first
     if (!t) return;
 
     uint8_t tr = (tint >> 16) & 0xFF, tg = (tint >> 8) & 0xFF;
-    uint8_t tb = tint & 0xFF, ta = (tint >> 24) & 0xFF;
+    uint8_t tb = (uint8_t)(tint & 0xFF), ta = (uint8_t)((tint >> 24) & 0xFF);
     for (uint32_t i = 0; i + 2 < count; i += 3) {
         raster_image(sw, &img[first + i], &img[first + i + 1], &img[first + i + 2],
                      t, tr, tg, tb, ta);
@@ -1005,7 +1005,7 @@ static void sw_draw_text(flux_rhi_device *r, flux_r_buffer *buf, uint32_t first,
     if (!t) return;
 
     uint8_t cr = (color >> 16) & 0xFF, cg = (color >> 8) & 0xFF;
-    uint8_t cb = color & 0xFF, ca = (color >> 24) & 0xFF;
+    uint8_t cb = (uint8_t)(color & 0xFF), ca = (uint8_t)((color >> 24) & 0xFF);
 
     for (uint32_t i = 0; i + 2 < count; i += 3) {
         raster_image(sw, &img[first + i], &img[first + i + 1], &img[first + i + 2],
@@ -1097,22 +1097,22 @@ static void sw_blur(flux_rhi_device *r, float sigma)
         uint8_t *row = src + (size_t)y * stride;
         uint8_t *dst_row = tmp + (size_t)y * stride;
         for (uint32_t x = 0; x < w; x++) {
-            float r = 0, g = 0, b = 0, a = 0;
+            float acc_r = 0, acc_g = 0, acc_b = 0, acc_a = 0;
             for (int k = -radius; k <= radius; k++) {
                 int sx = (int)x + k;
                 if (sx < 0) sx = 0;
                 if (sx >= (int)w) sx = (int)w - 1;
                 uint8_t *sp = row + (size_t)sx * 4;
                 float wt = kernel[k + radius];
-                r += (float)sp[0] * wt;
-                g += (float)sp[1] * wt;
-                b += (float)sp[2] * wt;
-                a += (float)sp[3] * wt;
+                acc_r += (float)sp[0] * wt;
+                acc_g += (float)sp[1] * wt;
+                acc_b += (float)sp[2] * wt;
+                acc_a += (float)sp[3] * wt;
             }
-            dst_row[x * 4 + 0] = (uint8_t)(r + 0.5f);
-            dst_row[x * 4 + 1] = (uint8_t)(g + 0.5f);
-            dst_row[x * 4 + 2] = (uint8_t)(b + 0.5f);
-            dst_row[x * 4 + 3] = (uint8_t)(a + 0.5f);
+            dst_row[x * 4 + 0] = (uint8_t)(acc_r + 0.5f);
+            dst_row[x * 4 + 1] = (uint8_t)(acc_g + 0.5f);
+            dst_row[x * 4 + 2] = (uint8_t)(acc_b + 0.5f);
+            dst_row[x * 4 + 3] = (uint8_t)(acc_a + 0.5f);
         }
     }
 
@@ -1120,22 +1120,22 @@ static void sw_blur(flux_rhi_device *r, float sigma)
     for (uint32_t y = 0; y < h; y++) {
         uint8_t *dst_row = src + (size_t)y * stride;
         for (uint32_t x = 0; x < w; x++) {
-            float r = 0, g = 0, b = 0, a = 0;
+            float acc_r = 0, acc_g = 0, acc_b = 0, acc_a = 0;
             for (int k = -radius; k <= radius; k++) {
                 int sy = (int)y + k;
                 if (sy < 0) sy = 0;
                 if (sy >= (int)h) sy = (int)h - 1;
                 uint8_t *sp = tmp + (size_t)sy * stride + (size_t)x * 4;
                 float wt = kernel[k + radius];
-                r += (float)sp[0] * wt;
-                g += (float)sp[1] * wt;
-                b += (float)sp[2] * wt;
-                a += (float)sp[3] * wt;
+                acc_r += (float)sp[0] * wt;
+                acc_g += (float)sp[1] * wt;
+                acc_b += (float)sp[2] * wt;
+                acc_a += (float)sp[3] * wt;
             }
-            dst_row[x * 4 + 0] = (uint8_t)(r + 0.5f);
-            dst_row[x * 4 + 1] = (uint8_t)(g + 0.5f);
-            dst_row[x * 4 + 2] = (uint8_t)(b + 0.5f);
-            dst_row[x * 4 + 3] = (uint8_t)(a + 0.5f);
+            dst_row[x * 4 + 0] = (uint8_t)(acc_r + 0.5f);
+            dst_row[x * 4 + 1] = (uint8_t)(acc_g + 0.5f);
+            dst_row[x * 4 + 2] = (uint8_t)(acc_b + 0.5f);
+            dst_row[x * 4 + 3] = (uint8_t)(acc_a + 0.5f);
         }
     }
 
@@ -1174,8 +1174,8 @@ static void sw_cover_solid(flux_rhi_device *r, flux_r_buffer *buf, uint32_t firs
     flux_solid_vertex *solid = buf_solid(sw, b);
     if (!solid) return;
 
-    uint8_t cr = (color >> 16) & 0xFF, cg = (color >> 8) & 0xFF;
-    uint8_t cb = color & 0xFF, ca = (color >> 24) & 0xFF;
+    uint8_t cr = (uint8_t)((color >> 16) & 0xFF), cg = (uint8_t)((color >> 8) & 0xFF);
+    uint8_t cb = (uint8_t)(color & 0xFF), ca = (uint8_t)((color >> 24) & 0xFF);
 
     for (uint32_t i = 0; i + 2 < count; i += 3) {
         raster_solid(sw, &solid[first + i], &solid[first + i + 1], &solid[first + i + 2],

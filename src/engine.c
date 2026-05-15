@@ -105,10 +105,10 @@ static bool emit_fringe_tris(flux_rhi_device *r, const flux_point *src, size_t n
         float nx = (-dy / len) * sign * width;
         float ny = ( dx / len) * sign * width;
 
-        flux_fringe_vertex v0 = { { src[i].x,           src[i].y           }, 1.0f };
-        flux_fringe_vertex v1 = { { src[j].x,           src[j].y           }, 1.0f };
-        flux_fringe_vertex v2 = { { src[i].x + nx,      src[i].y + ny      }, 0.0f };
-        flux_fringe_vertex v3 = { { src[j].x + nx,      src[j].y + ny      }, 0.0f };
+        flux_fringe_vertex v0 = { { src[i].x,           src[i].y           }, 1.0f, 0.0f };
+        flux_fringe_vertex v1 = { { src[j].x,           src[j].y           }, 1.0f, 0.0f };
+        flux_fringe_vertex v2 = { { src[i].x + nx,      src[i].y + ny      }, 0.0f, 0.0f };
+        flux_fringe_vertex v3 = { { src[j].x + nx,      src[j].y + ny      }, 0.0f, 0.0f };
 
         vx[vi++] = v0; vx[vi++] = v1; vx[vi++] = v2;
         vx[vi++] = v1; vx[vi++] = v3; vx[vi++] = v2;
